@@ -74,6 +74,7 @@ internal object DiPlayPreferences {
         return stored?.let(DefaultConnectionMode::fromKey)
             ?: SealPerformanceProfile.defaultConnectionMode(SealPerformanceProfile.enabled(context))
     }
+    fun storedDefaultConnectionModeKey(context: Context): String? = prefs(context).getString("default_connection_mode", null)
     fun saveDefaultConnectionMode(context: Context, mode: DefaultConnectionMode) {
         prefs(context).edit().putString("default_connection_mode", mode.key).apply()
     }

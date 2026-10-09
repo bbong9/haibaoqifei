@@ -10,6 +10,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val launchEnabled = AirPlayPersistence.loadAutoStartOnBoot(context)
+        runCatching { StartupTimeline.event(context, "BOOT_RECEIVED", "launchEnabled" to launchEnabled) }
         StartupDiagnosticSnapshot.received(context, launchEnabled)
         if (!launchEnabled) return
 
@@ -23,8 +24,10 @@ class BootReceiver : BroadcastReceiver() {
         try {
             context.startActivity(launch)
             StartupDiagnosticSnapshot.launchResult(context)
+            runCatching { StartupTimeline.event(context, "BOOT_LAUNCH", "result" to "ok", "error" to null) }
         } catch (error: RuntimeException) {
             StartupDiagnosticSnapshot.launchResult(context, error)
+            runCatching { StartupTimeline.event(context, "BOOT_LAUNCH", "result" to "failed", "error" to error.javaClass.simpleName) }
             Log.w(TAG, "Boot auto-start could not launch DiPlayActivity", error)
         }
     }

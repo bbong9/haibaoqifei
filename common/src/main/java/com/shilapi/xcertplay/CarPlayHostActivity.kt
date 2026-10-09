@@ -567,6 +567,10 @@ class CarPlayHostActivity : ComponentActivity() {
         if (isIphoneUsbAttachment(intent)) {
             AirPlayPersistence.saveWirelessEnabled(this, false)
         }
+        runCatching {
+            StartupTimeline.event(this, "HOST_CREATE", "action" to intent.action,
+                "usbIntent" to isIphoneUsbAttachment(intent), "wirelessEnabled" to AirPlayPersistence.loadWirelessEnabled(this))
+        }
         if (runCatching { DiPlayBootstrap.ensure(this, AirPlayPersistence.loadMfiTarget(this)) }.isFailure) {
             startActivity(Intent(this, DiPlayActivity::class.java))
             finish(); return
@@ -769,6 +773,15 @@ class CarPlayHostActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        val timelineWireless = wirelessEnabled
+        val timelineController = controller != null
+        fun logIntent(switchToUsb: Boolean) {
+            runCatching {
+                StartupTimeline.event(this, "HOST_NEW_INTENT", "action" to intent.action,
+                    "usbIntent" to isIphoneUsbAttachment(intent), "wirelessEnabled" to timelineWireless,
+                    "controller" to timelineController, "switchToUsb" to switchToUsb)
+            }
+        }
         if (isIphoneUsbAttachment(intent)) {
             // A re-enumeration can arrive while the USB session's menu is open too.
             if (menuOpen) cancelSettingsEdits()
@@ -777,12 +790,20 @@ class CarPlayHostActivity : ComponentActivity() {
                 wirelessEnabled = false
                 wirelessPermissionsReady = true
                 if (controller != null) {
+                    logIntent(true)
                     restartCarPlay("switching to USB")
+                } else {
+                    logIntent(false)
                 }
                 requestStartupPrerequisites()
             } else if (controller == null) {
+                logIntent(false)
                 requestStartupPrerequisites()
+            } else {
+                logIntent(false)
             }
+        } else {
+            logIntent(false)
         }
     }
 
@@ -805,6 +826,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        runCatching { StartupTimeline.event(this, "HOST_RESUME") }
         if (SealPerformanceProfile.enabled(this) && usbAttachments == null) {
             usbAttachments = IphoneUsbConnection.observe(this) { device ->
                 if (!isFinishing && !isDestroyed) onNewIntent(IphoneUsbConnection.hostIntent(this, device))
@@ -1214,6 +1236,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        runCatching { StartupTimeline.event(this, "HOST_PAUSE") }
         usbAttachments?.close()
         usbAttachments = null
         nightModeController.pause()
@@ -1221,6 +1244,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        runCatching { StartupTimeline.event(this, "HOST_STOP") }
         closePicturePanel()
         // The controller, USB/iAP2 link, and VPN attachment intentionally outlive the UI.
         isActivityStarted = false
@@ -3891,6 +3915,15 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun createStatusReporter(
         controllerGeneration: Int,
     ): (CarPlayStatus) -> Unit = report@{ status ->
+        runCatching {
+            StartupTimeline.event(this, "HOST_STATUS", "generation" to controllerGeneration,
+                "current" to restartGeneration, "status" to status::class.simpleName,
+                "dropped" to when {
+                    controllerGeneration != restartGeneration -> "stale"
+                    menuOpen -> "menu"
+                    else -> "no"
+                })
+        }
         if (controllerGeneration != restartGeneration) return@report
         if (menuOpen) {
             if (status is CarPlayStatus.Failed) failurePendingAfterMenu = status
@@ -4049,6 +4082,10 @@ class CarPlayHostActivity : ComponentActivity() {
         val media = createMediaEngine(renderer)
         val pairings = AirPlayPersistence.loadPairings(this) { id, key ->
             AirPlayPersistence.savePairing(this, id, key)
+        }
+        runCatching {
+            StartupTimeline.event(this, "HOST_START_STACK", "generation" to controllerGeneration,
+                "wireless" to (config.transport == CarPlayTransport.WIRELESS))
         }
         val next = CarPlayController(
             context = this,
@@ -4441,6 +4478,7 @@ class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(reason)
         Log.i(TAG, "$reason; rebuilding stack at ${size.width}x${size.height}")
         val generation = ++restartGeneration
+        runCatching { StartupTimeline.event(this, "HOST_RESTART", "generation" to generation, "reason" to reason) }
         pendingReconnect?.let { mainHandler.removeCallbacks(it) }
         pendingReconnect = null
         reconnectScheduled = false
@@ -4792,6 +4830,10 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun onScreenStreamStateChanged(generation: Int, type: Int, active: Boolean) {
         runOnUiThread {
+            runCatching {
+                StartupTimeline.event(this, "HOST_STREAM", "generation" to generation,
+                    "current" to restartGeneration, "type" to type, "active" to active)
+            }
             if (shuttingDown.get() || generation != restartGeneration) return@runOnUiThread
             if (active) {
                 activeScreenStreamTypes.add(type)

@@ -273,8 +273,15 @@ class DiPlayActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SealPerformanceProfile.migrateIfNeeded(this)
+        runCatching {
+            StartupTimeline.event(this, "UI_CREATE", "action" to intent.action,
+                "launcherCategory" to intent.hasCategory(Intent.CATEGORY_LAUNCHER),
+                "pageExtra" to intent.hasExtra("page"), "isLauncher" to isLauncherIntent(intent),
+                "hasSession" to CarPlayBackgroundSession.hasSession(), "restored" to (savedInstanceState != null))
+        }
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
         if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
+            runCatching { StartupTimeline.event(this, "UI_FORWARD", "from" to "create", "usbAttached" to (IphoneUsbConnection.attached(this) != null)) }
             openProjection(preferAttachedUsb = true); finish(); return
         }
         enforceInterfaceSize()
@@ -312,10 +319,17 @@ class DiPlayActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
+        runCatching {
+            StartupTimeline.event(this, "UI_NEW_INTENT", "action" to intent.action,
+                "launcherCategory" to intent.hasCategory(Intent.CATEGORY_LAUNCHER),
+                "pageExtra" to intent.hasExtra("page"), "isLauncher" to isLauncherIntent(intent),
+                "hasSession" to CarPlayBackgroundSession.hasSession())
+        }
         connectionSettingsReturnCategory = null
         // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
         // CarPlay carry a "page" extra, which isLauncherIntent rejects.
         if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
+            runCatching { StartupTimeline.event(this, "UI_FORWARD", "from" to "newIntent", "usbAttached" to (IphoneUsbConnection.attached(this) != null)) }
             page = "home"; render(); openProjection(preferAttachedUsb = true); return
         }
         page = intent.getStringExtra("page") ?: "home"; render()
@@ -381,14 +395,19 @@ class DiPlayActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        runCatching { StartupTimeline.event(this, "UI_RESUME", "initialLaunch" to initialLaunch) }
         if (SealPerformanceProfile.enabled(this) && usbAttachments == null) {
             usbAttachments = IphoneUsbConnection.observe(this) { device ->
                 if (!isFinishing && !isDestroyed && setupError == null) {
                     pendingWireless = false
                     startupHotspotCancelled = true
+                    runCatching { StartupTimeline.event(this, "UI_USB_ATTACHED", "launched" to true) }
                     startActivity(IphoneUsbConnection.hostIntent(this, device))
+                } else {
+                    runCatching { StartupTimeline.event(this, "UI_USB_ATTACHED", "launched" to false) }
                 }
             }
+            runCatching { StartupTimeline.event(this, "UI_USB_OBSERVER") }
         }
         // Returning from another activity can bring the head unit's own density back.
         if (enforceInterfaceSize()) render()
@@ -406,12 +425,22 @@ class DiPlayActivity : ComponentActivity() {
             startCarHotspotOnLaunch()
             if (setupError == null && !CarPlayBackgroundSession.hasSession() &&
                 DiPlayPreferences.autoConnect(this) && intent.getStringExtra("page") == null) {
-                handler.post { connect(DiPlayPreferences.autoConnectWireless(this)) }
+                handler.post {
+                    val chooseWireless = DiPlayPreferences.autoConnectWireless(this)
+                    logAutoConnectDecision(chooseWireless, "post")
+                    connect(chooseWireless)
+                }
+            } else {
+                logAutoConnectDecision("skipped", "skip")
             }
+        } else {
+            logAutoConnectDecision("skipped", "skip")
         }
     }
     override fun onPause() {
+        runCatching { StartupTimeline.event(this, "UI_PAUSE") }
         usbAttachments?.close()
+        runCatching { if (usbAttachments != null) StartupTimeline.event(this, "UI_USB_OBSERVER_CLOSED") }
         usbAttachments = null
         cancelKeyLearning()
         pausedForAdbSwitchChange = adbSwitchChangePending
@@ -3768,24 +3797,43 @@ class DiPlayActivity : ComponentActivity() {
         parent.addView(space(12))
     }
 
+    private fun logAutoConnectDecision(chooseWireless: Any, action: String) {
+        runCatching {
+            StartupTimeline.event(this, "AUTO_CONNECT_DECISION", "setupError" to (setupError != null),
+                "hasSession" to CarPlayBackgroundSession.hasSession(), "autoConnect" to DiPlayPreferences.autoConnect(this),
+                "pageExtra" to intent.hasExtra("page"), "storedMode" to (DiPlayPreferences.storedDefaultConnectionModeKey(this) ?: "unset"),
+                "resolvedMode" to DiPlayPreferences.defaultConnectionMode(this),
+                "lastWireless" to AirPlayPersistence.loadWirelessEnabled(this),
+                "usbAttached" to (IphoneUsbConnection.attached(this) != null), "chooseWireless" to chooseWireless, "action" to action)
+        }
+    }
+
+    private fun logConnectAbort(wireless: Boolean, reason: String) {
+        runCatching { StartupTimeline.event(this, "CONNECT_ABORT", "wireless" to wireless, "reason" to reason) }
+    }
+
     private fun connect(wireless: Boolean) {
+        runCatching { StartupTimeline.event(this, "CONNECT_REQUEST", "wireless" to wireless, "hasSession" to CarPlayBackgroundSession.hasSession()) }
         startupHotspotCancelled = true
-        if (wireless && pendingCarHotspotSetup) { toast(getString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
-        if (setupError != null) { toast(setupError!!); return }
+        if (wireless && pendingCarHotspotSetup) { logConnectAbort(wireless, "pendingHotspotSetup"); toast(getString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
+        if (setupError != null) { logConnectAbort(wireless, "setupError"); toast(setupError!!); return }
         if (wireless && AirPlayPersistence.loadWirelessHotspotMode(this) == WirelessHotspotMode.MANUAL &&
             hotspotError(storedSsid(), storedPassword()) != null) {
+            logConnectAbort(wireless, "manualHotspotInvalid")
             pendingCarHotspotSetup = true
             page = "connection"
             render()
             toast(getString(R.string.save_the_name_and_password_from_the_car_s_hotspot_settings))
             return
         }
-        if (wireless && carHotspotOff()) { carHotspotOffDialog(); return }
+        if (wireless && carHotspotOff()) { logConnectAbort(wireless, "carHotspotOff"); carHotspotOffDialog(); return }
         if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
+            logConnectAbort(wireless, "noPairedPhone")
             pendingWireless = true; choosePhone(); return
         }
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !preferences.getBoolean("notification_asked", false)) {
+            logConnectAbort(wireless, "notificationPermission")
             preferences.edit().putBoolean("notification_asked", true).apply()
             notificationTransport = wireless
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -3800,6 +3848,7 @@ class DiPlayActivity : ComponentActivity() {
     }
     private fun openProjection(preferAttachedUsb: Boolean = false) {
         val device = if (preferAttachedUsb && SealPerformanceProfile.enabled(this)) IphoneUsbConnection.attached(this) else null
+        runCatching { StartupTimeline.event(this, "OPEN_PROJECTION", "preferUsb" to preferAttachedUsb, "usbIntent" to (device != null)) }
         startActivity(if (device != null) IphoneUsbConnection.hostIntent(this, device)
             else Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
@@ -4004,6 +4053,18 @@ class DiPlayActivity : ComponentActivity() {
                     appendLine(StartupDiagnosticSnapshot.report(appContext))
                     appendLine("Startup settings: openAfterBoot=${AirPlayPersistence.loadAutoStartOnBoot(appContext)} " +
                         "connectWhenOpened=${DiPlayPreferences.autoConnect(appContext)}")
+                    appendLine()
+                    appendLine("--- Startup timeline (up= is milliseconds since boot) ---")
+                    runCatching {
+                        for (name in SessionLogFile.REPORT_NAMES) {
+                            val timelineName = if (name == "diplay.log") "timeline.log" else name
+                            val file = File(appContext.filesDir, "logs/startup/$timelineName")
+                            if (file.isFile) {
+                                appendLine("--- startup/$timelineName ---")
+                                file.useLines { lines -> lines.forEach { line -> DiagnosticRedactor.redact(line)?.let { appendLine(it) } } }
+                            }
+                        }
+                    }
                     appendLine()
                     appendLine("--- Recent own-app process exits (Android 11+) ---")
                     appendLine(ProcessExitDiagnostics.report(appContext))
