@@ -1,0 +1,3 @@
+<resources>
+    <string name="default_connection_description">عند فتح DiPlay، تكون الأولوية لجهاز iPhone المتصل بكابل بدلاً من الوضع الافتراضي. توصيل الكابل أثناء ظهور DiPlay يحوّل الاتصال إلى USB. تظل أزرار الاتصال اليدوي تستخدم الوضع الذي تختاره.</string>
+</resources>

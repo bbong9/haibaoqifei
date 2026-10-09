@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_seal_profile">海豹 60 幀設定</string>
+    <string name="settings_seal_profile_hint">請求 60 幀，使用單主畫面 H.264 和直接顯示。重設介面大小，關閉儀表地圖、浮動地圖、地圖分享、旋轉畫布、分割畫面和側邊欄。下次連線生效，實際幀率需測量。</string>
+    <string name="settings_seal_native">原生解析度 · 100%</string>
+    <string name="settings_seal_medium">較低解析度 · 83%</string>
+    <string name="settings_seal_light">最低解析度 · 67%</string>
+    <string name="settings_direct_video">直接顯示（實驗性）</string>
+    <string name="settings_direct_video_hint">使用 SurfaceView，不額外增加平滑緩衝。畫面濾鏡無法使用；啟用平滑影片後仍會增加緩衝。下次連線生效。</string>
+</resources>

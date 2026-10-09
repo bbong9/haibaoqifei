@@ -206,6 +206,10 @@ class CarPlayController(
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
+    private val usbBringupGeneration = AtomicInteger()
+    private val wiredFailureReported = AtomicBoolean(false)
+    // Main-thread permission/attach events for the same USB incarnation share one attempt.
+    private var iphonePermissionDevice: Pair<String, Int?>? = null
     private var lastReportedStatus: CarPlayStatus? = null
     private var mfiResetLogged = false
 
@@ -214,6 +218,7 @@ class CarPlayController(
     @Volatile private var ch341Host: Ch341UsbHost? = null
     @Volatile private var mfiSession: MfiSession? = null
     @Volatile private var mux: Iap2UsbMuxHost? = null
+    @Volatile private var wiredUsbSession: Iap2UsbSession? = null
     @Volatile private var csm: Iap2Session? = null
     @Volatile private var activeSession: AirPlaySession? = null
     @Volatile private var requestedDashboardUrl: String? = airPlayConfig.cluster?.initialUrl
@@ -461,8 +466,15 @@ class CarPlayController(
     fun sendTouch(contacts: List<AirPlayContact>): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
+        val token = session.mainScreenSessionToken() ?: return false
+        val queuedAt = System.nanoTime()
         return try {
-            touchExecutor.execute { session.sendTouch(contacts) }
+            touchExecutor.execute {
+                if (!closed && activeSession === session && session.mainScreenSessionToken() === token) {
+                    com.shilapi.xcertplay.media.TouchLatencyProbe.onDispatchWait(System.nanoTime() - queuedAt)
+                    session.sendTouch(contacts)
+                }
+            }
             true
         } catch (_: Exception) {
             false
@@ -587,7 +599,7 @@ class CarPlayController(
     }
 
     override fun close() {
-        synchronized(this) {
+        synchronized(lifecycleLock) {
             if (closed) return
             closed = true
             dashboardMapOutputVisible = false
@@ -622,6 +634,9 @@ class CarPlayController(
                     }
                     closeBestEffort("USBMUX") { mux?.close() }
                     mux = null
+                    // The version handshake can still be running before mux is published.
+                    closeBestEffort("USB pipe") { wiredUsbSession?.close() }
+                    wiredUsbSession = null
                     if (config.transport == CarPlayTransport.WIRED) {
                         closeBestEffort("VPN/NCM") { service?.detach() }
                     }
@@ -1684,16 +1699,22 @@ class CarPlayController(
     }
 
     private fun startIphone() {
-        diagnosticRun.incrementAndGet()
-        availabilityPollGeneration.incrementAndGet()
-        phase = Phase.IPHONE
-        reenumerationAttempts = 0
-        onStatus(CarPlayStatus.DiscoveringIphone)
-        checkIphoneAvailability()
+        mainHandler.post {
+            if (closed) return@post
+            diagnosticRun.incrementAndGet()
+            availabilityPollGeneration.incrementAndGet()
+            usbBringupGeneration.incrementAndGet()
+            wiredFailureReported.set(false)
+            iphonePermissionDevice = null
+            phase = Phase.IPHONE
+            reenumerationAttempts = 0
+            onStatus(CarPlayStatus.DiscoveringIphone)
+            checkIphoneAvailability()
+        }
     }
 
     private fun checkIphoneAvailability() {
-        if (closed || phase != Phase.IPHONE) return
+        if (closed || wiredFailureReported.get() || phase != Phase.IPHONE) return
         val device = iphoneHost.discover().firstOrNull()
         if (device == null) {
             onStatus(CarPlayStatus.WaitingForIphone)
@@ -1713,17 +1734,20 @@ class CarPlayController(
     }
 
     private fun doRequestIphonePermission(device: UsbDevice) {
-        if (closed) return
+        if (closed || wiredFailureReported.get() || phase !in listOf(Phase.IPHONE, Phase.REENUMERATION)) return
         try {
+            val key = iphoneDeviceKey(device)
+            if (iphonePermissionDevice == key) return
+            iphonePermissionDevice = key
+            usbBringupGeneration.incrementAndGet()
+            permissionGrant.set(false)
             when (val request = iphoneHost.requestPermission(device)) {
                 is IphoneUsbHost.PermissionRequest.AlreadyGranted -> {
                     debugLog("wired iPhone USB permission already granted")
-                    permissionGrant.set(false)
                     onIphonePermission(IphoneUsbHost.PermissionResult.Granted(request.device))
                 }
                 is IphoneUsbHost.PermissionRequest.Requested -> {
                     debugLog("wired iPhone USB permission requested")
-                    permissionGrant.set(false)
                     onStatus(CarPlayStatus.RequestingIphonePermission)
                     pollIphonePermission(device)
                 }
@@ -1734,6 +1758,12 @@ class CarPlayController(
     }
 
     private fun onIphonePermission(result: IphoneUsbHost.PermissionResult) {
+        if (closed || wiredFailureReported.get() || phase !in listOf(Phase.IPHONE, Phase.REENUMERATION)) return
+        val device = when (result) {
+            is IphoneUsbHost.PermissionResult.Granted -> result.device
+            is IphoneUsbHost.PermissionResult.Denied -> result.device
+        }
+        if (iphonePermissionDevice != iphoneDeviceKey(device)) return
         when (result) {
             is IphoneUsbHost.PermissionResult.Granted -> {
                 // The system broadcast and the polling fallback can both observe the grant.
@@ -1769,8 +1799,9 @@ class CarPlayController(
                 }
             }
             is IphoneUsbHost.PermissionResult.Denied -> {
-                permissionGrant.set(true)
-                onStatus(CarPlayStatus.Failed("iPhone USB permission was denied"))
+                if (!permissionGrant.compareAndSet(false, true)) return
+                permissionPollGeneration++
+                fail(IphoneUsbException.PermissionDenied("iPhone USB permission was denied"))
             }
         }
     }
@@ -1781,15 +1812,15 @@ class CarPlayController(
         val deadlineNanos = System.nanoTime() + PERMISSION_POLL_TIMEOUT_MILLIS * 1_000_000L
         val check = object : Runnable {
             override fun run() {
-                if (closed || generation != permissionPollGeneration) return
+                if (closed || wiredFailureReported.get() || generation != permissionPollGeneration) return
                 if (requireUsbManager().hasPermission(device)) {
                     onIphonePermission(IphoneUsbHost.PermissionResult.Granted(device))
                     return
                 }
                 if (System.nanoTime() >= deadlineNanos) {
                     if (permissionGrant.compareAndSet(false, true)) {
-                        onStatus(
-                            CarPlayStatus.Failed(
+                        fail(
+                            IphoneUsbException.PermissionDenied(
                                 "iPhone USB permission was not granted; tap Reconnect iPhone to retry",
                             ),
                         )
@@ -1807,12 +1838,48 @@ class CarPlayController(
         reenumerationAttempts += 1
         connectionDiagnostic("USB transition requested count=$reenumerationAttempts")
         onStatus(CarPlayStatus.SelectingConfiguration)
+        val generation = usbBringupGeneration.get()
         iphoneHost.requestCarPlayReenumerationAsync(device, executor) { transition ->
-            when (transition) {
-                IphoneUsbHost.TransitionResult.ReenumerationRequested ->
-                    onStatus(CarPlayStatus.WaitingForReenumeration)
-                is IphoneUsbHost.TransitionResult.Failed -> fail(transition.error)
+            mainHandler.post { onUsbTransition(generation, transition) }
+        }
+    }
+
+    private fun iphoneDeviceKey(device: UsbDevice): Pair<String, Int?> =
+        device.deviceName to IphoneCarPlayConfiguration.find(device)?.id
+
+    private fun currentUsbBringup(generation: Int): Boolean =
+        !closed && !wiredFailureReported.get() && generation == usbBringupGeneration.get()
+
+    private fun onUsbTransition(generation: Int, transition: IphoneUsbHost.TransitionResult) {
+        if (!currentUsbBringup(generation) || phase != Phase.REENUMERATION) return
+        val error = (transition as? IphoneUsbHost.TransitionResult.Failed)?.error
+        if (error == null) onStatus(CarPlayStatus.WaitingForReenumeration)
+        // The vendor request may return -1 because the phone has already re-enumerated.
+        // Give Android's attach/device-list update time to arrive before reporting failure.
+        pollReenumeratedIphone(generation, error, if (error == null) 10 else 2)
+    }
+
+    private fun pollReenumeratedIphone(generation: Int, error: Throwable?, remainingPolls: Int) {
+        if (!currentUsbBringup(generation) || phase != Phase.REENUMERATION) return
+        val replacement = iphoneHost.discover().firstOrNull { iphoneDeviceKey(it) != iphonePermissionDevice }
+        if (replacement != null) {
+            doRequestIphonePermission(replacement)
+        } else if (remainingPolls == 0) {
+            val previous = iphonePermissionDevice
+            val discovered = iphoneHost.discover().joinToString(prefix = "[", postfix = "]") {
+                val (name, configId) = iphoneDeviceKey(it)
+                "$name/${configId ?: "none"}"
             }
+            connectionDiagnostic(
+                "USB reenumeration not observed previous=${previous?.first ?: "none"}/${previous?.second ?: "none"} " +
+                    "discovered=$discovered error=${error?.javaClass?.simpleName ?: "none"}",
+            )
+            fail(error ?: IphoneUsbException.TimedOut("iPhone did not reappear after the CarPlay USB transition"))
+        } else {
+            mainHandler.postDelayed(
+                { pollReenumeratedIphone(generation, error, remainingPolls - 1) },
+                PERMISSION_POLL_INTERVAL_MILLIS,
+            )
         }
     }
 
@@ -1844,21 +1911,36 @@ class CarPlayController(
 
     private fun openDataPaths(device: UsbDevice) {
         phase = Phase.DATAPATHS
+        val generation = usbBringupGeneration.get()
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
         onStatus(CarPlayStatus.OpeningDataPaths)
         iphoneHost.openIap2UsbSessionAsync(device, executor) { result ->
             when (result) {
                 is IphoneUsbHost.Iap2SessionResult.Connected -> {
+                    val accepted = synchronized(lifecycleLock) {
+                        if (!currentUsbBringup(generation)) false else {
+                            wiredUsbSession = result.session
+                            true
+                        }
+                    }
+                    if (!accepted) {
+                        result.session.close()
+                        return@openIap2UsbSessionAsync
+                    }
                     try {
                         val ncm = openNcm(device)
                         runStack(result.session, ncm)
                     } catch (error: Throwable) {
+                        if (currentUsbBringup(generation)) fail(error)
+                    } finally {
                         result.session.close()
-                        fail(error)
+                        synchronized(lifecycleLock) {
+                            if (wiredUsbSession === result.session) wiredUsbSession = null
+                        }
                     }
                 }
-                is IphoneUsbHost.Iap2SessionResult.Failed -> fail(result.error)
+                is IphoneUsbHost.Iap2SessionResult.Failed -> if (currentUsbBringup(generation)) fail(result.error)
             }
         }
     }
@@ -1887,7 +1969,13 @@ class CarPlayController(
         try {
             if (closed) return
             val mux = Iap2UsbMuxHost.open(usbSession, onDiagnostic = ::connectionDiagnostic)
-            this.mux = mux
+            synchronized(lifecycleLock) {
+                if (closed) {
+                    mux.close()
+                    return
+                }
+                this.mux = mux
+            }
             debugLog("wired USBMUX host opened")
             onStatus(CarPlayStatus.Pairing)
             val pairingClient = LockdownPairingClient(mux)
@@ -1902,38 +1990,7 @@ class CarPlayController(
             )
             onStatus(CarPlayStatus.ConnectingControl)
             val carKitClient = LockdownCarKitClient(mux)
-            // Temporary lab capture, limited to accessory/authentication messages and two minutes.
-            try {
-                val relay = carKitClient.openService(pairRecord, config.label, "com.apple.syslog_relay")
-                Thread({
-                    try {
-                        relay.use {
-                            val deadline = System.nanoTime() + 120_000_000_000L
-                            val pending = StringBuilder()
-                            val relevant = Regex(" (accessoryd|ACCCarPlayService|iap2d|CarPlay)([\\[(])", RegexOption.IGNORE_CASE)
-                            while (!closed && System.nanoTime() < deadline) {
-                                val bytes = relay.recv(8192, 1000) ?: continue
-                                if (bytes.isEmpty()) break
-                                pending.append(bytes.toString(Charsets.UTF_8).replace('\u0000', '\n'))
-                                while (true) {
-                                    val end = pending.indexOf("\n")
-                                    if (end < 0) break
-                                    val line = pending.substring(0, end)
-                                    pending.delete(0, end + 1)
-                                    if (relevant.containsMatchIn(line)) debugLog("PHONE ${line.take(2000)}")
-                                }
-                                if (pending.length > 65536) pending.clear()
-                            }
-                        }
-                        debugLog("phone authentication diagnostic capture ended")
-                    } catch (error: Exception) {
-                        debugLog("phone authentication diagnostic capture ended: ${error.javaClass.simpleName}")
-                    }
-                }, "carplay-lab-phone-diagnostics").apply { isDaemon = true; start() }
-                debugLog("phone authentication diagnostic capture started")
-            } catch (error: Exception) {
-                debugLog("phone authentication diagnostics unavailable: ${error.message}")
-            }
+            // Open CarPlay immediately after trust; phone log services must not delay this handshake.
             val carkit = try {
                 carKitClient.open(pairRecord, config.label)
             } catch (error: Throwable) {
@@ -2541,6 +2598,8 @@ class CarPlayController(
             if (wireless) {
                 if (!wirelessFailureReported.compareAndSet(false, true)) return
                 firstTcpWatchdog?.terminate()
+            } else {
+                if (!wiredFailureReported.compareAndSet(false, true)) return
             }
             val causes = generateSequence(error) { it.cause }.toList()
             onStatus(CarPlayStatus.Failed(error.message ?: error.javaClass.simpleName,

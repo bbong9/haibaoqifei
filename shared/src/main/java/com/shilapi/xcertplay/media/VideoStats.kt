@@ -14,6 +14,11 @@ internal class VideoStats(
     private var recoveries = 0
     private var bytes = 0L
     private var maxArrivalGapNs = 0L
+    private var maxAllArrivalGapNs = 0L
+    private var longArrivalGaps = 0
+    private var lastReleaseNs = 0L
+    private var maxReleaseGapNs = 0L
+    private val queueWait = LatencySamples()
     private var touchSamples = 0
     private var touchLatencySumNs = 0L
     private var maxTouchLatencyNs = 0L
@@ -26,6 +31,10 @@ internal class VideoStats(
         val now = nanoTime()
         val gap = now - lastArrivalNs
         if (lastArrivalNs != 0L && gap < IDLE_GAP_NS) maxArrivalGapNs = maxOf(maxArrivalGapNs, gap)
+        if (lastArrivalNs != 0L) {
+            maxAllArrivalGapNs = maxOf(maxAllArrivalGapNs, gap)
+            if (gap >= IDLE_GAP_NS) longArrivalGaps++
+        }
         lastArrivalNs = now
         // Touches only change the main screen; a second stream must not consume their samples.
         val touchLatency = if (label.isEmpty()) TouchLatencyProbe.onFrame(now) else -1L
@@ -38,7 +47,14 @@ internal class VideoStats(
         bytes += size
     }
 
-    @Synchronized fun onRendered() { rendered++ }
+    @Synchronized fun onRendered() {
+        val now = nanoTime()
+        if (lastReleaseNs != 0L) maxReleaseGapNs = maxOf(maxReleaseGapNs, now - lastReleaseNs)
+        lastReleaseNs = now
+        rendered++
+    }
+
+    fun onQueueWait(ns: Long) { queueWait.record(ns) }
 
     @Synchronized fun onRecovery() { recoveries++ }
 
@@ -66,26 +82,29 @@ internal class VideoStats(
         val elapsedNs = now - windowStartNs
         if (elapsedNs < WINDOW_NS) return null
         val seconds = elapsedNs / 1e9
-        if (received == 0 && touchSamples == 0) { windowStartNs = now; return null }
+        if (received == 0 && rendered == 0 && recoveries == 0 && touchSamples == 0) { windowStartNs = now; return null }
         val touchAvgMs = if (touchSamples == 0) -1 else touchLatencySumNs / touchSamples / 1_000_000
         val line = ("video stats$label rx=%.1ffps shown=%.1ffps maxGap=%dms kbps=%d recoveries=%d " +
             "touch2frame avg=%dms max=%dms n=%d touchSendMax=%dms").format(
             received / seconds, rendered / seconds, maxArrivalGapNs / 1_000_000,
             (bytes * 8 / 1000 / seconds).toLong(), recoveries,
             touchAvgMs, maxTouchLatencyNs / 1_000_000, touchSamples, TouchLatencyProbe.maxSendNs / 1_000_000,
-        ) + decodeSummary()
-        TouchLatencyProbe.maxSendNs = 0
+        ) + decodeSummary() + queueWait.takeSummary("queue") +
+            " allGap=${maxAllArrivalGapNs / 1_000_000}ms gapsOver2s=$longArrivalGaps releaseGap=${maxReleaseGapNs / 1_000_000}ms" +
+            if (label.isEmpty()) TouchLatencyProbe.takeDispatchSummary() else ""
+        if (label.isEmpty()) TouchLatencyProbe.maxSendNs = 0
         Log.i(TAG, line)
         windowStartNs = now
         received = 0; rendered = 0; recoveries = 0; bytes = 0; maxArrivalGapNs = 0
         touchSamples = 0; touchLatencySumNs = 0; maxTouchLatencyNs = 0
         decodeSamples = 0; late = 0
+        maxAllArrivalGapNs = 0; longArrivalGaps = 0; maxReleaseGapNs = 0
         return line
     }
 
     private companion object {
         const val TAG = "DiPlay-VideoStats"
         const val WINDOW_NS = 5_000_000_000L
-        const val IDLE_GAP_NS = 2_000_000_000L // longer gaps are a static screen, not lag
+        const val IDLE_GAP_NS = 2_000_000_000L // Legacy maxGap excludes these; allGap preserves them for diagnosis.
     }
 }

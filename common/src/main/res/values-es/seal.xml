@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_seal_profile">Perfil Seal de 60 fps</string>
+    <string name="settings_seal_profile_hint">Solicita 60 fps con una pantalla principal H.264 y salida directa. Restablece el tamaño de la interfaz y desactiva mapas del cuadro, mapas flotantes y compartidos, lienzo giratorio, pantalla dividida y panel lateral. Se aplica en la próxima conexión. Hay que medir los fps reales.</string>
+    <string name="settings_seal_native">Resolución nativa · 100%</string>
+    <string name="settings_seal_medium">Resolución reducida · 83%</string>
+    <string name="settings_seal_light">Resolución mínima · 67%</string>
+    <string name="settings_direct_video">Vídeo directo (experimental)</string>
+    <string name="settings_direct_video_hint">Usa SurfaceView sin añadir búfer de suavizado. Los ajustes de imagen no están disponibles. Si se activa Vídeo fluido, se añade su búfer. Se aplica en la próxima conexión.</string>
+</resources>

@@ -1,0 +1,3 @@
+<resources>
+    <string name="default_connection_description">Al abrir DiPlay, un iPhone conectado por cable tiene prioridad sobre el modo predeterminado. Conectar el cable con DiPlay visible cambia a USB. Los botones de conexión manual conservan el modo elegido.</string>
+</resources>

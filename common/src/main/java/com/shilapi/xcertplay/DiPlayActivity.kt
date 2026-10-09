@@ -114,6 +114,13 @@ internal object SettingsInformationArchitecture {
             SettingsSection.ADVANCED_MEDIA,
         ),
     )
+
+    fun visibleCategories(
+        sealEdition: Boolean,
+        currentCategory: SettingsCategory,
+    ): List<SettingsCategory> = SettingsCategory.entries.filterNot {
+        sealEdition && it == SettingsCategory.ADVANCED && currentCategory != SettingsCategory.ADVANCED
+    }
 }
 
 /** DiAuto's visual language, with a connection flow for an independent CarPlay receiver. */
@@ -265,9 +272,10 @@ class DiPlayActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SealPerformanceProfile.migrateIfNeeded(this)
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
         if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            openProjection(); finish(); return
+            openProjection(preferAttachedUsb = true); finish(); return
         }
         enforceInterfaceSize()
         languagePreferenceAtCreate = AppLocale.preference(this)
@@ -308,7 +316,7 @@ class DiPlayActivity : ComponentActivity() {
         // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
         // CarPlay carry a "page" extra, which isLauncherIntent rejects.
         if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
-            page = "home"; render(); openProjection(); return
+            page = "home"; render(); openProjection(preferAttachedUsb = true); return
         }
         page = intent.getStringExtra("page") ?: "home"; render()
         automaticVehicleValidationStarted = false
@@ -369,8 +377,19 @@ class DiPlayActivity : ComponentActivity() {
         if (!isFinishing && !isChangingConfigurations) CenterMapOverlay.scheduleShow()
     }
 
+    private var usbAttachments: java.io.Closeable? = null
+
     override fun onResume() {
         super.onResume()
+        if (SealPerformanceProfile.enabled(this) && usbAttachments == null) {
+            usbAttachments = IphoneUsbConnection.observe(this) { device ->
+                if (!isFinishing && !isDestroyed && setupError == null) {
+                    pendingWireless = false
+                    startupHotspotCancelled = true
+                    startActivity(IphoneUsbConnection.hostIntent(this, device))
+                }
+            }
+        }
         // Returning from another activity can bring the head unit's own density back.
         if (enforceInterfaceSize()) render()
         if (Build.VERSION.SDK_INT < 33 && AppLocale.preference(this) != languagePreferenceAtCreate) {
@@ -392,6 +411,8 @@ class DiPlayActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        usbAttachments?.close()
+        usbAttachments = null
         cancelKeyLearning()
         pausedForAdbSwitchChange = adbSwitchChangePending
         handler.removeCallbacks(tick)
@@ -710,7 +731,10 @@ class DiPlayActivity : ComponentActivity() {
     private fun settingsRail(): LinearLayout = column().apply {
         background = rounded(SURFACE, BORDER)
         setPadding(dp(12), dp(12), dp(12), dp(12))
-        SettingsCategory.entries.forEach { category ->
+        SettingsInformationArchitecture.visibleCategories(
+            SealPerformanceProfile.enabled(this@DiPlayActivity),
+            settingsCategory,
+        ).forEach { category ->
             addView(settingsRailDestination(category), matchButton(0, 52).apply {
                 bottomMargin = dp(8)
             })
@@ -955,14 +979,16 @@ class DiPlayActivity : ComponentActivity() {
             getString(R.string.default_connection_description),
             DiPlayPreferences.autoConnect(this@DiPlayActivity)) { DiPlayPreferences.saveAutoConnect(this@DiPlayActivity, it) }
         appearanceControl(this)
-        toggle(this, getString(R.string.full_screen), getString(R.string.settings_full_screen_description),
-            AirPlayPersistence.loadHideTopBar(this@DiPlayActivity) && AirPlayPersistence.loadHideBottomBar(this@DiPlayActivity)) { enabled ->
-            AirPlayPersistence.saveHideTopBar(this@DiPlayActivity, enabled)
-            AirPlayPersistence.saveHideBottomBar(this@DiPlayActivity, enabled)
+        if (!SealPerformanceProfile.enabled(this@DiPlayActivity)) {
+            toggle(this, getString(R.string.full_screen), getString(R.string.settings_full_screen_description),
+                AirPlayPersistence.loadHideTopBar(this@DiPlayActivity) && AirPlayPersistence.loadHideBottomBar(this@DiPlayActivity)) { enabled ->
+                AirPlayPersistence.saveHideTopBar(this@DiPlayActivity, enabled)
+                AirPlayPersistence.saveHideBottomBar(this@DiPlayActivity, enabled)
+            }
+            toggle(this, getString(R.string.report_location_to_iphone),
+                "${getString(R.string.location_reporting_reconnects)} ${getString(R.string.sends_precise_android_location_as_carplay_gps_data_when_th)}",
+                AirPlayPersistence.loadLocationReportingEnabled(this@DiPlayActivity), save = ::onLocationReportingChanged)
         }
-        toggle(this, getString(R.string.report_location_to_iphone),
-            "${getString(R.string.location_reporting_reconnects)} ${getString(R.string.sends_precise_android_location_as_carplay_gps_data_when_th)}",
-            AirPlayPersistence.loadLocationReportingEnabled(this@DiPlayActivity), save = ::onLocationReportingChanged)
         Unit
     }
 
@@ -1160,6 +1186,10 @@ class DiPlayActivity : ComponentActivity() {
             })
         }
         content.addView(caution, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
+        if (SealPerformanceProfile.enabled(this)) {
+            section(content, getString(R.string.display_and_performance), R.drawable.ic_dp_display,
+                ::detailedDisplaySettings)
+        }
         renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.ADVANCED))
         advancedVehicleDataSettings(content)
     }
@@ -1189,6 +1219,81 @@ class DiPlayActivity : ComponentActivity() {
         } finally {
             settingsSectionFilter = previous
         }
+    }
+
+    private fun detailedDisplaySettings(card: LinearLayout) {
+        val nightModes = CarPlayNightMode.entries
+        val nightMode = AirPlayPersistence.loadCarPlayNightMode(this)
+        val ambientControls = column().apply {
+            visibility = if (nightMode == CarPlayNightMode.AMBIENT) View.VISIBLE else View.GONE
+        }
+        val scheduleControls = column().apply {
+            visibility = if (nightMode == CarPlayNightMode.SCHEDULE) View.VISIBLE else View.GONE
+        }
+        choice(
+            card,
+            getString(R.string.carplay_night_mode),
+            nightModeLabels(),
+            nightModes.indexOf(nightMode),
+            reconnects = false,
+        ) { index ->
+            AirPlayPersistence.saveCarPlayNightMode(this, nightModes[index])
+            ambientControls.visibility = if (nightModes[index] == CarPlayNightMode.AMBIENT) View.VISIBLE else View.GONE
+            scheduleControls.visibility = if (nightModes[index] == CarPlayNightMode.SCHEDULE) View.VISIBLE else View.GONE
+        }
+        card.addView(label(getString(R.string.carplay_night_hint), 14, MUTED))
+        card.addView(label(getString(R.string.carplay_night_time_note), 14, MUTED).apply {
+            setPadding(0, 0, 0, dp(18))
+        })
+        ambientControls.addView(label(getString(R.string.carplay_night_ambient_hint), 14, MUTED).apply {
+            setPadding(0, 0, 0, dp(18))
+        })
+        ambientLightThresholdControl(ambientControls)
+        nightDelaySettingControl(ambientControls, R.string.ambient_delay_title, R.string.ambient_delay_hint,
+            0..60, 2, R.string.ambient_delay_summary, { AirPlayPersistence.loadAmbientDelaySeconds(this) },
+            save = { AirPlayPersistence.saveAmbientDelaySeconds(this, it) })
+        card.addView(ambientControls)
+        scheduleControls.addView(label(getString(R.string.carplay_night_schedule_hint), 14, MUTED).apply {
+            setPadding(0, 0, 0, dp(18))
+        })
+        scheduleTimeControl(scheduleControls, start = true)
+        scheduleTimeControl(scheduleControls, start = false)
+        card.addView(scheduleControls)
+        card.addView(button(getString(R.string.picture_adjustments), false) {
+            startActivity(Intent(this, CarPlayHostActivity::class.java)
+                .putExtra("picture_controls", true).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        }, matchButton(0, 56).apply { bottomMargin = dp(24) })
+        carPlaySizeControl(card)
+        resolutionSettingControl(
+            card, R.string.resolution, R.string.custom_resolution_hint,
+            CarPlayDisplayScale.MIN_PERCENT..CarPlayDisplayScale.MAX_PERCENT, 100,
+            R.string.custom_resolution_summary,
+            { AirPlayPersistence.loadDisplayScalePercent(this) }, reconnects = true,
+            save = { AirPlayPersistence.saveDisplayScalePercent(this, it) },
+        )
+        choice(card, getString(R.string.frame_rate),
+            listOf(getString(R.string.s_30_fps_lighter_load), getString(R.string.s_60_fps_smoother_motion)),
+            if (AirPlayPersistence.loadFps(this) == 60) 1 else 0) {
+            AirPlayPersistence.saveFps(this, if (it == 1) 60 else 30)
+        }
+        carPlayDockControl(card)
+        addSystemBarControls(
+            hideTopBar = AirPlayPersistence.loadHideTopBar(this),
+            hideBottomBar = AirPlayPersistence.loadHideBottomBar(this),
+            onHideTopBarChanged = { AirPlayPersistence.saveHideTopBar(this, it) },
+            onHideBottomBarChanged = { AirPlayPersistence.saveHideBottomBar(this, it) },
+        ) { label, checked, onChanged ->
+            toggle(card, getString(label), getString(R.string.hide_the_car_s_system_bars_while_carplay_is_open), checked, save = onChanged)
+        }
+        toggle(card, getString(R.string.adapt_pip_resolution),
+            getString(R.string.adapt_pip_resolution_description),
+            AirPlayPersistence.loadAdaptPipResolution(this)) {
+            AirPlayPersistence.saveAdaptPipResolution(this, it)
+        }
+        card.addView(button("${getString(R.string.settings_interface_size)} · ${InterfaceSize.displayName(this, InterfaceSize.preference(this))}", false) {
+            InterfaceSize.showPicker(this)
+        }, matchButton(12, 60))
+        card.addView(label(getString(R.string.settings_interface_size_hint), 14, MUTED))
     }
 
     private fun allSettingsSections(content: LinearLayout) {
@@ -1276,72 +1381,22 @@ class DiPlayActivity : ComponentActivity() {
         if (settingsSectionFilter?.contains(SettingsSection.BYD_ADB) != false) bydAdbSettings(content)
         filteredSection(content, SettingsSection.DISPLAY_AND_PERFORMANCE,
             getString(R.string.display_and_performance), R.drawable.ic_dp_display) { card ->
-            val nightModes = CarPlayNightMode.entries
-            val nightMode = AirPlayPersistence.loadCarPlayNightMode(this)
-            val ambientControls = column().apply {
-                visibility = if (nightMode == CarPlayNightMode.AMBIENT) View.VISIBLE else View.GONE
+            if (SealPerformanceProfile.enabled(this)) {
+                card.addView(button("${getString(R.string.settings_seal_profile)} · ${AirPlayPersistence.loadDisplayScalePercent(this)}%", false) {
+                    val options = listOf(R.string.settings_seal_native, R.string.settings_seal_medium, R.string.settings_seal_light)
+                    var selected = SealPerformanceProfile.resolutionPercents.indexOf(AirPlayPersistence.loadDisplayScalePercent(this)).coerceAtLeast(0)
+                    AlertDialog.Builder(this).setTitle(R.string.settings_seal_profile)
+                        .setSingleChoiceItems(options.map { getString(it) }.toTypedArray(), selected) { _, index -> selected = index }
+                        .setPositiveButton(R.string.save) { _, _ ->
+                            SealPerformanceProfile.apply(this, SealPerformanceProfile.resolutionPercents[selected])
+                            render()
+                            markReconnectNeeded()
+                        }.setNegativeButton(R.string.cancel, null).show()
+                }, matchButton(0, 60))
+                card.addView(label(getString(R.string.settings_seal_profile_hint), 14, MUTED))
             }
-            val scheduleControls = column().apply {
-                visibility = if (nightMode == CarPlayNightMode.SCHEDULE) View.VISIBLE else View.GONE
-            }
-            choice(
-                card,
-                getString(R.string.carplay_night_mode),
-                nightModeLabels(),
-                nightModes.indexOf(nightMode),
-                reconnects = false,
-            ) { index ->
-                AirPlayPersistence.saveCarPlayNightMode(this, nightModes[index])
-                ambientControls.visibility = if (nightModes[index] == CarPlayNightMode.AMBIENT) View.VISIBLE else View.GONE
-                scheduleControls.visibility = if (nightModes[index] == CarPlayNightMode.SCHEDULE) View.VISIBLE else View.GONE
-            }
-            card.addView(label(getString(R.string.carplay_night_hint), 14, MUTED))
-            card.addView(label(getString(R.string.carplay_night_time_note), 14, MUTED).apply {
-                setPadding(0, 0, 0, dp(18))
-            })
-            ambientControls.addView(label(getString(R.string.carplay_night_ambient_hint), 14, MUTED).apply {
-                setPadding(0, 0, 0, dp(18))
-            })
-            ambientLightThresholdControl(ambientControls)
-            nightDelaySettingControl(ambientControls, R.string.ambient_delay_title, R.string.ambient_delay_hint,
-                0..60, 2, R.string.ambient_delay_summary, { AirPlayPersistence.loadAmbientDelaySeconds(this) },
-                save = { AirPlayPersistence.saveAmbientDelaySeconds(this, it) })
-            card.addView(ambientControls)
-            scheduleControls.addView(label(getString(R.string.carplay_night_schedule_hint), 14, MUTED).apply {
-                setPadding(0, 0, 0, dp(18))
-            })
-            scheduleTimeControl(scheduleControls, start = true)
-            scheduleTimeControl(scheduleControls, start = false)
-            card.addView(scheduleControls)
-            card.addView(button(getString(R.string.picture_adjustments), false) {
-                startActivity(Intent(this, CarPlayHostActivity::class.java)
-                    .putExtra("picture_controls", true).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-            }, matchButton(0, 56).apply { bottomMargin = dp(24) })
-            carPlaySizeControl(card)
-            resolutionSettingControl(
-                card, R.string.resolution, R.string.custom_resolution_hint,
-                CarPlayDisplayScale.MIN_PERCENT..CarPlayDisplayScale.MAX_PERCENT, 100,
-                R.string.custom_resolution_summary,
-                { AirPlayPersistence.loadDisplayScalePercent(this) }, reconnects = true,
-                save = { AirPlayPersistence.saveDisplayScalePercent(this, it) },
-            )
-            choice(card, getString(R.string.frame_rate), listOf(getString(R.string.s_30_fps_lighter_load), getString(R.string.s_60_fps_smoother_motion)), if (AirPlayPersistence.loadFps(this) == 60) 1 else 0) { AirPlayPersistence.saveFps(this, if (it == 1) 60 else 30) }
-            carPlayDockControl(card)
-            addSystemBarControls(
-                hideTopBar = AirPlayPersistence.loadHideTopBar(this),
-                hideBottomBar = AirPlayPersistence.loadHideBottomBar(this),
-                onHideTopBarChanged = { AirPlayPersistence.saveHideTopBar(this, it) },
-                onHideBottomBarChanged = { AirPlayPersistence.saveHideBottomBar(this, it) },
-            ) { label, checked, onChanged ->
-                toggle(card, getString(label), getString(R.string.hide_the_car_s_system_bars_while_carplay_is_open), checked, save = onChanged)
-            }
-            toggle(card, getString(R.string.adapt_pip_resolution), getString(R.string.adapt_pip_resolution_description), AirPlayPersistence.loadAdaptPipResolution(this)) {
-                AirPlayPersistence.saveAdaptPipResolution(this, it)
-            }
-            card.addView(button("${getString(R.string.settings_interface_size)} · ${InterfaceSize.displayName(this, InterfaceSize.preference(this))}", false) {
-                InterfaceSize.showPicker(this)
-            }, matchButton(12, 60))
-            card.addView(label(getString(R.string.settings_interface_size_hint), 14, MUTED))
+            if (SealPerformanceProfile.enabled(this)) return@filteredSection
+            detailedDisplaySettings(card)
         }
         filteredSection(content, SettingsSection.EXPERIMENTAL_DISPLAY,
             getString(R.string.settings_experimental_display), R.drawable.ic_dp_display) { card ->
@@ -1374,6 +1429,11 @@ class DiPlayActivity : ComponentActivity() {
         // Opt-in controls that can cost sound or video on some head units.
         filteredSection(content, SettingsSection.ADVANCED_MEDIA,
             getString(R.string.settings_advanced_media), R.drawable.ic_dp_advanced) { card ->
+            toggle(card, getString(R.string.settings_direct_video), getString(R.string.settings_direct_video_hint),
+                AirPlayPersistence.loadDirectVideo(this)) {
+                AirPlayPersistence.saveDirectVideo(this, it)
+                markReconnectNeeded()
+            }
             toggle(card, getString(R.string.efficient_video), getString(R.string.use_hevc_leave_off_for_the_widest_head_unit_compatibility), AirPlayPersistence.loadHevcEnabled(this)) { AirPlayPersistence.saveHevcEnabled(this, it); markReconnectNeeded() }
             toggle(card, getString(R.string.smooth_video), getString(R.string.smooth_video_description),
                 AirPlayPersistence.loadSmoothVideo(this)) {
@@ -1822,7 +1882,8 @@ class DiPlayActivity : ComponentActivity() {
     }
 
     private fun startupHotspotEligible(): Boolean =
-        CarHotspotSetup.shouldStartOnLaunch(applicationContext, CarPlayBackgroundSession.hasSession())
+        !(SealPerformanceProfile.enabled(this) && IphoneUsbConnection.attached(this) != null) &&
+            CarHotspotSetup.shouldStartOnLaunch(applicationContext, CarPlayBackgroundSession.hasSession())
 
     private fun hotspotResultText(result: CarHotspotTethering.Result): String = getString(when (result) {
         CarHotspotTethering.Result.READY -> R.string.hotspot_control_on
@@ -3737,8 +3798,10 @@ class DiPlayActivity : ComponentActivity() {
         if (CarPlayBackgroundSession.hasSession()) CarPlayBackgroundSession.stop { runOnUiThread { open() } }
         else open()
     }
-    private fun openProjection() {
-        startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+    private fun openProjection(preferAttachedUsb: Boolean = false) {
+        val device = if (preferAttachedUsb && SealPerformanceProfile.enabled(this)) IphoneUsbConnection.attached(this) else null
+        startActivity(if (device != null) IphoneUsbConnection.hostIntent(this, device)
+            else Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -3892,6 +3955,9 @@ class DiPlayActivity : ComponentActivity() {
                     appendLine("Saved resolution preference (may differ from active session): ${AirPlayPersistence.loadDisplayScalePercent(appContext)}%")
                     appendLine("Session: ${if (CarPlayBackgroundSession.active) "active" else if (CarPlayBackgroundSession.hasSession()) "connecting" else "stopped"}")
                     appendLine("Head-unit board: ${Build.BOARD}; hardware: ${Build.HARDWARE}; build: ${Build.DISPLAY}")
+                    appendLine()
+                    appendLine("--- Video performance and display capabilities ---")
+                    appendLine(VideoPerformanceDiagnostics.report(appContext))
                     appendLine()
                     appendLine("--- Current cluster display diagnostics (even when disabled) ---")
                     appendLine(ClusterMapPresentation.diagnosticReport(appContext))

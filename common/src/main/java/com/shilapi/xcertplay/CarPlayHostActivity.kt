@@ -277,6 +277,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var fallbackVideoBounds: CarPlaySurfaceBounds? = null
     // Smooth video (a setting): SurfaceView output with frames released at the iPhone's frame time.
     private var smoothVideo = false
+    private var directVideo = false
     // Sinks whose sessions are being torn down; their decoders may still render to the current surface
     // until they have released their codecs, so a destroyed surface is detached from them too. A restart
     // and a shutdown can overlap, so this is a set.
@@ -439,6 +440,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var startAfterHandshakeReset = false
     private var restartGeneration = 0
     private var reconnectScheduled = false
+    private var pendingReconnect: Runnable? = null
     private var sessionLog: SessionLogFile? = null
     private var gestureFingerCount = 3
     private var settingsGestureHint: TextView? = null
@@ -528,7 +530,7 @@ class CarPlayHostActivity : ComponentActivity() {
             appendLog("SurfaceView video surface created valid=${surface.isValid}")
             attachSurface(surface)
             // A still CarPlay screen sends no frames, so ask for one instead of showing the parked gap.
-            if (smoothVideo) sink?.refreshPicture(SCREEN_TYPE_MAIN)
+            sink?.refreshPicture(SCREEN_TYPE_MAIN)
             videoView?.let { updateVideoLayout(it.width, it.height) }
         }
 
@@ -546,7 +548,7 @@ class CarPlayHostActivity : ComponentActivity() {
             // smooth video the live session's main decoder parks off screen and keeps its state.
             val live = sink
             val detaches = (listOfNotNull(live) + retiringSinks).distinct()
-                .map { owner -> owner.beginSurfaceDetach(surface, parkMain = smoothVideo && owner === live) }
+                .map { owner -> owner.beginSurfaceDetach(surface, parkMain = (smoothVideo || directVideo) && owner === live) }
             val confirmed = detaches.map { it.await() }.all { it }
             videoSurfaceOwner.clear(surface)
             appendLog("SurfaceView video surface destroyed detachConfirmed=$confirmed")
@@ -555,6 +557,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SealPerformanceProfile.migrateIfNeeded(this)
         NavigationWidgetUpdater.attach(applicationContext)
         CarPlayCallKeys.install(applicationContext)
         CenterMapOverlay.requestShow = ::showCenterMap
@@ -767,8 +770,9 @@ class CarPlayHostActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (isIphoneUsbAttachment(intent)) {
+            // A re-enumeration can arrive while the USB session's menu is open too.
+            if (menuOpen) cancelSettingsEdits()
             if (wirelessEnabled) {
-                if (menuOpen) cancelSettingsEdits()
                 AirPlayPersistence.saveWirelessEnabled(this, false)
                 wirelessEnabled = false
                 wirelessPermissionsReady = true
@@ -783,9 +787,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun isIphoneUsbAttachment(intent: Intent): Boolean {
-        if (intent.action != UsbManager.ACTION_USB_DEVICE_ATTACHED) return false
-        val device = androidx.core.content.IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-        return device?.vendorId == IphoneUsbMatcher.APPLE_VENDOR_ID
+        return IphoneUsbConnection.fromIntent(intent) != null
     }
 
     override fun onStart() {
@@ -799,8 +801,15 @@ class CarPlayHostActivity : ComponentActivity() {
         homeScreenVisible = null
     }
 
+    private var usbAttachments: java.io.Closeable? = null
+
     override fun onResume() {
         super.onResume()
+        if (SealPerformanceProfile.enabled(this) && usbAttachments == null) {
+            usbAttachments = IphoneUsbConnection.observe(this) { device ->
+                if (!isFinishing && !isDestroyed) onNewIntent(IphoneUsbConnection.hostIntent(this, device))
+            }
+        }
         val savedNightMode = AirPlayPersistence.loadCarPlayNightMode(this)
         val savedThreshold = AirPlayPersistence.loadAmbientLightThreshold(this)
         val savedDelay = AirPlayPersistence.loadAmbientDelaySeconds(this)
@@ -1205,6 +1214,8 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        usbAttachments?.close()
+        usbAttachments = null
         nightModeController.pause()
         super.onPause()
     }
@@ -1497,6 +1508,7 @@ class CarPlayHostActivity : ComponentActivity() {
         root.addView(safeAreaEditor, FrameLayout.LayoutParams(-1, -1))
         videoView = video
         smoothVideo = AirPlayPersistence.loadSmoothVideo(this)
+        directVideo = AirPlayPersistence.loadDirectVideo(this)
         observeVideoWindow(video)
         gestureOverlay = gestureLayer
         settingsGestureHint = gestureHint
@@ -4344,9 +4356,10 @@ class CarPlayHostActivity : ComponentActivity() {
             return
         }
         if (controller == null && adoptBackgroundSession()) return
-        // The video view is chosen once per activity; a changed Smooth video setting needs a new one.
-        if (controller == null && AirPlayPersistence.loadSmoothVideo(this) != smoothVideo) {
-            appendLog("Smooth video setting changed; rebuilding the video view")
+        // Output preferences take effect at reconnection; the view is fixed for this activity.
+        if (controller == null && (AirPlayPersistence.loadSmoothVideo(this) != smoothVideo ||
+                AirPlayPersistence.loadDirectVideo(this) != directVideo)) {
+            appendLog("Video output setting changed; rebuilding the video view")
             // No session runs here, but a restart keeps this host as the session owner; the new instance
             // must be able to start its own.
             if (CarPlayBackgroundSession.isOwner(this)) CarPlayBackgroundSession.clear()
@@ -4397,22 +4410,22 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         reconnectAttempts += 1
         appendLog("$reason; retrying in ${delayMillis}ms generation=$generation startupFailure=$startupFailure startupRetries=${startupRetryBudget.retries}")
-        mainHandler.postDelayed(
-            {
-                reconnectScheduled = false
-                if (menuOpen && generation == restartGeneration) recoveryPendingAfterMenu = true
-                if (
-                    shuttingDown.get() ||
-                    menuOpen ||
-                    handshakeResetInProgress || startupRetryStopped ||
-                    generation != restartGeneration
-                ) {
-                    return@postDelayed
-                }
-                restartCarPlay("Reconnecting after $reason")
-            },
-            delayMillis,
-        )
+        val reconnect = Runnable postDelayed@{
+            pendingReconnect = null
+            reconnectScheduled = false
+            if (menuOpen && generation == restartGeneration) recoveryPendingAfterMenu = true
+            if (
+                shuttingDown.get() ||
+                menuOpen ||
+                handshakeResetInProgress || startupRetryStopped ||
+                generation != restartGeneration
+            ) {
+                return@postDelayed
+            }
+            restartCarPlay("Reconnecting after $reason")
+        }
+        pendingReconnect = reconnect
+        mainHandler.postDelayed(reconnect, delayMillis)
     }
 
     /** Full-stack fallback when an AirPlay-only reconnect is unavailable. */
@@ -4428,6 +4441,9 @@ class CarPlayHostActivity : ComponentActivity() {
         setConnectionStage(reason)
         Log.i(TAG, "$reason; rebuilding stack at ${size.width}x${size.height}")
         val generation = ++restartGeneration
+        pendingReconnect?.let { mainHandler.removeCallbacks(it) }
+        pendingReconnect = null
+        reconnectScheduled = false
         handshakeResetInProgress = true
         val oldController = controller
         val oldSink = sink
@@ -4618,9 +4634,9 @@ class CarPlayHostActivity : ComponentActivity() {
                 if (!texture.isAttachedToWindow) return true
                 removeVideoSurfaceProbe()
                 if (isDestroyed || videoView !== texture) return true
-                val mode = carPlayVideoSurfaceMode(texture.isHardwareAccelerated, smoothVideo)
+                val mode = carPlayVideoSurfaceMode(texture.isHardwareAccelerated, smoothVideo, directVideo)
                 appendLog("Video output mode=$mode windowHardwareAccelerated=${texture.isHardwareAccelerated} " +
-                    "smoothVideo=$smoothVideo")
+                    "smoothVideo=$smoothVideo directVideo=$directVideo")
                 if (mode == CarPlayVideoSurfaceMode.TEXTURE) return true
                 useFallbackVideoSurface(texture)
                 return false // Measure the replacement before drawing the software window.
@@ -4665,6 +4681,8 @@ class CarPlayHostActivity : ComponentActivity() {
         appendLog(if (smoothVideo) {
             "Using SurfaceView video output: smooth video, frames shown at the iPhone's frame time + a delay " +
                 "starting at ${smoothVideoDelayMillis(fps)} ms; picture adjustments unavailable"
+        } else if (directVideo) {
+            "Using SurfaceView video output: direct presentation without pacing buffer; picture adjustments unavailable"
         } else {
             "Using SurfaceView video output: window has no hardware acceleration; picture adjustments unavailable"
         })

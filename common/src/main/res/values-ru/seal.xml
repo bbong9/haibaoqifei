@@ -1,0 +1,9 @@
+<resources>
+    <string name="settings_seal_profile">Профиль Seal 60 кадров/с</string>
+    <string name="settings_seal_profile_hint">Запрашивает 60 кадров/с для одного главного экрана H.264 с прямым выводом. Сбрасывает размер интерфейса и отключает карты приборной панели, плавающие и общие карты, поворотный холст, разделение экрана и боковую панель. Применяется при следующем подключении. Фактическую частоту нужно измерить.</string>
+    <string name="settings_seal_native">Исходное разрешение · 100%</string>
+    <string name="settings_seal_medium">Пониженное разрешение · 83%</string>
+    <string name="settings_seal_light">Минимальное разрешение · 67%</string>
+    <string name="settings_direct_video">Прямой вывод видео (экспериментально)</string>
+    <string name="settings_direct_video_hint">Использует SurfaceView без дополнительного буфера сглаживания. Настройки изображения недоступны. Включённое плавное видео по-прежнему добавляет свой буфер. Применяется при следующем подключении.</string>
+</resources>

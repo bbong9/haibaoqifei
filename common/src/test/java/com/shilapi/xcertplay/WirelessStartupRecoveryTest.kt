@@ -5,18 +5,24 @@ import android.os.Looper
 import android.view.View
 import android.widget.Button
 import com.shilapi.xcertplay.network.WirelessStartupFailure
+import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.CarPlayStatus
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.util.concurrent.PausedExecutorService
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import org.robolectric.util.ReflectionHelpers
 import org.robolectric.util.ReflectionHelpers.ClassParameter.from
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(RobolectricTestRunner::class)
@@ -38,6 +44,8 @@ class WirelessStartupRecoveryTest {
 
     @After fun cleanup() {
         ReflectionHelpers.getField<Handler>(activity, "mainHandler").removeCallbacksAndMessages(null)
+        ReflectionHelpers.getField<ExecutorService>(activity, "teardownExecutor").shutdownNow()
+        ReflectionHelpers.getField<ExecutorService>(activity, "airPlayCommandExecutor").shutdownNow()
         CarPlayBackgroundSession.clear()
     }
 
@@ -46,6 +54,56 @@ class WirelessStartupRecoveryTest {
             from(Int::class.javaPrimitiveType, generation))(status)
     }
     private fun budget() = ReflectionHelpers.getField<WirelessStartupRetryBudget>(activity, "startupRetryBudget")
+
+    private fun attachController(): PausedExecutorService {
+        ReflectionHelpers.getField<ExecutorService>(activity, "teardownExecutor").shutdownNow()
+        val teardown = PausedExecutorService()
+        ReflectionHelpers.setField(activity, "teardownExecutor", teardown)
+        val sizeClass = Class.forName("com.shilapi.xcertplay.CarPlayHostActivity\$DisplaySize")
+        val size = sizeClass.getDeclaredConstructor(Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }.newInstance(1920, 990)
+        ReflectionHelpers.setField(activity, "activeDisplaySize", size)
+        ReflectionHelpers.setField(activity, "controller", mock(CarPlayController::class.java))
+        return teardown
+    }
+
+    @Test fun restartCancelsPendingReconnectWithoutAnotherRestart() {
+        val teardown = attachController()
+        report(status = CarPlayStatus.Failed("Connection closed"))
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertEquals(1, ReflectionHelpers.getField<Int>(activity, "reconnectAttempts"))
+
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "restartCarPlay", from(String::class.java, "switching to USB"))
+        assertEquals(1, ReflectionHelpers.getField<Int>(activity, "restartGeneration"))
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idleFor(31, TimeUnit.SECONDS)
+        assertEquals(1, ReflectionHelpers.getField<Int>(activity, "restartGeneration"))
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertEquals(1, ReflectionHelpers.getField<Int>(activity, "reconnectAttempts"))
+        assertEquals(0, budget().retries)
+    }
+
+    @Test fun replacementGenerationCanScheduleAndExecuteItsOwnReconnect() {
+        val teardown = attachController()
+        report(status = CarPlayStatus.Failed("Connection closed"))
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "restartCarPlay", from(String::class.java, "switching to USB"))
+        assertEquals(1, ReflectionHelpers.getField<Int>(activity, "restartGeneration"))
+        teardown.runAll()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        report(1, CarPlayStatus.Failed("Replacement connection closed"))
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertEquals(2, ReflectionHelpers.getField<Int>(activity, "reconnectAttempts"))
+        shadowOf(Looper.getMainLooper()).idleFor(4, TimeUnit.SECONDS)
+        assertEquals(2, ReflectionHelpers.getField<Int>(activity, "restartGeneration"))
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertEquals(2, ReflectionHelpers.getField<Int>(activity, "reconnectAttempts"))
+        assertEquals(0, budget().retries)
+    }
 
     @Test fun duplicateFailureAndCleanupErrorScheduleOnlyOneRetry() {
         report()

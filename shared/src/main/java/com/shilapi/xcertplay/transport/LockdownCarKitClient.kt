@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class LockdownCarKitClient(
     private val host: Iap2UsbMuxHost,
+    private val openTls: (BlockingDuplexByteStream, LockdownPairRecord, Long) -> BlockingDuplexByteStream =
+        { stream, record, timeout -> TlsDuplexChannel.open(stream, record, timeout) },
 ) {
     @Throws(IphoneUsbException::class, GeneralSecurityException::class)
     fun open(pairedRecord: PairedRecord, label: String): BlockingDuplexByteStream =
@@ -48,15 +50,12 @@ class LockdownCarKitClient(
             if (!enableSessionSsl) {
                 throw IphoneUsbException.Protocol("StartSession did not enable TLS")
             }
-            TlsDuplexChannel.open(
-                underlying = plaintext.detach(),
-                pairRecord = pairRecord,
-                handshakeTimeoutMillis = STEP_TIMEOUT_MILLIS,
-            )
+            openTls(plaintext.detach(), pairRecord, STEP_TIMEOUT_MILLIS)
         }
 
         val secureLockdown = LockdownPlistChannel(sessionTls)
         var serviceStream: BlockingDuplexByteStream? = null
+        var ownershipTransferred = false
         try {
             val response = secureLockdown.request(
                 LockdownPlistValue.Dictionary(
@@ -81,22 +80,18 @@ class LockdownCarKitClient(
                 timeoutMillis = STEP_TIMEOUT_MILLIS,
             )
             val readyStream = if (enableServiceSsl) {
-                TlsDuplexChannel.open(
-                    underlying = serviceConnection,
-                    pairRecord = pairRecord,
-                    handshakeTimeoutMillis = STEP_TIMEOUT_MILLIS,
-                )
+                openTls(serviceConnection, pairRecord, STEP_TIMEOUT_MILLIS)
             } else {
                 serviceConnection
             }
             serviceStream = readyStream
             val ownedStream = CarkitServiceStream(readyStream, secureLockdown)
-            serviceStream = null
+            ownershipTransferred = true
             return ownedStream
         } finally {
-            if (serviceStream != null) {
+            if (!ownershipTransferred) {
                 try {
-                    serviceStream.close()
+                    serviceStream?.close()
                 } finally {
                     secureLockdown.close()
                 }

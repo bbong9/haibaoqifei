@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CarPlayVideoSurfaceTest {
+    @Test fun directOutputUsesSurfaceViewWithoutRequestingPacing() {
+        assertEquals(CarPlayVideoSurfaceMode.SURFACE, carPlayVideoSurfaceMode(true, smoothVideo = false, directVideo = true))
+        assertEquals(CarPlayVideoSurfaceMode.TEXTURE, carPlayVideoSurfaceMode(true, smoothVideo = false, directVideo = false))
+    }
+
     @Test fun windowCapabilityKeepsTexturesAndSelectsFallbackWithoutHardwareAcceleration() {
         assertEquals(CarPlayVideoSurfaceMode.TEXTURE, carPlayVideoSurfaceMode(true))
         assertEquals(CarPlayVideoSurfaceMode.SURFACE, carPlayVideoSurfaceMode(false))

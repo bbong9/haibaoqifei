@@ -798,6 +798,7 @@ private class VideoDecoder(
                     when (job) {
                         is VideoJob.Config -> configureDecoder(job)
                         is VideoJob.Frame -> {
+                            stats.onQueueWait(System.nanoTime() - job.receivedNs)
                             if (System.nanoTime() - job.receivedNs > MAX_FRAME_AGE_NS) {
                                 queue.discardFrames()
                                 recover("video backlog exceeded 250 ms")
@@ -890,6 +891,12 @@ private class VideoDecoder(
         submittedFrameLogged = false
         if (next != null) {
             report("decoder=${next.name} mime=$mime size=${width}x$height")
+            if (Build.VERSION.SDK_INT >= 29) {
+                runCatching {
+                    val info = next.codecInfo
+                    report("decoder capability hardware=${info.isHardwareAccelerated} software=${info.isSoftwareOnly} vendor=${info.isVendor}")
+                }
+            }
             Log.i(
                 TAG,
                 "video decoder configured name=${next.name} mime=$mime size=${width}x$height",

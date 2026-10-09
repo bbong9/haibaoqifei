@@ -1,0 +1,3 @@
+<resources>
+    <string name="default_connection_description">When DiPlay opens, an attached iPhone takes priority over the default mode. Connecting an iPhone cable while DiPlay is visible switches to USB. Manual connection buttons still use the mode you choose.</string>
+</resources>

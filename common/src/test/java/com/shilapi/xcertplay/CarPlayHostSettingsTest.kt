@@ -402,6 +402,23 @@ class CarPlayHostSettingsTest {
         assertEquals(false, method.invoke(activity, Intent(UsbManager.ACTION_USB_DEVICE_DETACHED).putExtra(UsbManager.EXTRA_DEVICE, device)))
     }
 
+    @Test fun wiredReenumerationClosesSettingsWithoutRestartingThePairingInProgress() {
+        val controller = attachController()
+        AirPlayPersistence.saveWirelessEnabled(activity, false)
+        invoke("loadPersistedSettings")
+        invoke("openSettingsMenu")
+        val device = mock(UsbDevice::class.java)
+        `when`(device.vendorId).thenReturn(0x05ac)
+        val intent = IphoneUsbConnection.hostIntent(activity, device)
+        val method = activity.javaClass.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
+        method.invoke(activity, intent)
+        method.invoke(activity, intent) // Activity dispatch and the foreground receiver can both see it.
+        assertFalse(field("menuOpen") as Boolean)
+        assertSame(controller, field("controller"))
+        assertEquals(0, field("restartGeneration"))
+        assertFalse(field("wirelessEnabled") as Boolean)
+    }
+
     @Test fun cancelRestoresSafeAreaResetAfterTheWindowChangesSize() {
         val original = SafeAreaRect(20, 20, 1800, 900)
         AirPlayPersistence.saveSafeAreaRect(activity, 1920, 942, original)

@@ -52,4 +52,19 @@ class SettingsLayoutPolicyTest {
         assertEquals(SettingsSection.entries.toSet(), assignments.toSet())
         assertEquals(assignments.toSet().size, assignments.size)
     }
+
+    @Test fun sealKeepsAdvancedOutOfTheEverydayRailButShowsItWhenOpened() {
+        assertFalse(SettingsInformationArchitecture.visibleCategories(
+            sealEdition = true,
+            currentCategory = SettingsCategory.OVERVIEW,
+        ).contains(SettingsCategory.ADVANCED))
+        assertTrue(SettingsInformationArchitecture.visibleCategories(
+            sealEdition = true,
+            currentCategory = SettingsCategory.ADVANCED,
+        ).contains(SettingsCategory.ADVANCED))
+        assertTrue(SettingsInformationArchitecture.visibleCategories(
+            sealEdition = false,
+            currentCategory = SettingsCategory.OVERVIEW,
+        ).contains(SettingsCategory.ADVANCED))
+    }
 }

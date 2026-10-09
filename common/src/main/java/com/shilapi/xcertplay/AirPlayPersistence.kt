@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.content.Context
 import android.os.Build
+import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.airplay.AirPlayDisplaySettings
 import com.shilapi.xcertplay.airplay.AirPlayPhysicalSizeBasis
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
@@ -70,6 +71,7 @@ object AirPlayPersistence {
     private const val KEY_CALL_ECHO_CANCELLATION = "call_echo_cancellation"
     private const val KEY_CALL_VOICE_FILTER = "call_voice_filter"
     private const val KEY_SMOOTH_VIDEO = "smooth_video"
+    private const val KEY_DIRECT_VIDEO = "direct_video"
     private const val KEY_CLUSTER_MAP = "cluster_map_enabled"
     private const val KEY_ADB_CLUSTER_ACTIVITY = "adb_cluster_activity_enabled"
     private const val KEY_CENTER_MAP_OVERLAY = "center_map_overlay"
@@ -509,7 +511,7 @@ object AirPlayPersistence {
 
     fun loadFps(context: Context): Int = AirPlayDisplaySettings.sanitizeFps(
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_FPS, 30),
+            .getInt(KEY_FPS, context.resources.getInteger(R.integer.config_video_fps_default)),
     )
 
     fun loadMediaBufferMillis(context: Context): Int = com.shilapi.xcertplay.media.MediaAudioBuffer.sanitize(
@@ -530,6 +532,16 @@ object AirPlayPersistence {
 
     fun saveSmoothVideo(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SMOOTH_VIDEO, enabled).apply()
+    }
+
+    /** SurfaceView output without enabling Smooth video's presentation buffer. */
+    fun loadDirectVideo(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(
+            KEY_DIRECT_VIDEO, context.resources.getBoolean(R.bool.config_direct_video_default),
+        )
+
+    fun saveDirectVideo(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_DIRECT_VIDEO, enabled).apply()
     }
 
     fun saveMediaBufferMillis(context: Context, millis: Int) {

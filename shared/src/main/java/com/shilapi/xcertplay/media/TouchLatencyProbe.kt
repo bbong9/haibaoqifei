@@ -2,8 +2,13 @@ package com.shilapi.xcertplay.media
 
 /** Diagnostic link between the touch uplink and the next video frame, read by [VideoStats]. */
 internal object TouchLatencyProbe {
+    private val dispatchWait = LatencySamples()
     @Volatile private var pendingTouchNs = 0L
     @Volatile var maxSendNs = 0L
+
+    fun onDispatchWait(ns: Long) = dispatchWait.record(ns)
+
+    fun takeDispatchSummary(): String = dispatchWait.takeSummary("touchQueue")
 
     fun onTouchSent(sentAtNs: Long, sendDurationNs: Long) {
         if (pendingTouchNs == 0L) pendingTouchNs = sentAtNs

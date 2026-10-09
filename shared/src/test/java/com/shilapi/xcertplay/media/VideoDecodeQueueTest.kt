@@ -5,6 +5,38 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoDecodeQueueTest {
+    @Test fun consumingAndDrainingFramesReturnsTheirBudget() {
+        val queue = VideoDecodeQueue(maxFrames = 1, maxBytes = 3)
+        repeat(20) {
+            val frame = VideoJob.Frame(ByteArray(3))
+            queue.offer(frame)
+            assertSame(frame, queue.poll(0))
+            assertNull(queue.poll(0))
+        }
+        queue.offer(VideoJob.Frame(ByteArray(3)))
+        assertEquals(1, queue.drain().size)
+        val next = VideoJob.Frame(ByteArray(3))
+        queue.offer(next)
+        assertSame(next, queue.poll(0))
+    }
+
+    @Test fun waitingConsumerWakesForControlJobsAndCanBeInterrupted() {
+        val queue = VideoDecodeQueue()
+        val started = java.util.concurrent.CountDownLatch(1)
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val result = executor.submit<VideoJob?> { started.countDown(); queue.poll(5_000) }
+            assertTrue(started.await(1, java.util.concurrent.TimeUnit.SECONDS))
+            queue.offer(VideoJob.RefreshPicture)
+            assertSame(VideoJob.RefreshPicture, result.get(1, java.util.concurrent.TimeUnit.SECONDS))
+            val waiting = executor.submit<VideoJob?> { queue.poll(5_000) }
+            assertTrue(waiting.cancel(true))
+        } finally {
+            executor.shutdownNow()
+            assertTrue(executor.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS))
+        }
+    }
+
     @Test fun lostReferenceChainWaitsForSuccessfullyQueuedKeyframe() {
         val chain = VideoReferenceChain()
         val predicted = byteArrayOf(0, 0, 0, 1, 0x41, 1)

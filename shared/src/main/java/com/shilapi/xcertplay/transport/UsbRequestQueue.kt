@@ -84,12 +84,12 @@ internal class UsbCompletionReaper<T : Any>(
     fun await(timeoutMillis: Long): T? = synchronized(lock) {
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
-        while (completed.isEmpty() && !failed) {
+        while (completed.isEmpty() && !failed && !closed) {
             val remaining = deadline - System.nanoTime()
             if (remaining <= 0) throw TimeoutException("No USB request completed within $timeoutMillis ms")
             TimeUnit.NANOSECONDS.timedWait(lock, remaining)
         }
-        completed.removeFirstOrNull()
+        if (closed) null else completed.removeFirstOrNull()
     }
 
     override fun close() = synchronized(lock) {

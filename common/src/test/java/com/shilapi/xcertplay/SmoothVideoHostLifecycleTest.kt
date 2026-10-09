@@ -82,6 +82,7 @@ class SmoothVideoHostLifecycleTest {
         (getField("airPlayCommandExecutor") as ExecutorService).shutdownNow()
         CarPlayBackgroundSession.clear()
         AirPlayPersistence.saveSmoothVideo(activity, false)
+        AirPlayPersistence.saveDirectVideo(activity, false)
         controllerConstruction.close()
     }
 
@@ -189,6 +190,32 @@ class SmoothVideoHostLifecycleTest {
             (getField(rebuilt, "teardownExecutor") as ExecutorService).shutdownNow()
             (getField(rebuilt, "airPlayCommandExecutor") as ExecutorService).shutdownNow()
         }
+    }
+
+    @Test fun changingDirectOutputReleasesTheSessionSlotForANewVideoView() {
+        allowStartup()
+        val controller = mock(CarPlayController::class.java)
+        val sink = sink(pacingDelayMillis = 0)
+        setField("controller", controller)
+        setField("sink", sink)
+        CarPlayBackgroundSession.store(controller, sink, 1920, 990, activity, display) { it() }
+        AirPlayPersistence.saveDirectVideo(activity, true)
+        restartCarPlay("Direct output changed")
+        finishTeardown()
+        assertFalse(CarPlayBackgroundSession.hasSession())
+        assertNull(getField("controller"))
+    }
+
+    @Test fun directOutputParksTheLiveDecoderWithoutEnablingPacing() {
+        setField("directVideo", true)
+        val live = spy(AndroidMediaSink()).also(ownedSinks::add)
+        setField("sink", live)
+        val surface = surface()
+        val holder = mock(SurfaceHolder::class.java)
+        `when`(holder.surface).thenReturn(surface)
+        (getField("fallbackSurfaceCallback") as SurfaceHolder.Callback).surfaceDestroyed(holder)
+        verify(live).beginSurfaceDetach(surface, true)
+        assertFalse(live.videoPacingEnabled)
     }
 
     // (3) A shutdown while a restart's teardown is still closing must not drop the restart's sink: until

@@ -1,0 +1,3 @@
+<resources>
+    <string name="default_connection_description">開啟 DiPlay 時，已插線的 iPhone 優先使用 USB；未插線時使用已儲存的預設模式。應用程式在前景時插線會自動進入 USB 連線。手動連線按鈕仍依你的選擇執行。</string>
+</resources>
