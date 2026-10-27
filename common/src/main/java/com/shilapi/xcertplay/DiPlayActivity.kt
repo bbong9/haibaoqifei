@@ -167,9 +167,16 @@ internal object SettingsInformationArchitecture {
 
     fun visibleCategories(
         sealEdition: Boolean,
-        currentCategory: SettingsCategory,
+        @Suppress("UNUSED_PARAMETER") currentCategory: SettingsCategory,
     ): List<SettingsCategory> = SettingsCategory.entries.filterNot {
-        sealEdition && it == SettingsCategory.ADVANCED && currentCategory != SettingsCategory.ADVANCED
+        sealEdition && it in SealSettingsScope.hiddenCategories
+    }
+
+    fun sectionsFor(category: SettingsCategory, sealEdition: Boolean): Set<SettingsSection> {
+        val sections = sectionsByCategory.getValue(category)
+        if (!sealEdition) return sections
+        return (sections - SealSettingsScope.hiddenSections) +
+            SealSettingsScope.relocatedSections.filterValues { it == category }.keys
     }
 }
 
@@ -187,6 +194,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val windowLearningPresses = WheelKeyPresses()
     private val endWindowLearning = Runnable { cancelKeyLearning() }
     private var page = "home"
+    internal var sealEditionCheck: (Context) -> Boolean = SealPerformanceProfile::enabled
     internal var ambientSupportCheck: (Context) -> java.util.concurrent.CompletableFuture<Boolean> = AmbientMusicController::checkSupport
     internal var carRhythmSupportCheck: (Context) -> java.util.concurrent.CompletableFuture<Boolean> =
         com.shilapi.xcertplay.hud.BydCarMusicRhythm::checkSupport
@@ -701,6 +709,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun render() = render(appearanceOnly = false)
 
     private fun render(appearanceOnly: Boolean, preferredFocusTag: Any? = null) {
+        if (page == "settings") settingsCategory = visibleSettingsCategory(settingsCategory)
         enforceInterfaceSize()
         refreshAppearance()
         applyWindowAppearance()
@@ -1140,7 +1149,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         background = rounded(SURFACE, BORDER)
         setPadding(dp(12), dp(12), dp(12), dp(12))
         SettingsInformationArchitecture.visibleCategories(
-            SealPerformanceProfile.enabled(this@DiPlayActivity),
+            sealEditionCheck(this@DiPlayActivity),
             settingsCategory,
         ).forEach { category ->
             addView(settingsRailDestination(category), matchButton(0, 52).apply {
@@ -1228,7 +1237,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             SettingsCategory.ADVANCED -> advancedSettings(content)
             SettingsCategory.LANGUAGE -> {
                 settingsPageTitle(content, getString(R.string.language_section_title), getString(R.string.settings_language_summary))
-                renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.LANGUAGE))
+                renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.LANGUAGE, sealEditionCheck(this)))
             }
             SettingsCategory.ABOUT -> about(content)
         }
@@ -1249,6 +1258,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setPadding(0, 0, 0, dp(20))
         })
 
+        val visibleCategories = SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this), settingsCategory)
         val destinations = listOf(
             SettingsCategory.CONNECTION to R.string.settings_connection_summary,
             SettingsCategory.DISPLAY to R.string.settings_display_summary,
@@ -1259,7 +1269,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             SettingsCategory.ABOUT to R.string.about_diplay,
             SettingsCategory.DIAGNOSTICS to R.string.settings_diagnostics_summary,
             SettingsCategory.ADVANCED to R.string.settings_advanced_subtitle,
-        )
+        ).filter { it.first in visibleCategories }
         val categoryGap = dp(SETTINGS_BLOCK_GAP_DP)
         val twoColumns = isExpandedSettingsLayout && resources.configuration.let {
             SettingsLayoutPolicy.overviewHasTwoColumns(it.screenWidthDp, it.fontScale)
@@ -1289,7 +1299,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             content.addView(quickSettingsCard(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
         }
 
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.OVERVIEW))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.OVERVIEW, sealEditionCheck(this)))
     }
 
     private fun currentReadiness() = SettingsReadiness.of(
@@ -1364,9 +1374,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun openSettingsCategory(category: SettingsCategory) {
         setSearchKeyboard(settingsSearchBox, false)
         clearSettingsSearchState()
-        settingsCategory = category
+        settingsCategory = visibleSettingsCategory(category)
         render()
     }
+
+    private fun visibleSettingsCategory(category: SettingsCategory): SettingsCategory =
+        category.takeIf { it in SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this), it) }
+            ?: SettingsCategory.OVERVIEW
 
     private fun settingsSectionHeading(title: Int) = label(getString(title), 22, TEXT, true).apply {
         setPadding(0, 0, 0, dp(10))
@@ -1403,12 +1417,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun connectionSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.connection), getString(R.string.settings_connection_summary))
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.CONNECTION))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.CONNECTION, sealEditionCheck(this)))
     }
 
     private fun displaySettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.settings_display), getString(R.string.settings_display_summary))
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DISPLAY))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.DISPLAY, sealEditionCheck(this)))
     }
 
     private fun nightModeLabels() = CarPlayNightMode.entries.map { mode ->
@@ -1431,12 +1445,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun audioSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.audio), getString(R.string.settings_audio_summary))
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.AUDIO))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.AUDIO, sealEditionCheck(this)))
     }
 
     private fun navigationSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.settings_navigation), getString(R.string.settings_navigation_summary))
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.NAVIGATION))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.NAVIGATION, sealEditionCheck(this)))
         // The BYD card is hidden without its receiver; say so instead of leaving a gap.
         if (!BydOutputSettings.available(this)) {
             content.addView(label(getString(R.string.settings_byd_navigation_unavailable), 15, MUTED).apply {
@@ -1447,19 +1461,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun vehicleSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.settings_vehicle), getString(R.string.settings_vehicle_summary))
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.VEHICLE))
-        section(content, getString(R.string.settings_advanced), R.drawable.ic_dp_advanced) { card ->
-            card.addView(label(getString(R.string.settings_vehicle_description), 16, MUTED))
-            card.addView(button(getString(R.string.settings_open_advanced), false) {
-                settingsCategory = SettingsCategory.ADVANCED
-                render()
-            }, matchButton(14, 56))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.VEHICLE, sealEditionCheck(this)))
+        if (SettingsCategory.ADVANCED in SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this), settingsCategory)) {
+            section(content, getString(R.string.settings_advanced), R.drawable.ic_dp_advanced) { card ->
+                card.addView(label(getString(R.string.settings_vehicle_description), 16, MUTED))
+                card.addView(button(getString(R.string.settings_open_advanced), false) {
+                    settingsCategory = SettingsCategory.ADVANCED
+                    render()
+                }, matchButton(14, 56))
+            }
         }
     }
 
     private fun diagnosticsSettings(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.diagnostics), getString(R.string.settings_diagnostics_summary))
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.DIAGNOSTICS))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.DIAGNOSTICS, sealEditionCheck(this)))
     }
 
     internal data class SettingsSearchResult(val title: String, val category: SettingsCategory)
@@ -1469,10 +1485,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     // ponytail: indexes the default state only; controls behind an expander (vehicle data) are not found.
     private fun buildSettingsSearchIndex(): List<SettingsSearchResult> {
         val selected = settingsCategory
+        val categories = SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this), selected)
         // Category names first, so a card that only links to a category cannot claim its name.
-        val index = SettingsCategory.entries.associateByTo(linkedMapOf(), ::settingsCategoryTitle)
+        val index = categories.associateByTo(linkedMapOf(), ::settingsCategoryTitle)
         try {
-            for (category in SettingsCategory.entries.filter { it != SettingsCategory.OVERVIEW } + SettingsCategory.OVERVIEW) {
+            for (category in categories.filter { it != SettingsCategory.OVERVIEW } + SettingsCategory.OVERVIEW) {
                 settingsCategory = category
                 val titles = mutableListOf(settingsCategoryTitle(category))
                 searchIndexSink = titles
@@ -1743,7 +1760,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             })
         }
         content.addView(caution, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
-        renderSections(content, SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.ADVANCED))
+        renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.ADVANCED, sealEditionCheck(this)))
         advancedVehicleDataSettings(content)
     }
 
@@ -1787,7 +1804,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(label(getString(R.string.settings_gesture_fingers_hint), 14, MUTED).apply {
                 setPadding(0, dp(10), 0, 0)
             })
-            toggle(card, getString(R.string.right_hand_drive), getString(R.string.place_carplay_s_controls_closer_to_the_driver), AirPlayPersistence.loadRightHandDrive(this)) { AirPlayPersistence.saveRightHandDrive(this, it); markReconnectNeeded() }
+            if (!sealHides(SealHiddenControl.RIGHT_HAND_DRIVE)) {
+                toggle(card, getString(R.string.right_hand_drive), getString(R.string.place_carplay_s_controls_closer_to_the_driver), AirPlayPersistence.loadRightHandDrive(this)) { AirPlayPersistence.saveRightHandDrive(this, it); markReconnectNeeded() }
+            }
+            if (sealEditionCheck(this)) bydCallPopupControl(card)
         }
         filteredSection(content, SettingsSection.WHEEL_KEYS,
             getString(R.string.settings_wheel_keys), R.drawable.ic_dp_controls, ::wheelKeysSettings)
@@ -1796,23 +1816,25 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
             card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
             card.addView(space(12))
-            // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
-            // so that menu could not be reached to switch back (#696).
-            val mfiTargets = listOf(MfiTarget.LOCAL, MfiTarget.USB_CH341)
-            val storedMfiTarget = AirPlayPersistence.loadMfiTarget(this)
-            if (storedMfiTarget in mfiTargets) {
-                choice(card, getString(R.string.mfi_certificate_signing_target), listOf(
-                    getString(R.string.local_offline),
-                    getString(R.string.usb_ch341),
-                ), mfiTargets.indexOf(storedMfiTarget)) { index ->
-                    val target = mfiTargets[index]
-                    AirPlayPersistence.saveMfiTarget(this, target)
-                    setupError = runCatching { DiPlayBootstrap.ensure(this, target) }.exceptionOrNull()?.let {
-                        android.util.Log.e("DiPlaySetup", "CarPlay authentication could not be loaded", it)
-                        getString(R.string.setup_error_auth)
+            if (!sealHides(SealHiddenControl.MFI_TARGET)) {
+                // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
+                // so that menu could not be reached to switch back (#696).
+                val mfiTargets = listOf(MfiTarget.LOCAL, MfiTarget.USB_CH341)
+                val storedMfiTarget = AirPlayPersistence.loadMfiTarget(this)
+                if (storedMfiTarget in mfiTargets) {
+                    choice(card, getString(R.string.mfi_certificate_signing_target), listOf(
+                        getString(R.string.local_offline),
+                        getString(R.string.usb_ch341),
+                    ), mfiTargets.indexOf(storedMfiTarget)) { index ->
+                        val target = mfiTargets[index]
+                        AirPlayPersistence.saveMfiTarget(this, target)
+                        setupError = runCatching { DiPlayBootstrap.ensure(this, target) }.exceptionOrNull()?.let {
+                            android.util.Log.e("DiPlaySetup", "CarPlay authentication could not be loaded", it)
+                            getString(R.string.setup_error_auth)
+                        }
                     }
+                    card.addView(label(getString(R.string.settings_mfi_target_description), 14, MUTED))
                 }
-                card.addView(label(getString(R.string.settings_mfi_target_description), 14, MUTED))
             }
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
@@ -1852,13 +1874,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     bluetoothAutoConnectPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
                 } else if (enabled && DiPlayPreferences.phoneAddress(this) == null) choosePhone()
             }
-            val connectionModes = DefaultConnectionMode.entries
-            choice(card, getString(R.string.default_connection_mode), listOf(
-                getString(R.string.default_connection_last_used),
-                getString(R.string.default_connection_wireless),
-                getString(R.string.default_connection_usb)
-            ), connectionModes.indexOf(DiPlayPreferences.defaultConnectionMode(this)), reconnects = false) {
-                DiPlayPreferences.saveDefaultConnectionMode(this, connectionModes[it])
+            if (!sealHides(SealHiddenControl.DEFAULT_CONNECTION_MODE)) {
+                val connectionModes = DefaultConnectionMode.entries
+                choice(card, getString(R.string.default_connection_mode), listOf(
+                    getString(R.string.default_connection_last_used),
+                    getString(R.string.default_connection_wireless),
+                    getString(R.string.default_connection_usb)
+                ), connectionModes.indexOf(DiPlayPreferences.defaultConnectionMode(this)), reconnects = false) {
+                    DiPlayPreferences.saveDefaultConnectionMode(this, connectionModes[it])
+                }
             }
             adbToggle(card, R.string.open_after_the_car_starts,
                 R.string.availability_depends_on_your_head_unit_s_startup_settings,
@@ -1869,16 +1893,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 AirPlayPersistence.saveAutoStartOnBoot(this, it)
             }
             val autoConfirmActive = UsbPermissionSetup.Permission.ACCESSIBILITY.granted(this)
-            toggle(
-                card,
-                getString(R.string.usb_auto_confirm_title),
-                getString(R.string.usb_auto_confirm_subtitle),
-                autoConfirmActive,
-            ) { enabled ->
-                if (enabled) promptEnableUsbAutoConfirm()
-                else {
-                    if (!UsbAutoConfirmService.openSettings(this)) toast(getString(R.string.wheel_keys_no_settings))
-                    render()
+            if (!sealHides(SealHiddenControl.USB_AUTO_CONFIRM)) {
+                toggle(
+                    card,
+                    getString(R.string.usb_auto_confirm_title),
+                    getString(R.string.usb_auto_confirm_subtitle),
+                    autoConfirmActive,
+                ) { enabled ->
+                    if (enabled) promptEnableUsbAutoConfirm()
+                    else {
+                        if (!UsbAutoConfirmService.openSettings(this)) toast(getString(R.string.wheel_keys_no_settings))
+                        render()
+                    }
                 }
             }
             if (!autoConfirmActive) {
@@ -1985,6 +2011,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 save = { AirPlayPersistence.saveDisplayScalePercent(this, it) },
             )
             frameRateControl(card)
+            if (sealEditionCheck(this)) videoOutputControls(card)
             carPlayDockControl(card)
             addSystemBarControls(
                 hideTopBar = AirPlayPersistence.loadHideTopBar(this),
@@ -1994,8 +2021,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             ) { label, checked, onChanged ->
                 toggle(card, getString(label), getString(R.string.hide_the_car_s_system_bars_while_carplay_is_open), checked, save = onChanged)
             }
-            toggle(card, getString(R.string.adapt_pip_resolution), getString(R.string.adapt_pip_resolution_description), AirPlayPersistence.loadAdaptPipResolution(this)) {
-                AirPlayPersistence.saveAdaptPipResolution(this, it)
+            if (!sealHides(SealHiddenControl.ADAPT_PIP_RESOLUTION)) {
+                toggle(card, getString(R.string.adapt_pip_resolution), getString(R.string.adapt_pip_resolution_description), AirPlayPersistence.loadAdaptPipResolution(this)) {
+                    AirPlayPersistence.saveAdaptPipResolution(this, it)
+                }
             }
             card.addView(button("${getString(R.string.settings_interface_size)} · ${InterfaceSize.displayName(this, InterfaceSize.preference(this))}", false) {
                 InterfaceSize.showPicker(this)
@@ -2049,47 +2078,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         // Opt-in controls that can cost sound or video on some head units.
         filteredSection(content, SettingsSection.ADVANCED_MEDIA,
             getString(R.string.settings_advanced_media), R.drawable.ic_dp_advanced) { card ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && CarHotspotSetup.isBydHeadUnit(this)) {
-                toggle(card, getString(R.string.settings_hide_byd_call_popup),
-                    getString(R.string.settings_hide_byd_call_popup_description),
-                    AirPlayPersistence.loadHideBydCallPopup(this)) {
-                    AirPlayPersistence.saveHideBydCallPopup(this, it)
-                }
-            }
-            toggle(card, getString(R.string.efficient_video), getString(R.string.use_hevc_leave_off_for_the_widest_head_unit_compatibility), AirPlayPersistence.loadHevcEnabled(this)) {
-                AirPlayPersistence.saveHevcEnabled(this, it)
-                markReconnectNeeded()
-                render()
-            }
-            val hevc = AirPlayPersistence.loadHevcEnabled(this)
-            val selectedMime = if (hevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
-            val mtkDecoder = if (hevc && AirPlayPersistence.loadHevcSoftwareDecoderEnabled(this)) null
-                else selectedMtkDecoderName(selectedMime)
-            if (mtkDecoder != null) {
-                toggle(card, getString(R.string.settings_mtk_decoder_tuning),
-                    getString(R.string.settings_mtk_decoder_tuning_description, mtkDecoder),
-                    AirPlayPersistence.loadMtkDecoderTuning(this)) {
-                    AirPlayPersistence.saveMtkDecoderTuning(this, it)
-                    markReconnectNeeded()
-                }
-            }
-            toggle(card, getString(R.string.smooth_video), getString(R.string.smooth_video_description),
-                AirPlayPersistence.loadSmoothVideo(this)) {
-                AirPlayPersistence.saveSmoothVideo(this, it)
-                reconnectIfRunning()
-            }
-            toggle(card, getString(R.string.settings_direct_video_output),
-                getString(R.string.settings_direct_video_output_description),
-                AirPlayPersistence.loadDirectVideoOutput(this)) {
-                AirPlayPersistence.saveDirectVideoOutput(this, it)
-                reconnectIfRunning()
-            }
-            toggle(card, getString(R.string.settings_low_latency_decoder),
-                getString(R.string.settings_low_latency_decoder_description),
-                AirPlayPersistence.loadLowLatencyDecoder(this)) {
-                AirPlayPersistence.saveLowLatencyDecoder(this, it)
-                markReconnectNeeded()
-            }
+            if (!sealEditionCheck(this)) bydCallPopupControl(card)
+            if (!sealEditionCheck(this)) videoOutputControls(card)
             toggle(card, getString(R.string.call_echo_cancellation), getString(R.string.call_echo_cancellation_description),
                 AirPlayPersistence.loadCallEchoCancellation(this)) {
                 AirPlayPersistence.saveCallEchoCancellation(this, it)
@@ -2172,7 +2162,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
             })
             musicBufferChoice(card, wireless = true)
-            musicBufferChoice(card, wireless = false)
+            if (!sealHides(SealHiddenControl.WIRED_MUSIC_BUFFER)) {
+                musicBufferChoice(card, wireless = false)
+            }
             toggle(card, getString(R.string.settings_call_speakerphone), getString(R.string.settings_call_speakerphone_description),
                 AirPlayPersistence.loadCallSpeakerphone(this)) { AirPlayPersistence.saveCallSpeakerphone(this, it) }
         }
@@ -2590,7 +2582,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private enum class UpdateStage { IDLE, CHECKING, AVAILABLE, DOWNLOADING, VERIFYING, READY, FAILED }
 
     private fun openBackup(from: SettingsCategory = SettingsCategory.ABOUT) {
-        backupOpenedFrom = from
+        backupOpenedFrom = visibleSettingsCategory(from)
         page = "backup"
         render()
     }
@@ -6328,8 +6320,59 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         icon: Int? = null,
         build: (LinearLayout) -> Unit,
     ) {
+        if (sealEditionCheck(this) && key in SealSettingsScope.hiddenSections) return
         if (settingsSectionFilter?.contains(key) == false) return
         section(parent, title, icon, build)
+    }
+
+    private fun sealHides(control: SealHiddenControl): Boolean =
+        sealEditionCheck(this) && control in SealSettingsScope.hiddenControls
+
+    private fun bydCallPopupControl(card: LinearLayout) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && CarHotspotSetup.isBydHeadUnit(this)) {
+            toggle(card, getString(R.string.settings_hide_byd_call_popup),
+                getString(R.string.settings_hide_byd_call_popup_description),
+                AirPlayPersistence.loadHideBydCallPopup(this)) {
+                AirPlayPersistence.saveHideBydCallPopup(this, it)
+            }
+        }
+    }
+
+    private fun videoOutputControls(card: LinearLayout) {
+        toggle(card, getString(R.string.efficient_video), getString(R.string.use_hevc_leave_off_for_the_widest_head_unit_compatibility), AirPlayPersistence.loadHevcEnabled(this)) {
+            AirPlayPersistence.saveHevcEnabled(this, it)
+            markReconnectNeeded()
+            render()
+        }
+        val hevc = AirPlayPersistence.loadHevcEnabled(this)
+        val selectedMime = if (hevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
+        val mtkDecoder = if (hevc && AirPlayPersistence.loadHevcSoftwareDecoderEnabled(this)) null
+            else selectedMtkDecoderName(selectedMime)
+        if (mtkDecoder != null) {
+            toggle(card, getString(R.string.settings_mtk_decoder_tuning),
+                getString(R.string.settings_mtk_decoder_tuning_description, mtkDecoder),
+                AirPlayPersistence.loadMtkDecoderTuning(this)) {
+                AirPlayPersistence.saveMtkDecoderTuning(this, it)
+                markReconnectNeeded()
+            }
+        }
+        toggle(card, getString(R.string.smooth_video), getString(R.string.smooth_video_description),
+            AirPlayPersistence.loadSmoothVideo(this)) {
+            AirPlayPersistence.saveSmoothVideo(this, it)
+            reconnectIfRunning()
+        }
+        toggle(card, getString(R.string.settings_direct_video_output),
+            getString(R.string.settings_direct_video_output_description),
+            AirPlayPersistence.loadDirectVideoOutput(this)) {
+            AirPlayPersistence.saveDirectVideoOutput(this, it)
+            reconnectIfRunning()
+        }
+        toggle(card, getString(R.string.settings_low_latency_decoder),
+            getString(R.string.settings_low_latency_decoder_description),
+            AirPlayPersistence.loadLowLatencyDecoder(this)) {
+            AirPlayPersistence.saveLowLatencyDecoder(this, it)
+            markReconnectNeeded()
+        }
     }
     // Routing changes affect the live cluster surface as soon as the host resumes.
     // Ask before saving them instead of promising to defer only part of the change.

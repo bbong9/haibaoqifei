@@ -53,12 +53,12 @@ class SettingsLayoutPolicyTest {
         assertEquals(assignments.toSet().size, assignments.size)
     }
 
-    @Test fun sealKeepsAdvancedOutOfTheEverydayRailButShowsItWhenOpened() {
+    @Test fun sealNeverShowsAdvanced() {
         assertFalse(SettingsInformationArchitecture.visibleCategories(
             sealEdition = true,
             currentCategory = SettingsCategory.OVERVIEW,
         ).contains(SettingsCategory.ADVANCED))
-        assertTrue(SettingsInformationArchitecture.visibleCategories(
+        assertFalse(SettingsInformationArchitecture.visibleCategories(
             sealEdition = true,
             currentCategory = SettingsCategory.ADVANCED,
         ).contains(SettingsCategory.ADVANCED))
@@ -66,5 +66,28 @@ class SettingsLayoutPolicyTest {
             sealEdition = false,
             currentCategory = SettingsCategory.OVERVIEW,
         ).contains(SettingsCategory.ADVANCED))
+    }
+
+    @Test fun sealHidesOnlyUsbAndUnrelocatedAdvancedSections() {
+        val advanced = SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.ADVANCED)
+        val relocated = setOf(SettingsSection.AMBIENT_LIGHTING, SettingsSection.CLUSTER_MAP)
+        assertEquals((advanced - relocated) + SettingsSection.USB_CONNECTION, SealSettingsScope.hiddenSections)
+        val ordinary = SettingsInformationArchitecture.sectionsByCategory
+            .filterKeys { it != SettingsCategory.ADVANCED }.values.flatten().toSet()
+        assertEquals(setOf(SettingsSection.USB_CONNECTION), SealSettingsScope.hiddenSections intersect ordinary)
+        assertEquals(setOf(SettingsCategory.ADVANCED), SealSettingsScope.hiddenCategories)
+        assertEquals(SealHiddenControl.entries.toSet(), SealSettingsScope.hiddenControls)
+    }
+
+    @Test fun sealRelocatesCardsWithoutDuplicatingVisibleSections() {
+        val visible = SettingsInformationArchitecture.visibleCategories(true, SettingsCategory.OVERVIEW)
+        val assignments = visible.flatMap { SettingsInformationArchitecture.sectionsFor(it, true) }
+        assertEquals(assignments.toSet().size, assignments.size)
+        assertTrue(SettingsSection.AMBIENT_LIGHTING in SettingsInformationArchitecture.sectionsFor(SettingsCategory.VEHICLE, true))
+        assertTrue(SettingsSection.CLUSTER_MAP in SettingsInformationArchitecture.sectionsFor(SettingsCategory.NAVIGATION, true))
+        for (category in SettingsCategory.entries) {
+            assertEquals(SettingsInformationArchitecture.sectionsByCategory.getValue(category),
+                SettingsInformationArchitecture.sectionsFor(category, false))
+        }
     }
 }

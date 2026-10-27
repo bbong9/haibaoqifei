@@ -44,7 +44,7 @@ class SealPerformanceProfileTest {
         assertEquals(100, AirPlayPersistence.loadDisplayScalePercent(seal))
         assertEquals(60, AirPlayPersistence.loadFps(seal))
         assertTrue(AirPlayPersistence.loadDirectVideoOutput(seal))
-        assertFalse(AirPlayPersistence.loadSmoothVideo(seal))
+        assertTrue(AirPlayPersistence.loadSmoothVideo(seal))
         assertFalse(AirPlayPersistence.loadClusterMapEnabled(seal))
         assertFalse(AirPlayPersistence.loadAdbClusterEnabled(seal))
         assertFalse(AirPlayPersistence.loadCenterMapOverlay(seal))
@@ -74,7 +74,48 @@ class SealPerformanceProfileTest {
         assertTrue(AirPlayPersistence.loadAdbClusterEnabled(context))
         // A no-op for another edition must not consume the Seal migration.
         SealPerformanceProfile.migrateIfNeeded(editionContext(true))
+        assertTrue(AirPlayPersistence.loadSmoothVideo(context))
+    }
+
+    @Test fun versionOneUserGetsSmoothVideoBackAndNothingElse() {
+        val seal = editionContext(true)
+        val prefs = seal.getSharedPreferences("seal_performance", Context.MODE_PRIVATE)
+        prefs.edit().putInt("video_defaults_version", 1).commit()
+        AirPlayPersistence.saveSmoothVideo(seal, false)
+        AirPlayPersistence.saveHevcEnabled(seal, true)
+        AirPlayPersistence.saveFps(seal, 45)
+        AirPlayPersistence.saveDisplayScalePercent(seal, 101)
+        AirPlayPersistence.saveDirectVideoOutput(seal, false)
+        AirPlayPersistence.saveAdbClusterEnabled(seal, true)
+        val videoPrefs = seal.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
+        val before = videoPrefs.all.toMap()
+
+        SealPerformanceProfile.migrateIfNeeded(seal)
+
+        assertTrue(AirPlayPersistence.loadSmoothVideo(seal))
+        assertTrue(AirPlayPersistence.loadHevcEnabled(seal))
+        assertEquals(45, AirPlayPersistence.loadFps(seal))
+        assertEquals(101, AirPlayPersistence.loadDisplayScalePercent(seal))
+        assertEquals(2, prefs.getInt("video_defaults_version", 0))
+        assertEquals(before + ("smooth_video" to true), videoPrefs.all)
+        AirPlayPersistence.saveSmoothVideo(seal, false)
+        SealPerformanceProfile.migrateIfNeeded(seal)
+        assertFalse(AirPlayPersistence.loadSmoothVideo(seal))
+        assertTrue(AirPlayPersistence.loadHevcEnabled(seal))
+        assertEquals(45, AirPlayPersistence.loadFps(seal))
+        assertEquals(101, AirPlayPersistence.loadDisplayScalePercent(seal))
+    }
+
+    @Test fun otherEditionDoesNotConsumeVersionTwoMigration() {
+        val prefs = context.getSharedPreferences("seal_performance", Context.MODE_PRIVATE)
+        prefs.edit().putInt("video_defaults_version", 1).commit()
+        AirPlayPersistence.saveSmoothVideo(context, false)
+        SealPerformanceProfile.migrateIfNeeded(editionContext(false))
+        assertEquals(1, prefs.getInt("video_defaults_version", 0))
         assertFalse(AirPlayPersistence.loadSmoothVideo(context))
+        SealPerformanceProfile.migrateIfNeeded(editionContext(true))
+        assertEquals(2, prefs.getInt("video_defaults_version", 0))
+        assertTrue(AirPlayPersistence.loadSmoothVideo(context))
     }
 
     @Test fun oldDirectVideoFalseMigratesAndRemovesTheOldKey() {
