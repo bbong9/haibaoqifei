@@ -911,6 +911,8 @@
     <string name="connection_help_wifi_direct">Mantén activados el Wi-Fi y el Bluetooth de la unidad y el iPhone desbloqueado y cerca, y reintenta. Si sigue fallando, olvida el coche en el iPhone en Ajustes → General → CarPlay y vuelve a conectarte.</string>
     <string name="connection_help_existing_wifi">Comprueba que la unidad y el iPhone estén en la misma red Wi-Fi y que su nombre y contraseña coincidan con DiPlay, y reintenta.</string>
     <string name="settings_report_on_phone">Obtener el informe en un teléfono</string>
+    <string name="settings_startup_no_record">Último inicio: aún no hay registros</string>
+    <string name="settings_startup_summary">Último inicio: del arranque a la imagen %1$s s, de la conexión a la imagen %2$s s, más lento %3$s %4$s s</string>
     <string name="settings_report_on_phone_hint">Escanea el código con la cámara del teléfono para abrir esta página en su navegador y elige Descargar informe. Mantén esta pantalla abierta hasta que termine la descarga.</string>
     <string name="settings_mfi_target_description">Elige USB/CH341 solo si hay un adaptador de autenticación CH341 conectado a la unidad principal. Sin él, elige Local sin conexión. Se aplica en la próxima conexión.</string>
     <string name="settings_call_speakerphone">Llamadas por el altavoz</string>

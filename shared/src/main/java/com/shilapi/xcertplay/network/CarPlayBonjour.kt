@@ -142,6 +142,7 @@ class CarPlayBonjour(
     private val useInterfaceMdns: Boolean = false,
     private val onEvent: (CarPlayBonjourEvent) -> Unit = {},
     additionalAddresses: List<InetAddress> = emptyList(),
+    private val onMdnsCreated: (family: String, elapsedMs: Long) -> Unit = { _, _ -> },
 ) : Closeable {
     // Interface-bound mDNS does not need Android's NSD service, which may be absent on some head units.
     private val nsdManager: NsdManager by lazy {
@@ -287,7 +288,13 @@ class CarPlayBonjour(
                         } else {
                             InetAddress.getByAddress(hostName, address.address)
                         }
-                        val dns = JmDNS.create(mdnsAddress, hostName)
+                        val createStarted = System.nanoTime()
+                        val dns = try {
+                            JmDNS.create(mdnsAddress, hostName)
+                        } finally {
+                            val elapsed = ((System.nanoTime() - createStarted) / 1_000_000L).coerceAtLeast(0)
+                            runCatching { onMdnsCreated(if (address is Inet4Address) "IPv4" else "IPv6", elapsed) }
+                        }
                         interfaceMdns.add(dns)
                         dns.addServiceListener("$CARPLAY_CONTROL_SERVICE_TYPE.local.", interfaceListener)
                         dns.registerService(ServiceInfo.create(

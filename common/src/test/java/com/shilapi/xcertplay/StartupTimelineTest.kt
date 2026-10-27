@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.hardware.usb.UsbManager
 import android.provider.Settings
+import com.shilapi.xcertplay.host.R
 import java.io.File
 import org.junit.After
 import org.junit.Assert.*
@@ -166,6 +167,202 @@ class StartupTimelineTest {
         assertEquals(1, timeline.readLines().count { it.contains(" PROCESS_START ") })
         assertFalse(File(timeline.parentFile, "previous.log").exists())
     }
+
+    @Test fun summarizesEveryCompleteSegmentAndRendersTheDiagnosticText() {
+        val summary = StartupTimeline.summarize(completeEvents()).single()
+        assertEquals(9, summary.bootCount)
+        assertEquals(1, summary.generation)
+        assertEquals(9800L, summary.boot)
+        assertEquals(2100L, summary.launch)
+        assertEquals(150L, summary.decide)
+        assertEquals(900L, summary.mfi)
+        assertEquals(40L, summary.cleanup)
+        assertEquals(1800L, summary.wifi)
+        assertEquals(12040L, summary.bluetooth)
+        assertEquals(1500L, summary.iap2)
+        assertEquals(6100L, summary.iphoneJoin)
+        assertEquals(820L, summary.session)
+        assertEquals(60L, summary.bonjour)
+        assertEquals(35460L, summary.bootToFrame)
+        assertEquals(23410L, summary.connectToFrame)
+        assertEquals("bluetooth" to 12040L, summary.slowest)
+        assertEquals(0, summary.retries)
+        assertNull(summary.failure)
+        val line = summary.formatLine(1)
+        assertEquals(line, DiagnosticRedactor.redact(line))
+        println("SUMMARY_SAMPLE $line")
+        val text = StartupTimeline.renderLastSummary(context, summary)
+        assertTrue(text.contains("bluetooth"))
+        assertTrue(text.contains("35.5"))
+        assertTrue(text.contains("23.4"))
+        println("DIAGNOSTICS_RENDER $text")
+    }
+
+    @Test fun processWithoutTimingDataRendersNoRecord() {
+        val summary = StartupTimeline.summarize(listOf(sample(100, "PROCESS_START", "boot" to 1))).single()
+        assertEquals(context.getString(R.string.settings_startup_no_record),
+            StartupTimeline.renderLastSummary(context, summary))
+    }
+
+    @Test fun partialTimingDataStillRendersTheAvailableSummary() {
+        val summary = StartupTimeline.summarize(listOf(
+            sample(100, "PROCESS_START", "boot" to 1),
+            sample(1000, "BOOT_RECEIVED"),
+        )).single()
+        assertEquals("boot" to 1000L, summary.slowest)
+        assertNotEquals(context.getString(R.string.settings_startup_no_record),
+            StartupTimeline.renderLastSummary(context, summary))
+    }
+
+    @Test fun missingBluetoothEndpointDoesNotInventDurations() {
+        val summary = StartupTimeline.summarize(completeEvents().filterNot { it.contains(" CP_W_BT_CONNECTED ") }).single()
+        assertNull(summary.bluetooth)
+        assertNull(summary.iap2)
+        assertEquals("boot" to 9800L, summary.slowest)
+    }
+
+    @Test fun selectsLastGenerationWithAFrameAndRecordsEarlierFailure() {
+        val lines = completeEvents().filterNot { it.contains(" FIRST_FRAME ") } + listOf(
+            sample(40000, "CP_W_FAIL", "gen" to 1, "failure" to "FIRST_TCP_TIMEOUT"),
+            sample(41000, "CP_W_BEGIN", "gen" to 2),
+            sample(41040, "CP_W_CLEANUP_DONE", "gen" to 2, "elapsedMs" to 40),
+            sample(42000, "CP_W_LINK_READY", "gen" to 2),
+            sample(43000, "CP_W_BT_START", "gen" to 2, "attempt" to 1),
+            sample(45000, "CP_W_BT_CONNECTED", "gen" to 2, "elapsedMs" to 2000),
+            sample(47000, "CP_W_WIFI_INFO_SENT", "gen" to 2),
+            sample(49000, "CP_W_FIRST_TCP", "gen" to 2),
+            sample(50000, "FIRST_FRAME", "gen" to 2),
+            sample(51000, "CP_W_BEGIN", "gen" to 3),
+        )
+        val summary = StartupTimeline.summarize(lines).single()
+        assertEquals(2, summary.generation)
+        assertEquals(2, summary.retries)
+        assertEquals("FIRST_TCP_TIMEOUT", summary.failure)
+        assertEquals(2000L, summary.bluetooth)
+        assertEquals(1000L, summary.session)
+        assertEquals(50000L, summary.bootToFrame)
+        assertEquals(37950L, summary.connectToFrame)
+        assertEquals(summary.formatLine(1), DiagnosticRedactor.redact(summary.formatLine(1)))
+    }
+
+    @Test fun twoGenerationsWithSecondFrameReportOneRetry() {
+        val lines = listOf(
+            sample(100, "PROCESS_START", "boot" to 1),
+            sample(101, "CP_W_BEGIN", "gen" to 1),
+            sample(102, "CP_W_FAIL", "gen" to 1, "failure" to "IOException"),
+            sample(103, "CP_W_BEGIN", "gen" to 2),
+            sample(104, "FIRST_FRAME", "gen" to 2),
+        )
+        val summary = StartupTimeline.summarize(lines).single()
+        assertEquals(2, summary.generation)
+        assertEquals(1, summary.retries)
+        assertEquals("IOException", summary.failure)
+    }
+
+    @Test fun selectsLastGenerationWhenNeitherReachesAFrame() {
+        val lines = listOf(
+            sample(100, "PROCESS_START", "boot" to 1),
+            sample(101, "CP_W_BEGIN", "gen" to 1),
+            sample(102, "CP_W_BEGIN", "gen" to 2),
+            sample(103, "CP_W_FAIL", "gen" to 2, "failure" to "IOException"),
+        )
+        val summary = StartupTimeline.summarize(lines).single()
+        assertEquals(2, summary.generation)
+        assertNull(summary.bootToFrame)
+        assertEquals(1, summary.retries)
+        assertEquals("IOException", summary.failure)
+    }
+
+    @Test fun aLateProcessHasNoBootToFrameButKeepsConnectToFrame() {
+        val summary = StartupTimeline.summarize(completeEvents(offset = 595000)).single()
+        assertNull(summary.bootToFrame)
+        assertEquals(23410L, summary.connectToFrame)
+    }
+
+    @Test fun keepsOnlyTheMostRecentThreeProcesses() {
+        val lines = (1..4).flatMap { count -> listOf(
+            sample(count * 100L, "PROCESS_START", "boot" to count),
+            sample(count * 100L + 1, "BOOT_RECEIVED"),
+        ) }
+        val summaries = StartupTimeline.summarize(lines)
+        assertEquals(listOf(2, 3, 4), summaries.map { it.bootCount })
+        summaries.forEachIndexed { index, summary ->
+            val line = summary.formatLine(index + 1)
+            assertEquals(line, DiagnosticRedactor.redact(line))
+        }
+    }
+
+    @Test fun diagnosticReportPlacesTheComputedSummaryBeforeTheTimeline() {
+        val timeline = File(context.filesDir, "logs/startup/timeline.log")
+        timeline.parentFile!!.mkdirs()
+        timeline.writeText(completeEvents().joinToString("\n", postfix = "\n"))
+        val activity = org.robolectric.Robolectric.buildActivity(DiPlayActivity::class.java).get()
+        try {
+            val report = ReflectionHelpers.callInstanceMethod<String>(activity, "diagnosticReportText",
+                ReflectionHelpers.ClassParameter.from(Context::class.java, context))
+            val summary = StartupTimeline.summarize(completeEvents()).single().formatLine(1)
+            assertTrue(report.contains(summary))
+            assertTrue(report.indexOf("--- Startup summary (ms) ---") < report.indexOf("--- Startup timeline"))
+            assertTrue(report.indexOf("--- Startup summary (ms) ---") < report.indexOf("Head unit:"))
+        } finally {
+            activity.finish()
+        }
+    }
+
+    @Test fun allWirelessMilestoneSchemasSurviveRedaction() {
+        val cases = listOf(
+            "CP_MFI_START" to emptyList(),
+            "CP_MFI_READY" to listOf("elapsedMs" to 900),
+            "CP_W_BEGIN" to listOf("gen" to 1),
+            "CP_W_CLEANUP_DONE" to listOf("gen" to 1, "elapsedMs" to 40),
+            "CP_W_LINK_READY" to listOf("gen" to 1, "mode" to "MANUAL", "backend" to "MANUAL_HOTSPOT", "band" to 5180, "channel" to 36, "elapsedMs" to 1800),
+            "CP_W_BT_START" to listOf("gen" to 1, "attempt" to 1),
+            "CP_W_BT_CONNECTED" to listOf("gen" to 1, "elapsedMs" to 12040),
+            "CP_W_BT_FAILED" to listOf("gen" to 1, "elapsedMs" to 1000, "error" to "IOException"),
+            "CP_W_IAP2_START" to listOf("gen" to 1),
+            "CP_W_WIFI_INFO_SENT" to listOf("gen" to 1),
+            "CP_W_BONJOUR_START" to listOf("gen" to 1),
+            "CP_W_BONJOUR_CREATE" to listOf("gen" to 1, "family" to "IPv4", "elapsedMs" to 20),
+            "CP_W_BONJOUR_CREATE" to listOf("gen" to 1, "family" to "IPv6", "elapsedMs" to 30),
+            "CP_W_BONJOUR_READY" to listOf("gen" to 1, "elapsedMs" to 60),
+            "CP_W_FIRST_TCP" to listOf("gen" to 1),
+            "CP_W_SESSION_START" to listOf("gen" to 1),
+            "CP_W_FAIL" to listOf("gen" to 1, "failure" to "HOTSPOT_NOT_READY"),
+            "FIRST_FRAME" to listOf("gen" to 1),
+        )
+        for ((event, fields) in cases) {
+            for ((key) in fields) {
+                val lower = key.lowercase()
+                assertFalse("unsafe field: $key", lower.endsWith("name") ||
+                    listOf("ssid", "pass", "token", "host").any { it in lower })
+            }
+            val line = StartupTimeline.formatLine(12345, 42, event, fields)
+            assertEquals("$event was redacted", line, DiagnosticRedactor.redact(line))
+        }
+    }
+
+    private fun completeEvents(offset: Long = 0): List<String> = listOf(
+        sample(5000 + offset, "PROCESS_START", "boot" to 9),
+        sample(9800 + offset, "BOOT_RECEIVED"),
+        sample(11900 + offset, "UI_CREATE"),
+        sample(12050 + offset, "CONNECT_REQUEST"),
+        sample(12100 + offset, "CP_MFI_START"),
+        sample(13000 + offset, "CP_MFI_READY", "elapsedMs" to 900),
+        sample(13000 + offset, "CP_W_BEGIN", "gen" to 1),
+        sample(13040 + offset, "CP_W_CLEANUP_DONE", "gen" to 1, "elapsedMs" to 40),
+        sample(14840 + offset, "CP_W_LINK_READY", "gen" to 1),
+        sample(14845 + offset, "CP_W_BONJOUR_START", "gen" to 1),
+        sample(14905 + offset, "CP_W_BONJOUR_READY", "gen" to 1, "elapsedMs" to 60),
+        sample(15000 + offset, "CP_W_BT_START", "gen" to 1, "attempt" to 1),
+        sample(27040 + offset, "CP_W_BT_CONNECTED", "gen" to 1, "elapsedMs" to 12040),
+        sample(28540 + offset, "CP_W_WIFI_INFO_SENT", "gen" to 1),
+        sample(34640 + offset, "CP_W_FIRST_TCP", "gen" to 1),
+        sample(34800 + offset, "CP_W_SESSION_START", "gen" to 1),
+        sample(35460 + offset, "FIRST_FRAME", "gen" to 1),
+    )
+
+    private fun sample(up: Long, event: String, vararg fields: Pair<String, Any?>): String =
+        "09:00:00.000  " + StartupTimeline.formatLine(up, 42, event, fields.toList())
 
     private fun writeSampleEvents() {
         StartupTimeline.event(context, "UI_CREATE", "action" to null, "launcherCategory" to false,

@@ -971,6 +971,8 @@
     <string name="connection_help_wifi_direct">保持車機的 Wi-Fi 與藍牙開啟，iPhone 解鎖並放在附近，再重試。若仍失敗，請在 iPhone 的「設定 → 一般 → CarPlay」中忘記這輛車，再重新連線。</string>
     <string name="connection_help_existing_wifi">請確認車機和 iPhone 連線的是同一個 Wi-Fi 網路，且網路名稱和密碼與 DiPlay 設定相同，再重試。</string>
     <string name="settings_report_on_phone">在手機上取得報告</string>
+    <string name="settings_startup_no_record">上次啟動：暫無記錄</string>
+    <string name="settings_startup_summary">上次啟動：開機到畫面 %1$s 秒，連接到畫面 %2$s 秒，最慢 %3$s %4$s 秒</string>
     <string name="settings_report_on_phone_hint">用手機相機掃碼，在瀏覽器中開啟此頁面，然後選擇「下載報告」。下載完成前請保持此畫面開啟。</string>
     <string name="settings_mfi_target_description">只有車機上插著 CH341 認證轉接器時才選擇 USB/CH341。沒有轉接器時請選擇「本機離線」。下次連線時生效。</string>
     <string name="settings_call_speakerphone">通話使用揚聲器</string>

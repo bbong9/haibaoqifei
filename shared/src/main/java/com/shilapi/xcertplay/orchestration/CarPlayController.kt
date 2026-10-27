@@ -173,6 +173,7 @@ class CarPlayController(
     private val clearPairRecord: () -> Unit = {},
     private val locationProvider: Iap2LocationProvider? = null,
     private val vehicleStatusProvider: com.shilapi.xcertplay.transport.VehicleStatusProvider? = null,
+    private val onStartupMilestone: (event: String, fields: List<Pair<String, Any?>>) -> Unit = { _, _ -> },
 ) : Closeable {
     init {
         require(!config.locationReportingEnabled || locationProvider != null) {
@@ -234,6 +235,7 @@ class CarPlayController(
     private val pendingUsbAdbGrants = mutableSetOf<String>()
     private var lastReportedStatus: CarPlayStatus? = null
     private var mfiResetLogged = false
+    @Volatile private var mfiStartedNanos: Long? = null
 
     @Volatile private var closed = false
     @Volatile private var phase = Phase.IDLE
@@ -887,6 +889,8 @@ class CarPlayController(
     }
 
     private fun startMfi() {
+        mfiStartedNanos = System.nanoTime()
+        startupMilestone("CP_MFI_START")
         if (!hasRequiredUsbService()) return
         availabilityPollGeneration.incrementAndGet()
         phase = Phase.MFI
@@ -1207,6 +1211,7 @@ class CarPlayController(
     }
 
     private fun startPhone() {
+        mfiStartedNanos?.let { startupMilestone("CP_MFI_READY", "elapsedMs" to elapsedMillis(it)) }
         if (config.locationReportingEnabled) {
             val started = try {
                 locationProvider?.start() == true
@@ -1263,9 +1268,12 @@ class CarPlayController(
     }
 
     private fun runWireless(generation: Int) {
+        val cleanupStarted = System.nanoTime()
+        wirelessMilestone(generation, "CP_W_BEGIN")
         try {
             debugLog("wireless bring-up generation=$generation starting")
             closeWirelessStack(generation = generation)
+            wirelessMilestone(generation, "CP_W_CLEANUP_DONE", "elapsedMs" to elapsedMillis(cleanupStarted))
             if (
                 closed ||
                 phase != Phase.WIRELESS ||
@@ -1307,7 +1315,14 @@ class CarPlayController(
                 state = activeAdapter?.state,
                 pausedByDiPlay = BydBluetoothSuspend.isSuspendedByUs(appContext),
             )?.let { throw BluetoothRadioCheck.failure(it) }
+            val linkStarted = System.nanoTime()
             val hotspotInfo = startWirelessHotspot(generation)
+            wirelessMilestone(generation, "CP_W_LINK_READY",
+                "mode" to config.wirelessHotspotMode.name,
+                "backend" to hotspotInfo.backend.name,
+                "band" to (hotspotInfo.frequencyMHz ?: -1),
+                "channel" to hotspotInfo.channel,
+                "elapsedMs" to elapsedMillis(linkStarted))
             if (isStaleWirelessRun(generation)) {
                 return
             }
@@ -1454,12 +1469,18 @@ class CarPlayController(
                 useInterfaceMdns = true,
                 onEvent = { event -> debugLog("wireless bonjour: ${event.diagnosticSummary()}") },
                 additionalAddresses = hotspotInfo.hostAddresses.filter { it != hostAddress },
+                onMdnsCreated = { family, elapsed ->
+                    wirelessMilestone(generation, "CP_W_BONJOUR_CREATE", "family" to family, "elapsedMs" to elapsed)
+                },
             )
             synchronized(wirelessResourceLock) {
                 if (isStaleWirelessRun(generation)) return
                 bonjour = bonjourClient
                 startedHotspot?.validateReady()
+                val bonjourStarted = System.nanoTime()
+                wirelessMilestone(generation, "CP_W_BONJOUR_START")
                 bonjourClient.start()
+                wirelessMilestone(generation, "CP_W_BONJOUR_READY", "elapsedMs" to elapsedMillis(bonjourStarted))
             }
             startedBonjour = bonjourClient
             diagnostics.start()
@@ -1480,13 +1501,17 @@ class CarPlayController(
             }
             logBluetoothConnectionSnapshot(device, "before-connect")
             val bluetoothStarted = System.nanoTime()
+            wirelessMilestone(generation, "CP_W_BT_START", "attempt" to 1)
             val bluetoothConnectMillis: Long
             try {
                 connectBluetoothSocket(socket, device.address)
                 bluetoothConnectMillis = elapsedMillis(bluetoothStarted)
+                wirelessMilestone(generation, "CP_W_BT_CONNECTED", "elapsedMs" to bluetoothConnectMillis)
                 connectionDiagnostic("Bluetooth connect completed elapsedMs=$bluetoothConnectMillis " +
                     "socketReportedConnected=${runCatching { socket.isConnected }.getOrNull() ?: "unknown"}")
             } catch (error: Throwable) {
+                wirelessMilestone(generation, "CP_W_BT_FAILED", "elapsedMs" to elapsedMillis(bluetoothStarted),
+                    "error" to error.javaClass.simpleName)
                 connectionDiagnostic(
                     "Bluetooth connect failed elapsedMs=${elapsedMillis(bluetoothStarted)} " +
                         "failureClass=${diagnosticFailureClass(error)}",
@@ -1515,6 +1540,7 @@ class CarPlayController(
                     watchForUnrealBluetooth(it)
                 }
             }
+            wirelessMilestone(generation, "CP_W_IAP2_START")
             val channel = Iap2Session.openWireless(
                 stream,
                 traceContext = "wireless-rfcomm",
@@ -1568,6 +1594,13 @@ class CarPlayController(
                     "location=false vehicleStatus=false",
             )
             startedHotspot?.validateReady()
+            var wifiInfoReported = false
+            fun reportWifiInfoSent() {
+                if (!wifiInfoReported) {
+                    wifiInfoReported = true
+                    wirelessMilestone(generation, "CP_W_WIFI_INFO_SENT")
+                }
+            }
             val result = Iap2WirelessControlClient(
                 session = channel,
                 mfi = Iap2MfiAuthenticationClient(mfi),
@@ -1577,7 +1610,11 @@ class CarPlayController(
                 timeoutMillis = controlLoopTimeoutMillis(),
                 keepAliveAfterDeadline = { keepBluetoothControlAlive(generation) },
                 beforeStartSession = { startedHotspot?.validateReady() },
-                onStartSessionSent = { watchdog.startSessionSent(it.sentAtNanos) },
+                onStartSessionSent = {
+                    watchdog.startSessionSent(it.sentAtNanos)
+                    reportWifiInfoSent()
+                },
+                onWifiInfoSent = ::reportWifiInfoSent,
                 onIncoming = ::onRouteFrame,
                 onProgress = { message ->
                     diagnostics.controlProgress(message)
@@ -1714,10 +1751,16 @@ class CarPlayController(
     private fun wirelessSessionListener(generation: Int, watchdog: FirstTcpWatchdog): AirPlaySessionListener =
         object : AirPlaySessionListener by sessionListener {
             private var reportedFrameSession: AirPlaySession? = null
+            private val startupTcpReported = AtomicBoolean(false)
+            private val startupSessionReported = AtomicBoolean(false)
+            private val startupFrameReported = AtomicBoolean(false)
 
             override fun onTcpAccepted(event: AirPlayTcpAccepted) {
                 if (isStaleWirelessRun(generation)) return
-                if (watchdog.accepted(event)) wirelessDiagnostics?.connectionAccepted()
+                if (watchdog.accepted(event)) {
+                    if (startupTcpReported.compareAndSet(false, true)) wirelessMilestone(generation, "CP_W_FIRST_TCP")
+                    wirelessDiagnostics?.connectionAccepted()
+                }
             }
 
             override fun onTransportError(message: String) {
@@ -1728,6 +1771,7 @@ class CarPlayController(
 
             override fun onSessionActive(session: AirPlaySession) {
                 if (isStaleWirelessRun(generation) || !watchdog.sessionEstablished()) return
+                if (startupSessionReported.compareAndSet(false, true)) wirelessMilestone(generation, "CP_W_SESSION_START")
                 wirelessDiagnostics?.let {
                     it.sessionActive()
                     it.close()
@@ -1747,6 +1791,7 @@ class CarPlayController(
             override fun onVideoFrameRendered(session: AirPlaySession) {
                 if (isStaleWirelessRun(generation) || activeSession !== session) return
                 if (!watchdog.sessionEstablished()) return
+                if (startupFrameReported.compareAndSet(false, true)) wirelessMilestone(generation, "FIRST_FRAME")
                 wirelessConnectionProof.rendered(generation, session)
                 val firstFrame = synchronized(this) {
                     if (reportedFrameSession === session) false else {
@@ -1754,7 +1799,9 @@ class CarPlayController(
                         true
                     }
                 }
-                if (firstFrame) uiListener?.onVideoFrameRendered(session)
+                if (firstFrame) {
+                    uiListener?.onVideoFrameRendered(session)
+                }
             }
 
             override fun onDebugLog(message: String) {
@@ -3056,6 +3103,11 @@ class CarPlayController(
                 firstTcpWatchdog?.terminate()
             }
             val causes = generateSequence(error) { it.cause }.toList()
+            if (wireless && phase == Phase.WIRELESS) {
+                val failure = causes.filterIsInstance<WirelessStartupException>().firstOrNull()?.reason?.name
+                    ?: error.javaClass.simpleName
+                wirelessMilestone(generation ?: wirelessGeneration.get(), "CP_W_FAIL", "failure" to failure)
+            }
             onStatus(CarPlayStatus.Failed(error.message ?: error.javaClass.simpleName,
                 causes.any { it is com.shilapi.xcertplay.network.P2pResetRequiredException },
                 causes.filterIsInstance<WirelessStartupException>().firstOrNull()?.reason,
@@ -3064,6 +3116,14 @@ class CarPlayController(
                 }),
                 if (wireless) wirelessGeneration.get() else null)
         }
+    }
+
+    private fun startupMilestone(event: String, vararg fields: Pair<String, Any?>) {
+        runCatching { onStartupMilestone(event, fields.toList()) }
+    }
+
+    private fun wirelessMilestone(generation: Int, event: String, vararg fields: Pair<String, Any?>) {
+        runCatching { onStartupMilestone(event, listOf("gen" to generation) + fields) }
     }
 
     private fun debugLog(message: String) {

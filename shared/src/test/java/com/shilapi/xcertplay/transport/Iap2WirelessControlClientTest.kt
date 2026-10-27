@@ -14,6 +14,24 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class Iap2WirelessControlClientTest {
+    @Test fun wifiInfoEventFollowsSuccessfulWriteAndCannotBreakTheControlFlow() {
+        var sent = false
+        var events = 0
+        sendWifiConfiguration(endpoint(), { frame ->
+            assertEquals(0x5703, frame.messageId)
+            sent = true
+        }, {
+            assertTrue(sent)
+            events++
+            throw AssertionError("diagnostic callback failed")
+        })
+        assertEquals(1, events)
+        assertThrows(java.io.IOException::class.java) {
+            sendWifiConfiguration(endpoint(), { throw java.io.IOException("write failed") }, { events++ })
+        }
+        assertEquals(1, events)
+    }
+
     @Test fun startSessionEventRequiresSuccessfulSendAndFollowsTheWrite() {
         var sent = false
         var events = 0

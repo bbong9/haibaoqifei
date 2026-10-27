@@ -5723,6 +5723,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             StartupTimeline.event(this, "HOST_START_STACK", "generation" to controllerGeneration,
                 "wireless" to (config.transport == CarPlayTransport.WIRELESS))
         }
+        val startupContext = applicationContext
         val next = CarPlayController(
             context = this,
             config = config,
@@ -5741,6 +5742,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             } else {
                 null
             },
+            onStartupMilestone = { event, fields -> StartupTimeline.event(startupContext, event, *fields.toTypedArray()) },
         )
         controller = next
         resetSidePanel() // a new session starts without the side panel

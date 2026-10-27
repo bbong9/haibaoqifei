@@ -34,6 +34,7 @@ class Iap2WirelessControlClient(
         // The caller must prove that the current CarPlay session is usable before keeping it alive.
         keepAliveAfterDeadline: () -> Boolean = { false },
         onProgress: (String) -> Unit = {},
+        onWifiInfoSent: () -> Unit = {},
     ): Iap2WirelessControlResult {
         require(identification.wireless != null) {
             "Wireless control requires an Iap2IdentificationConfig with wireless transport"
@@ -142,7 +143,7 @@ class Iap2WirelessControlClient(
                                 "iap2 0x5703 ignored: maximum Wi-Fi configuration sends reached",
                             )
                         } else {
-                            sendControl(accessoryWiFiConfiguration(endpoint))
+                            sendWifiConfiguration(endpoint, ::sendControl, onWifiInfoSent)
                             stage = later(
                                 stage,
                                 if (postTransport) {
@@ -196,7 +197,7 @@ class Iap2WirelessControlClient(
                                     "maximum Wi-Fi configuration sends reached",
                             )
                         } else {
-                            sendControl(accessoryWiFiConfiguration(endpoint))
+                            sendWifiConfiguration(endpoint, ::sendControl, onWifiInfoSent)
                             stage = later(
                                 stage,
                                 Iap2WirelessControlStage.POST_TRANSPORT_WIFI_CONFIG_SENT,
@@ -360,6 +361,15 @@ data class Iap2WirelessControlResult(
 
 /** 仅在 StartSession 发送成功后产生，不通过日志驱动超时。 */
 data class Iap2StartSessionSent(val sentAtNanos: Long)
+
+internal fun sendWifiConfiguration(
+    endpoint: Iap2WirelessCarPlayEndpoint,
+    send: (Iap2Frame) -> Unit,
+    onSent: () -> Unit,
+) {
+    send(Iap2WirelessControlClient.accessoryWiFiConfiguration(endpoint))
+    runCatching { onSent() }
+}
 
 internal fun sendStartSession(
     endpoint: Iap2WirelessCarPlayEndpoint,

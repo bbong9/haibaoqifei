@@ -923,6 +923,8 @@
     <string name="connection_help_wifi_direct">Тримайте Wi-Fi і Bluetooth головного пристрою ввімкненими, а iPhone розблокованим поряд, і повторіть спробу. Якщо збій повторюється, забудьте автомобіль на iPhone у розділі «Параметри → Загальні → CarPlay» і підключіться знову.</string>
     <string name="connection_help_existing_wifi">Переконайтеся, що головний пристрій та iPhone підключені до однієї мережі Wi-Fi, а її назва й пароль збігаються з налаштуваннями DiPlay, і повторіть спробу.</string>
     <string name="settings_report_on_phone">Отримати звіт на телефоні</string>
+    <string name="settings_startup_no_record">Останній запуск: записів ще немає</string>
+    <string name="settings_startup_summary">Останній запуск: від завантаження до зображення %1$s с, від підключення до зображення %2$s с, найдовший етап %3$s %4$s с</string>
     <string name="settings_report_on_phone_hint">Відскануйте код камерою телефона, щоб відкрити сторінку в його браузері, і виберіть «Завантажити звіт». Не закривайте цей екран, доки завантаження не завершиться.</string>
     <string name="settings_mfi_target_description">Обирайте USB/CH341, лише коли до головного пристрою підключено адаптер автентифікації CH341. Без нього оберіть «Локально, без мережі». Застосовується під час наступного підключення.</string>
     <string name="settings_call_speakerphone">Дзвінки через гучномовець</string>

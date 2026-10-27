@@ -960,6 +960,8 @@
     <string name="connection_help_wifi_direct">أبقِ واي فاي وبلوتوث وحدة السيارة قيد التشغيل وiPhone مفتوح القفل وقريبًا، ثم أعد المحاولة. إذا استمر الفشل، انسَ السيارة على iPhone من الإعدادات ← عام ← CarPlay ثم اتصل مجددًا.</string>
     <string name="connection_help_existing_wifi">تأكد من اتصال وحدة السيارة وiPhone بشبكة Wi-Fi نفسها وأن اسمها وكلمة مرورها يطابقان إعدادات DiPlay، ثم أعد المحاولة.</string>
     <string name="settings_report_on_phone">الحصول على التقرير عبر هاتف</string>
+    <string name="settings_startup_no_record">آخر بدء تشغيل: لا يوجد سجل بعد</string>
+    <string name="settings_startup_summary">آخر بدء تشغيل: من الإقلاع إلى الصورة %1$s ث، ومن الاتصال إلى الصورة %2$s ث، الأبطأ %3$s ‏%4$s ث</string>
     <string name="settings_report_on_phone_hint">امسح الرمز بكاميرا الهاتف لفتح هذه الصفحة في متصفحه، ثم اختر «تنزيل التقرير». أبقِ هذه الشاشة مفتوحة حتى يكتمل التنزيل.</string>
     <string name="settings_mfi_target_description">اختر USB/CH341 فقط عندما يكون محوّل مصادقة CH341 متصلًا بوحدة الوسائط. بدونه، اختر «محلي دون اتصال». يُطبَّق عند الاتصال التالي.</string>
     <string name="settings_call_speakerphone">المكالمات عبر مكبّر الصوت</string>

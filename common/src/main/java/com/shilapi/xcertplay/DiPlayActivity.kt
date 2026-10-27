@@ -1817,6 +1817,18 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            val startupSummary = label(getString(R.string.settings_startup_no_record), 14, MUTED)
+            card.addView(startupSummary)
+            if (searchIndexSink == null) {
+                val appContext = applicationContext
+                Thread({
+                    val summary = StartupTimeline.summarize(StartupTimeline.readLines(appContext)).lastOrNull()
+                    val text = StartupTimeline.renderLastSummary(appContext, summary)
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) startupSummary.text = text
+                    }
+                }, "diplay-startup-summary").start()
+            }
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }
@@ -6040,6 +6052,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         appendLine("DiPlay ${version()} · private beta diagnostic report")
         appendLine(LastConnectionProblem.report(appContext))
         appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
+        appendLine("--- Startup summary (ms) ---")
+        StartupTimeline.summarize(StartupTimeline.readLines(appContext)).forEachIndexed { index, summary ->
+            DiagnosticRedactor.redact(summary.formatLine(index + 1))?.let { appendLine(it) }
+        }
+        appendLine()
         appendLine("Head unit: ${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("Connection: ${if (AirPlayPersistence.loadWirelessEnabled(appContext)) "wireless" else "USB"}")
         AirPlayPersistence.loadUsbChargingCurrent(appContext).let {

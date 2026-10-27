@@ -911,6 +911,8 @@
     <string name="connection_help_wifi_direct">Не выключайте Wi-Fi и Bluetooth головного устройства, держите iPhone разблокированным рядом и повторите попытку. Если сбой повторяется, забудьте автомобиль на iPhone в разделе «Настройки → Основные → CarPlay» и подключитесь снова.</string>
     <string name="connection_help_existing_wifi">Убедитесь, что головное устройство и iPhone подключены к одной сети Wi-Fi, а её имя и пароль совпадают с настройками DiPlay, и повторите попытку.</string>
     <string name="settings_report_on_phone">Получить отчёт на телефоне</string>
+    <string name="settings_startup_no_record">Последний запуск: записей пока нет</string>
+    <string name="settings_startup_summary">Последний запуск: от загрузки до изображения %1$s с, от подключения до изображения %2$s с, самый долгий этап %3$s %4$s с</string>
     <string name="settings_report_on_phone_hint">Отсканируйте код камерой телефона, чтобы открыть страницу в его браузере, и выберите «Скачать отчёт». Не закрывайте этот экран, пока загрузка не завершится.</string>
     <string name="settings_mfi_target_description">Выбирайте USB/CH341, только если к головному устройству подключён адаптер аутентификации CH341. Без него выберите «Локальный офлайн». Применяется при следующем подключении.</string>
     <string name="settings_call_speakerphone">Звонки через громкоговоритель</string>

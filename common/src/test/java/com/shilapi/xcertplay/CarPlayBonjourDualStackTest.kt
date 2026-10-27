@@ -68,6 +68,24 @@ class CarPlayBonjourDualStackTest {
         assertEquals(ipv6.scopeId, (received[1] as Inet6Address).scopeId)
     }
 
+    @Test fun creationTimingCoversBothFamiliesEvenWhenTheObserverThrows() {
+        setup()
+        val dns = listOf(mock(JmDNS::class.java), mock(JmDNS::class.java))
+        val observed = mutableListOf<Pair<String, Long>>()
+        mockStatic(JmDNS::class.java).use { factory ->
+            factory.`when`<JmDNS> { JmDNS.create(any(InetAddress::class.java), anyString()) }
+                .thenReturn(dns[0], dns[1])
+            CarPlayBonjour(context, config, identity, ipv4.hostAddress, true,
+                additionalAddresses = listOf(ipv6), onMdnsCreated = { family, elapsed ->
+                    observed += family to elapsed
+                    throw AssertionError("diagnostic callback failed")
+                }).use { it.start() }
+        }
+        assertEquals(listOf("IPv4", "IPv6"), observed.map { it.first })
+        assertTrue(observed.all { it.second >= 0 })
+        dns.forEach { verify(it).registerService(any(ServiceInfo::class.java)) }
+    }
+
     @Test fun publishesAndBrowsesBothFamiliesAndClosesBothRegistries() {
         setup()
         val v4 = mock(JmDNS::class.java)

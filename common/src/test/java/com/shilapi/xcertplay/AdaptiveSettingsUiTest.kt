@@ -1288,6 +1288,40 @@ class AdaptiveSettingsUiTest {
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.save_diagnostic_report) })
     }
 
+    @Test fun diagnosticsLoadsTheLastStartupSummaryFromTheTimeline() {
+        val screen = openSettings()
+        assertTrue(AsyncDiagnosticLog.awaitIdle(2_000))
+        val file = java.io.File(context.filesDir, "logs/startup/timeline.log")
+        file.parentFile!!.mkdirs()
+        val previous = file.takeIf { it.isFile }?.readBytes()
+        try {
+            file.writeText(listOf(
+                "up=5000 pid=42 PROCESS_START boot=9",
+                "up=9800 pid=42 BOOT_RECEIVED",
+                "up=11900 pid=42 UI_CREATE",
+                "up=18120 pid=42 CONNECT_REQUEST",
+                "up=20000 pid=42 CP_W_BEGIN gen=1",
+                "up=22000 pid=42 CP_W_BT_START gen=1",
+                "up=34040 pid=42 CP_W_BT_CONNECTED gen=1",
+                "up=40410 pid=42 CP_W_FIRST_TCP gen=1",
+                "up=41230 pid=42 FIRST_FRAME gen=1",
+            ).joinToString("\n", postfix = "\n"))
+            descendants(screen.window.decorView).first { candidate ->
+                candidate.contentDescription == screen.getString(R.string.settings_open_category, screen.getString(R.string.diagnostics))
+            }.performClick()
+            val expected = screen.getString(R.string.settings_startup_summary, "41.2", "23.1", "bluetooth", "12.0")
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+            while (texts(screen).none { it.text == expected } && System.nanoTime() < deadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertTrue(texts(screen).map { it.text.toString() }.toString(), texts(screen).any { it.text == expected })
+            println("DIAGNOSTICS_VIEW $expected")
+        } finally {
+            if (previous == null) file.delete() else file.writeBytes(previous)
+        }
+    }
+
     private fun openSettings(): DiPlayActivity = Robolectric.buildActivity(
         DiPlayActivity::class.java,
         Intent(context, DiPlayActivity::class.java).putExtra("page", "settings"),
