@@ -17,8 +17,8 @@ android {
         applicationId = "com.shihab.diplay.seal"
         minSdk = 25
         targetSdk = 37
-        versionCode = 38
-        versionName = "0.2.14-seal.6"
+        versionCode = 41
+        versionName = "0.2.21-seal.7"
 
     }
 
@@ -40,7 +40,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".hudtest"
-            versionNameSuffix = "-debug"
+            versionNameSuffix = "-hud-test"
         }
         release {
             optimization {

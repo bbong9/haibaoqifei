@@ -29,44 +29,6 @@ class SealPerformanceProfileTest {
         )
     }
 
-    @Test fun profileRemovesExtraVideoWorkWithoutChangingConnectionOrAudio() {
-        AirPlayPersistence.saveWirelessEnabled(context, false)
-        AirPlayPersistence.saveMediaBufferMillis(context, 500)
-        AirPlayPersistence.saveHevcEnabled(context, true)
-        AirPlayPersistence.saveSmoothVideo(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveCenterMapOverlay(context, true)
-        AirPlayPersistence.saveLauncherMapSharing(context, true)
-        CarPlayRotation.setEnabled(context, true)
-        SplitScreenSettings.setEnabled(context, true)
-        SidePanelSettings.setEnabled(context, true)
-        SealPerformanceProfile.apply(context, 83)
-        assertEquals(60, AirPlayPersistence.loadFps(context))
-        assertEquals(83, AirPlayPersistence.loadDisplayScalePercent(context))
-        assertTrue(AirPlayPersistence.loadDirectVideo(context))
-        assertFalse(AirPlayPersistence.loadSmoothVideo(context))
-        assertFalse(AirPlayPersistence.loadHevcEnabled(context))
-        assertFalse(AirPlayPersistence.loadClusterMapEnabled(context))
-        assertFalse(AirPlayPersistence.loadAdbClusterEnabled(context))
-        assertFalse(AirPlayPersistence.loadCenterMapOverlay(context))
-        assertFalse(AirPlayPersistence.loadLauncherMapSharing(context))
-        assertFalse(CarPlayRotation.enabled(context))
-        assertFalse(SplitScreenSettings.enabled(context))
-        assertFalse(SidePanelSettings.enabled(context))
-        assertFalse(AirPlayPersistence.loadWirelessEnabled(context))
-        assertEquals(500, AirPlayPersistence.loadMediaBufferMillis(context))
-    }
-
-    @Test fun unsupportedPresetDoesNotPartiallyApplyAndSavedOverridesRemainEffective() {
-        AirPlayPersistence.saveFps(context, 45)
-        AirPlayPersistence.saveDisplayScalePercent(context, 90)
-        AirPlayPersistence.saveDirectVideo(context, false)
-        assertThrows(IllegalArgumentException::class.java) { SealPerformanceProfile.apply(context, 0) }
-        assertEquals(45, AirPlayPersistence.loadFps(context))
-        assertEquals(90, AirPlayPersistence.loadDisplayScalePercent(context))
-        assertFalse(AirPlayPersistence.loadDirectVideo(context))
-    }
-
     @Test fun upgradeRemovesOldBufferedAndClusterConfigurationButKeepsNativeResolution() {
         val seal = editionContext(true)
         AirPlayPersistence.saveDisplayScalePercent(seal, 100)
@@ -81,7 +43,7 @@ class SealPerformanceProfileTest {
         SealPerformanceProfile.migrateIfNeeded(seal)
         assertEquals(100, AirPlayPersistence.loadDisplayScalePercent(seal))
         assertEquals(60, AirPlayPersistence.loadFps(seal))
-        assertTrue(AirPlayPersistence.loadDirectVideo(seal))
+        assertTrue(AirPlayPersistence.loadDirectVideoOutput(seal))
         assertFalse(AirPlayPersistence.loadSmoothVideo(seal))
         assertFalse(AirPlayPersistence.loadClusterMapEnabled(seal))
         assertFalse(AirPlayPersistence.loadAdbClusterEnabled(seal))
@@ -113,6 +75,34 @@ class SealPerformanceProfileTest {
         // A no-op for another edition must not consume the Seal migration.
         SealPerformanceProfile.migrateIfNeeded(editionContext(true))
         assertFalse(AirPlayPersistence.loadSmoothVideo(context))
+    }
+
+    @Test fun oldDirectVideoFalseMigratesAndRemovesTheOldKey() {
+        val prefs = context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
+        prefs.edit().remove("direct_video_output").putBoolean("direct_video", false).commit()
+
+        assertFalse(AirPlayPersistence.loadDirectVideoOutput(context))
+        assertFalse(prefs.contains("direct_video"))
+        assertTrue(prefs.contains("direct_video_output"))
+    }
+
+    @Test fun oldDirectVideoTrueMigrates() {
+        val prefs = context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
+        prefs.edit().remove("direct_video_output").putBoolean("direct_video", true).commit()
+
+        assertTrue(AirPlayPersistence.loadDirectVideoOutput(context))
+        assertFalse(prefs.contains("direct_video"))
+    }
+
+    @Test fun existingDirectVideoOutputWinsAndOldKeyIsRemoved() {
+        val prefs = context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
+        for (newValue in listOf(false, true)) {
+            prefs.edit().putBoolean("direct_video", !newValue)
+                .putBoolean("direct_video_output", newValue).commit()
+
+            assertEquals(newValue, AirPlayPersistence.loadDirectVideoOutput(context))
+            assertFalse(prefs.contains("direct_video"))
+        }
     }
 
     private fun editionContext(seal: Boolean): Context {

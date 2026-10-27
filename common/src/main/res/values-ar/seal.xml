@@ -1,9 +1,0 @@
-<resources>
-    <string name="settings_seal_profile">إعداد Seal بمعدل 60 إطارًا</string>
-    <string name="settings_seal_profile_hint">يطلب 60 إطارًا لشاشة رئيسية واحدة بترميز H.264 وعرض مباشر. يعيد حجم الواجهة ويوقف خرائط العدادات والخرائط العائمة والمشتركة ولوحة الدوران وتقسيم الشاشة والشريط الجانبي. يسري عند الاتصال التالي. يجب قياس المعدل الفعلي.</string>
-    <string name="settings_seal_native">الدقة الأصلية · 100%</string>
-    <string name="settings_seal_medium">دقة أقل · 83%</string>
-    <string name="settings_seal_light">أقل دقة · 67%</string>
-    <string name="settings_direct_video">عرض فيديو مباشر (تجريبي)</string>
-    <string name="settings_direct_video_hint">يستخدم SurfaceView دون إضافة مخزن لتنعيم الفيديو. تعديلات الصورة غير متاحة. عند تفعيل الفيديو السلس يظل مخزنه مستخدمًا. يسري عند الاتصال التالي.</string>
-</resources>

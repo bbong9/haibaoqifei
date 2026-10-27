@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay.network
 
 import android.net.wifi.p2p.WifiP2pManager
+import com.shilapi.xcertplay.orchestration.ConnectionFailureCause
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
@@ -29,8 +30,8 @@ class P2pStartupRecoveryTest {
         }
         assertEquals(listOf(5745), attempts)
         assertSame(rejection, failure.cause)
-        assertTrue(failure.message!!.contains("channel 149"))
-        assertTrue(failure.message!!.contains("Choose Auto"))
+        assertEquals(ConnectionFailureCause.WIFI_DIRECT_CHANNEL_UNAVAILABLE, failure.reason)
+        assertEquals("Wi-Fi Direct could not use channel 149. Choose Auto or another channel. rejected", failure.message)
     }
 
     @Test fun busyManualChannelRetriesTheSameChannelOnlyOnce() {
@@ -357,9 +358,146 @@ class P2pStartupRecoveryTest {
         }
     }
 
+    @Test fun fiveGhzBandStaysInsideTheBandAndIgnoresStationOnTwoGhzAndRememberedAuto() {
+        val remembered = P2pCreationRequest(P2pCreationMode.FIXED_2_GHZ, 2437)
+        val plan = P2pStartupRecovery.plan(2437, remembered, preferredChannel = WifiP2pChannels.AUTO_5_GHZ)
+        assertEquals(listOf(
+            P2pCreationRequest(P2pCreationMode.BAND_5_GHZ),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5180),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5745),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5220),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5785),
+        ), plan)
+        assertTrue(plan.none { it.mode == P2pCreationMode.SYSTEM_DEFAULT })
+    }
+
+    @Test fun bandPlanPutsAnInBandStationChannelFirstWithoutRepeatingIt() {
+        assertEquals(listOf(
+            P2pCreationRequest(P2pCreationMode.ALIGNED_5_GHZ, 5745),
+            P2pCreationRequest(P2pCreationMode.BAND_5_GHZ),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5180),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5220),
+            P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5785),
+        ), P2pStartupRecovery.plan(5745, preferredChannel = WifiP2pChannels.AUTO_5_GHZ))
+        assertEquals(listOf(
+            P2pCreationRequest(P2pCreationMode.ALIGNED_2_GHZ, 2412),
+            P2pCreationRequest(P2pCreationMode.BAND_2_GHZ),
+            P2pCreationRequest(P2pCreationMode.FIXED_2_GHZ, 2437),
+            P2pCreationRequest(P2pCreationMode.FIXED_2_GHZ, 2462),
+        ), P2pStartupRecovery.plan(2412, preferredChannel = WifiP2pChannels.AUTO_2_4_GHZ))
+    }
+
+    @Test fun legacyBandPlanUsesOnlyExplicitChannels() {
+        assertEquals(listOf(5180, 5745, 5220, 5785),
+            P2pStartupRecovery.plan(null, preferredChannel = WifiP2pChannels.AUTO_5_GHZ, bandRequests = false)
+                .map { it.frequencyMHz })
+    }
+
+    @Test fun rejectedBandWalksItsChannelsThenStopsWithoutSwitchingBand() {
+        val attempts = mutableListOf<P2pCreationRequest>()
+        val failure = assertThrows(P2pChannelUnavailableException::class.java) {
+            P2pStartupRecovery.create(null, {}, preferredChannel = WifiP2pChannels.AUTO_5_GHZ) {
+                attempts += it
+                throw P2pCreateRejected(WifiP2pManager.ERROR, "rejected")
+            }
+        }
+        assertEquals(P2pStartupRecovery.plan(null, preferredChannel = WifiP2pChannels.AUTO_5_GHZ), attempts)
+        assertTrue(attempts.all { it.mode == P2pCreationMode.BAND_5_GHZ || WifiP2pBand.FIVE_GHZ.contains(it.frequencyMHz) })
+        assertTrue(failure.message!!.contains("5 GHz band"))
+    }
+
+    @Test fun bandBuilderFailureNeverFallsBackToTheUnpinnedDefault() {
+        var calls = 0
+        assertThrows(P2pChannelUnavailableException::class.java) {
+            P2pStartupRecovery.create(null, { fail("Unexpected fallback") }, preferredChannel = WifiP2pChannels.AUTO_2_4_GHZ) {
+                calls++
+                throw P2pConfigBuildCompatibilityFailure(NoSuchMethodError("vendor framework"))
+            }
+        }
+        assertEquals(1, calls)
+    }
+
     private fun reportedBuilderFailure(returnDescriptor: String = "Ljava/lang/String;") = NoSuchMethodError(
         "No virtual method getNetworkName()$returnDescriptor in class Landroid/net/wifi/p2p/WifiP2pConfig;",
     ).apply {
         stackTrace = arrayOf(StackTraceElement("android.net.wifi.p2p.WifiP2pConfig\$Builder", "build", null, 1))
+    }
+
+    @Test fun autoSkipsFiveGhzOnAChipWithoutIt() {
+        // #582: an i.MX8 head unit (Android 8.1, fiveGhzSupported=false, no station) was asked for 5180 first.
+        assertEquals(listOf(
+            P2pCreationRequest(P2pCreationMode.FIXED_2_GHZ, 2437),
+            P2pCreationRequest(P2pCreationMode.FIXED_2_GHZ, 2412),
+            P2pCreationRequest(P2pCreationMode.FIXED_2_GHZ, 2462),
+            P2pCreationRequest(P2pCreationMode.SYSTEM_DEFAULT),
+        ), P2pStartupRecovery.plan(null, bandRequests = false, fiveGhz = false))
+        val remembered = P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5745)
+        assertTrue(P2pStartupRecovery.plan(null, remembered, fiveGhz = false).none { (it.frequencyMHz ?: 0) > 5000 })
+        assertEquals(P2pCreationRequest(P2pCreationMode.FIXED_5_GHZ, 5180), P2pStartupRecovery.plan(null).first())
+    }
+
+    @Test fun aManualChannelIsStillTheDriversChoiceWithoutFiveGhz() {
+        assertEquals(listOf(P2pCreationRequest(P2pCreationMode.PREFERRED_CHANNEL, 5180)),
+            P2pStartupRecovery.plan(null, preferredChannel = 36, fiveGhz = false))
+    }
+
+    // Each further request would show Android's "turn the hotspot off?" prompt again (Galaxy Note20, Android 13).
+    @Test fun aBusyWithAKnownCauseEndsThePlanAtOnce() {
+        val attempts = mutableListOf<P2pCreationRequest>()
+        val asked = mutableListOf<P2pCreateRejected>()
+        val cause = IOException("refused beside the car hotspot")
+        val failure = assertThrows(IOException::class.java) {
+            P2pStartupRecovery.create(2437, { fail("Unexpected retry") }, busyCause = { asked += it; cause }) {
+                attempts += it
+                throw P2pCreateRejected(WifiP2pManager.BUSY, "busy", replyMillis = 3_500)
+            }
+        }
+        assertSame(cause, failure)
+        assertEquals(1, attempts.size)
+        assertEquals(listOf(3_500L), asked.map { it.replyMillis })
+    }
+
+    @Test fun aBusyWithoutAKnownCauseStillWalksThePlan() {
+        val attempts = mutableListOf<P2pCreationRequest>()
+        var asked = 0
+        assertThrows(P2pCreateRejected::class.java) {
+            P2pStartupRecovery.create(null, {}, busyCause = { asked++; null }) {
+                attempts += it
+                throw P2pCreateRejected(WifiP2pManager.BUSY, "busy", replyMillis = 40)
+            }
+        }
+        assertEquals(P2pStartupRecovery.plan(null).flatMap { listOf(it, it) }, attempts)
+        assertEquals(attempts.size, asked)
+    }
+
+    @Test fun onlyBusyAsksForACause() {
+        var asked = 0
+        assertThrows(P2pCreateRejected::class.java) {
+            P2pStartupRecovery.create(null, {}, busyCause = { asked++; IOException("unexpected") }) {
+                throw P2pCreateRejected(WifiP2pManager.ERROR, "error", replyMillis = 3_500)
+            }
+        }
+        assertEquals(0, asked)
+    }
+
+    @Test fun aRefusedPromptBesideTheCarHotspotEndsWifiDirect() {
+        val rejection = P2pCreateRejected(WifiP2pManager.BUSY, "busy", replyMillis = 3_500)
+        val failure = requireNotNull(P2pHotspotConflict.failure(33, true, rejection))
+        assertEquals(WirelessStartupFailure.WIFI_DIRECT_BESIDE_HOTSPOT, failure.reason)
+        assertFalse(failure.reason.retryable)
+        assertSame(rejection, failure.cause)
+    }
+
+    @Test fun otherBusyAnswersAreNotARefusedPrompt() {
+        fun busy(replyMillis: Long?) = P2pCreateRejected(WifiP2pManager.BUSY, "busy", replyMillis)
+        // Android 12 and older do not ask.
+        assertNull(P2pHotspotConflict.failure(32, true, busy(3_500)))
+        assertNull(P2pHotspotConflict.failure(33, false, busy(3_500)))
+        // Firmware that hides the hotspot state keeps the old behaviour.
+        assertNull(P2pHotspotConflict.failure(33, null, busy(3_500)))
+        // A firmware's own per-channel BUSY answers without waiting for anyone.
+        assertNull(P2pHotspotConflict.failure(33, true, busy(40)))
+        assertNull(P2pHotspotConflict.failure(33, true, busy(null)))
+        assertNull(P2pHotspotConflict.failure(33, true, P2pCreateRejected(WifiP2pManager.ERROR, "error", 3_500)))
     }
 }

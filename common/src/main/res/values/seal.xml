@@ -1,9 +1,0 @@
-<resources>
-    <string name="settings_seal_profile">Seal 60 fps profile</string>
-    <string name="settings_seal_profile_hint">Requests 60 fps with one H.264 main screen and direct video. Resets interface size and disables dashboard maps, map overlays, map sharing, rotation canvas, split screen and side panel. Applies at the next connection. Actual frame rate needs measurement.</string>
-    <string name="settings_seal_native">Native resolution · 100%</string>
-    <string name="settings_seal_medium">Lower resolution · 83%</string>
-    <string name="settings_seal_light">Lowest resolution · 67%</string>
-    <string name="settings_direct_video">Direct video (experimental)</string>
-    <string name="settings_direct_video_hint">Use SurfaceView without adding a smoothing buffer. Picture adjustments are unavailable. Smooth video still adds its own buffer when enabled. Applies at the next connection.</string>
-</resources>

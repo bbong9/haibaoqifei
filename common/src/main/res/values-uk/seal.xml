@@ -1,9 +1,0 @@
-<resources>
-    <string name="settings_seal_profile">Профіль Seal 60 кадрів/с</string>
-    <string name="settings_seal_profile_hint">Запитує 60 кадрів/с для одного головного екрана H.264 з прямим виведенням. Скидає розмір інтерфейсу та вимикає карти приладової панелі, рухомі й спільні карти, обертове полотно, поділ екрана й бічну панель. Діє з наступного підключення. Фактичну частоту потрібно виміряти.</string>
-    <string name="settings_seal_native">Початкова роздільність · 100%</string>
-    <string name="settings_seal_medium">Знижена роздільність · 83%</string>
-    <string name="settings_seal_light">Мінімальна роздільність · 67%</string>
-    <string name="settings_direct_video">Пряме виведення відео (експериментально)</string>
-    <string name="settings_direct_video_hint">Використовує SurfaceView без додаткового буфера згладжування. Налаштування зображення недоступні. Увімкнене плавне відео все одно додає свій буфер. Діє з наступного підключення.</string>
-</resources>

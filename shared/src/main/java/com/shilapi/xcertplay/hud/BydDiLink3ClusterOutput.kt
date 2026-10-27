@@ -28,7 +28,11 @@ internal object BydDiLink3ClusterOutput {
 
     fun setDesired(appContext: Context, mapShown: Boolean, guidanceActive: Boolean) {
         desiredMode = when {
-            mapShown -> BydDiLink3ClusterMode.Mode.PROJECTION
+            mapShown -> if (BydOutputSettings.clusterProjectionShape(appContext) == BydClusterProjectionShape.FULL) {
+                BydDiLink3ClusterMode.Mode.FULL_PROJECTION
+            } else {
+                BydDiLink3ClusterMode.Mode.PROJECTION
+            }
             guidanceActive -> BydDiLink3ClusterMode.Mode.SIMPLE_NAVIGATION
             else -> null
         }
@@ -95,14 +99,16 @@ internal object BydDiLink3ClusterOutput {
             loadRecovery = { journal.pending },
             saveRecovery = journal::save,
             projectionStillWanted = {
-                desiredMode == BydDiLink3ClusterMode.Mode.PROJECTION && !adbClusterRouteSelected(app)
+                desiredMode?.showsMap == true && !adbClusterRouteSelected(app)
             },
         ).also { session = it }
     }
 
     internal fun adbClusterRouteSelected(context: Context): Boolean =
-        context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE)
-            .getBoolean("adb_cluster_activity_enabled", false)
+        context.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE).let {
+            it.getBoolean("adb_cluster_activity_enabled", false) ||
+                it.getBoolean("platform21_cluster_enabled", false)
+        }
 
     private fun prefs(context: Context) = context.getSharedPreferences("diplay_dilink3_cluster", Context.MODE_PRIVATE)
 }

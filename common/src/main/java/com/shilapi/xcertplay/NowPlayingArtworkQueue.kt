@@ -25,6 +25,9 @@ internal class NowPlayingArtworkQueue<Image : Any>(
     private var workerScheduled = false
     private var deliveryScheduled = false
 
+    /** Runs bounded metadata recovery on the existing worker, away from the UI and PCM. */
+    fun execute(task: Runnable) = worker.execute(task)
+
     /** A fresh token also invalidates a decode already in progress. */
     fun newSession(): Any = synchronized(lock) {
         clearLocked()
@@ -41,7 +44,7 @@ internal class NowPlayingArtworkQueue<Image : Any>(
     }
 
     fun submit(expected: Any, id: Int, bytes: ByteArray) {
-        if (id !in 0..255 || bytes.size > Iap2FileTransferReceiver.DEFAULT_MAXIMUM_ARTWORK_BYTES) return
+        if (bytes.isEmpty() || id !in 0..255 || bytes.size > Iap2FileTransferReceiver.DEFAULT_MAXIMUM_ARTWORK_BYTES) return
         val schedule = synchronized(lock) {
             if (owner !== expected) return
             latest[id] = ++version

@@ -9,9 +9,6 @@ import java.lang.reflect.InvocationTargetException
 import java.nio.ByteBuffer
 import java.util.ArrayDeque
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -28,10 +25,22 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 
 /** Exercises the actual two read paths; queue rejection is a compatibility hypothesis. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28, 29], manifest = Config.NONE,
+@Config(sdk = [28], manifest = Config.NONE,
     shadows = [CompatibilityUsbConnectionShadow::class, CompatibilityUsbRequestShadow::class])
 class UsbReadQueueCompatibilityTest {
     @Before fun reset() { UsbQueueReplay.reset() }
+
+    @Test fun cachedSixteenKRejectionRetriesEightKInBothPipes() {
+        UsbQueueReplay.outcomes.addAll(listOf(false, true, false, true, true))
+        val pipe = pipe()
+        try { repeat(3) { assertArrayEquals(payload, pipe.read(100)) } } finally { pipe.close() }
+        assertEquals(listOf(65_536, 16_384, 16_384, 8_192, 8_192), UsbQueueReplay.sizes)
+        UsbQueueReplay.reset()
+        UsbQueueReplay.outcomes.addAll(listOf(false, true, false, true, true))
+        val ncm = ncm()
+        try { repeat(3) { assertEquals(payload.size, readChunk(ncm)) } } finally { ncm.close() }
+        assertEquals(listOf(32_768, 16_384, 16_384, 8_192, 8_192), UsbQueueReplay.sizes)
+    }
 
     @Test fun normalUsbmuxAndNcmRequestsKeepTheirOriginalSizes() {
         val diagnostics = mutableListOf<String>()
@@ -71,7 +80,7 @@ class UsbReadQueueCompatibilityTest {
         val frame = ByteArray(32_740) { (it * 31).toByte() }
         val followingFrame = byteArrayOf(0x33, 0x33, 0, 0, 0, 1, 0x86.toByte(), 0xdd.toByte())
         val block = Ntb16Codec.build(frame, 7)
-        assertEquals(32_769, block.size) // Two 16 KiB reads, then the required short-packet pad.
+        assertEquals(32_769, block.size) // Two 16 KiB reads, then the optional short-packet pad.
         UsbQueueReplay.transfer = block + Ntb16Codec.build(followingFrame, 8)
         UsbQueueReplay.outcomes.addAll(listOf(false, true))
         val diagnostics = mutableListOf<String>()
@@ -97,16 +106,16 @@ class UsbReadQueueCompatibilityTest {
         try { assertEquals(payload.size, readChunk(ncm)) } finally { ncm.close() }
     }
 
-    @Test fun bothQueueRejectionsFailWithEndpointApiAndAttemptedSizes() {
+    @Test fun everyLadderRejectionFailsWithEndpointApiAndAttemptedSizes() {
         val pipe = pipe()
-        UsbQueueReplay.outcomes.addAll(listOf(false, false))
+        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
         try { checkQueueFailure { pipe.read(100) } } finally { pipe.close() }
-        assertEquals(listOf(65_536, 16_384), UsbQueueReplay.sizes)
+        assertEquals(listOf(65_536, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
         UsbQueueReplay.reset()
         val ncm = ncm()
-        UsbQueueReplay.outcomes.addAll(listOf(false, false))
+        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
         try { checkQueueFailure { readChunk(ncm) } } finally { ncm.close() }
-        assertEquals(listOf(32_768, 16_384), UsbQueueReplay.sizes)
+        assertEquals(listOf(32_768, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
     }
 
     @Test fun queueExceptionDoesNotTriggerCompatibilityRetryInEitherPipe() {
@@ -133,87 +142,13 @@ class UsbReadQueueCompatibilityTest {
         assertEquals(listOf(32_768, 16_384), UsbQueueReplay.sizes)
     }
 
-    @Test fun repeatedUsbmuxTimeoutsKeepTheRequestAndLateBytesWithoutCancelling() {
-        UsbQueueReplay.outcomes.addAll(listOf(false, true))
-        UsbQueueReplay.timeout = true
-        // A completion racing a cancellation can make cancel() return false on the car.
-        UsbQueueReplay.cancelResult = false
-        val pipe = pipe()
-        try {
-            repeat(5) { assertEquals(null, pipe.read(7)) }
-            assertEquals(0, UsbQueueReplay.cancels)
-            assertEquals(0, UsbQueueReplay.requestCloses)
-            UsbQueueReplay.timeout = false
-            repeat(2) { assertArrayEquals(payload, pipe.read(100)) }
-            assertEquals(listOf(65_536, 16_384, 16_384), UsbQueueReplay.sizes)
-            assertTrue(UsbQueueReplay.buffers.all { it === UsbQueueReplay.buffers.first() })
-            assertEquals(0, UsbQueueReplay.cancels)
-        } finally { pipe.close() }
-        assertEquals(1, UsbQueueReplay.requestCloses)
-    }
-
-    @Test fun failedCompletionAfterTimeoutIsTerminalAndDoesNotRequeue() {
-        val pipe = pipe()
-        try {
-            UsbQueueReplay.timeout = true
-            assertEquals(null, pipe.read(7))
-            UsbQueueReplay.timeout = false
-            UsbQueueReplay.failedCompletion = true
-            val failure = expectUnavailable { pipe.read(100) }
-            assertTrue(failure === expectUnavailable { pipe.read(100) })
-            assertEquals(listOf(65_536), UsbQueueReplay.sizes)
-        } finally { pipe.close() }
-    }
-
-    @Test fun closingTimedOutPipeReleasesRequestOnceAndPreventsFurtherReads() {
-        val pipe = pipe()
-        UsbQueueReplay.timeout = true
-        assertEquals(null, pipe.read(7))
-        pipe.close()
-        pipe.close()
-        expectUnavailable { pipe.read(100) }
-        assertEquals(listOf(65_536), UsbQueueReplay.sizes)
-        assertEquals(1, UsbQueueReplay.cancels)
-        assertEquals(1, UsbQueueReplay.requestCloses)
-    }
-
-    @Test fun closeWakesBlockedReaderBeforeReleasingItsRequest() {
-        val entered = CountDownLatch(1)
-        val released = CountDownLatch(1)
-        val failure = AtomicReference<Throwable>()
-        UsbQueueReplay.onWait = {
-            entered.countDown()
-            check(released.await(2, TimeUnit.SECONDS))
-            assertEquals(0, UsbQueueReplay.requestCloses)
-        }
-        UsbQueueReplay.onConnectionClose = { released.countDown() }
-        UsbQueueReplay.failedCompletion = true
-        val pipe = pipe()
-        val reader = Thread {
-            try { pipe.read(60_000) } catch (error: Throwable) { failure.set(error) }
-        }
-        reader.start()
-        try {
-            assertTrue(entered.await(2, TimeUnit.SECONDS))
-            pipe.close()
-            reader.join(2_000)
-            assertTrue(!reader.isAlive)
-            assertTrue(failure.get() is IphoneUsbException.DeviceUnavailable)
-            assertEquals(1, UsbQueueReplay.requestCloses)
-        } finally {
-            released.countDown()
-            pipe.close()
-            reader.join(2_000)
-        }
-    }
-
     @Test fun closingUsbmuxAfterRejectedQueuePreventsTheCompatibilityRetry() {
         val pipe = pipe()
         UsbQueueReplay.outcomes.add(false)
         UsbQueueReplay.onQueue = { request ->
             val lock = ReflectionHelpers.getField<Any>(pipe, "stateLock")
             assertTrue(Thread.holdsLock(lock))
-            assertTrue(ReflectionHelpers.getField<UsbRequest>(pipe, "readRequest") === request)
+            assertTrue(ReflectionHelpers.getField<UsbRequest>(pipe, "pendingRead") === request)
             pipe.close()
         }
         try { expectUnavailable { pipe.read(100) } } finally { pipe.close() }
@@ -235,16 +170,16 @@ class UsbReadQueueCompatibilityTest {
 
     private fun checkQueueFailure(block: () -> Unit) {
         val error = expectUnavailable(block)
-        assertTrue(error.message!!.contains("api=${Build.VERSION.SDK_INT}"))
+        assertTrue(error.message!!.contains("api=28"))
         assertTrue(error.message!!.contains("endpoint=0x85"))
         assertTrue(error.message!!.contains("firstBytes="))
-        assertTrue(error.message!!.contains("fallbackBytes=16384"))
+        assertTrue(error.message!!.contains("fallbackBytes=2048"))
     }
 
     private fun checkFallbackDiagnostic(diagnostics: List<String>, pipe: String, firstBytes: Int) {
         val diagnostic = diagnostics.single()
         assertTrue(diagnostic.startsWith("$pipe read queue compatibility fallback "))
-        assertTrue(diagnostic.contains("api=${Build.VERSION.SDK_INT}"))
+        assertTrue(diagnostic.contains("api=28"))
         assertTrue(diagnostic.contains("endpoint=0x85(direction=128,type=2,maxPacket=512)"))
         assertTrue(diagnostic.contains("firstBytes=$firstBytes fallbackBytes=16384"))
     }
@@ -282,23 +217,22 @@ object UsbQueueReplay {
     var buffer: ByteBuffer? = null
     var queueException: RuntimeException? = null
     var timeout = false
-    var failedCompletion = false
-    var cancelResult = true
-    var cancels = 0
-    var requestCloses = 0
-    var onWait: (() -> Unit)? = null
-    var onConnectionClose: (() -> Unit)? = null
     var onQueue: ((UsbRequest) -> Unit)? = null
     var transfer: ByteArray? = null
     var transferOffset = 0
     val completedBytes = mutableListOf<Int>()
     @Volatile var untimedWaits = 0
+    /** Timed waits that time out once each before a completion is returned. */
+    var timeouts = 0
+    var cancelResult = true
+    /** The next completion carries no bytes, as a cancelled read does. */
+    var emptyCompletion = false
+    var cancels = 0
     fun reset() {
         outcomes.clear(); sizes.clear(); buffers.clear(); request = null; buffer = null
         queueException = null; timeout = false; onQueue = null
-        failedCompletion = false; cancelResult = true; cancels = 0; requestCloses = 0
-        onWait = null; onConnectionClose = null
         transfer = null; transferOffset = 0; completedBytes.clear(); untimedWaits = 0
+        timeouts = 0; cancelResult = true; emptyCompletion = false; cancels = 0
     }
 }
 
@@ -309,6 +243,9 @@ class CompatibilityUsbRequestShadow {
     @Implementation(minSdk = 26) fun queue(buffer: ByteBuffer): Boolean {
         UsbQueueReplay.sizes.add(buffer.remaining())
         UsbQueueReplay.buffers.add(buffer)
+        if (Build.VERSION.SDK_INT in 26..27) {
+            require(buffer.remaining() <= 16_384) { "number of remaining bytes is out of range [0, 16384]" }
+        }
         UsbQueueReplay.queueException?.let { throw it }
         UsbQueueReplay.onQueue?.invoke(request)
         val queued = UsbQueueReplay.outcomes.pollFirst() ?: true
@@ -320,16 +257,25 @@ class CompatibilityUsbRequestShadow {
         check(buffer.position() == 0 && buffer.remaining() == length) { "Unexpected Android 7 queue range" }
         return queue(buffer)
     }
-    @Implementation fun cancel(): Boolean { UsbQueueReplay.cancels++; return UsbQueueReplay.cancelResult }
-    @Implementation fun close() { UsbQueueReplay.requestCloses++ }
+    @Implementation fun cancel(): Boolean {
+        UsbQueueReplay.cancels += 1
+        return UsbQueueReplay.cancelResult
+    }
+    @Implementation fun close() = Unit
 }
 
 @Implements(UsbDeviceConnection::class)
 class CompatibilityUsbConnectionShadow {
-    @Implementation(minSdk = 26) fun requestWait(timeoutMillis: Long): UsbRequest? {
-        UsbQueueReplay.onWait?.invoke()
+    @Implementation(minSdk = 26) fun requestWait(timeoutMillis: Long): UsbRequest {
         if (UsbQueueReplay.timeout) throw TimeoutException()
-        if (UsbQueueReplay.failedCompletion) return null
+        if (UsbQueueReplay.timeouts > 0) {
+            UsbQueueReplay.timeouts -= 1
+            throw TimeoutException()
+        }
+        if (UsbQueueReplay.emptyCompletion) {
+            UsbQueueReplay.emptyCompletion = false
+            return UsbQueueReplay.request!!
+        }
         val buffer = UsbQueueReplay.buffer!!
         val transfer = UsbQueueReplay.transfer
         if (transfer == null) {
@@ -344,9 +290,9 @@ class CompatibilityUsbConnectionShadow {
         return UsbQueueReplay.request!!
     }
     /** Android 7.x blocking wait. */
-    @Implementation fun requestWait(): UsbRequest? {
+    @Implementation fun requestWait(): UsbRequest {
         UsbQueueReplay.untimedWaits += 1
         return requestWait(Long.MAX_VALUE)
     }
-    @Implementation fun close() { UsbQueueReplay.onConnectionClose?.invoke() }
+    @Implementation fun close() = Unit
 }

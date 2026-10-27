@@ -1,9 +1,0 @@
-<resources>
-    <string name="settings_seal_profile">海豹 60 帧配置</string>
-    <string name="settings_seal_profile_hint">请求 60 帧，使用单主屏 H.264 和直接显示。重置界面大小，关闭仪表地图、悬浮地图、地图共享、转屏画布、分屏和侧边栏。下次连接生效，实际帧率需测量。</string>
-    <string name="settings_seal_native">原生分辨率 · 100%</string>
-    <string name="settings_seal_medium">较低分辨率 · 83%</string>
-    <string name="settings_seal_light">最低分辨率 · 67%</string>
-    <string name="settings_direct_video">直接显示（实验性）</string>
-    <string name="settings_direct_video_hint">使用 SurfaceView，不额外增加平滑缓冲。画面滤镜不可用；开启平滑视频后仍会增加缓冲。下次连接生效。</string>
-</resources>

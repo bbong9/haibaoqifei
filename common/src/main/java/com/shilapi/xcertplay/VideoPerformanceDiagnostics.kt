@@ -13,7 +13,7 @@ internal object VideoPerformanceDiagnostics {
             appendLine("Edition: Seal 2022 / seal.1; target 60 fps; not yet measured on this car")
             appendLine("User-supplied target: iPhone 16 Pro Max / iOS 27; firmware 21.1.2.2601210.1; hardware V31.E34.00.32.00")
         }
-        appendLine("Saved output: direct=${AirPlayPersistence.loadDirectVideo(context)} smooth=${AirPlayPersistence.loadSmoothVideo(context)} (applies at reconnect)")
+        appendLine("Saved output: direct=${AirPlayPersistence.loadDirectVideoOutput(context)} smooth=${AirPlayPersistence.loadSmoothVideo(context)} (applies at reconnect)")
         appendLine("rx=received; shown=codec releases, not physical presentation; touch2frame=next received frame, not verified touch response")
         appendLine("queue=receive-to-worker wait; releaseGap=codec release interval, not display interval; allGap includes static screens and stalls")
         appendLine("Actual displays:")

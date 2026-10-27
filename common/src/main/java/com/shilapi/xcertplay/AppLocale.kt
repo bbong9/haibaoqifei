@@ -2,7 +2,6 @@
 package com.shilapi.xcertplay
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.LocaleManager
 import android.os.Build
 import android.os.LocaleList
@@ -22,8 +21,11 @@ object AppLocale {
     const val RUSSIAN = "ru"
     const val SPANISH = "es"
     const val UKRAINIAN = "uk"
+    const val JAPANESE = "ja"
 
-    val ALL = listOf(SYSTEM, ENGLISH, SIMPLIFIED_CHINESE, TRADITIONAL_CHINESE, ARABIC, RUSSIAN, SPANISH, UKRAINIAN)
+    const val ITALIAN = "it"
+
+    val ALL = listOf(SYSTEM, ENGLISH, SIMPLIFIED_CHINESE, TRADITIONAL_CHINESE, ARABIC, RUSSIAN, SPANISH, UKRAINIAN, JAPANESE, ITALIAN)
 
     private const val PREFS = "diplay"
     private const val KEY_LANGUAGE = "app_language"
@@ -109,7 +111,7 @@ object AppLocale {
 
     fun showPicker(activity: Activity) {
         var selected = ALL.indexOf(preference(activity)).coerceAtLeast(0)
-        AlertDialog.Builder(activity)
+        activity.appDialogBuilder()
             .setTitle(R.string.language_app_language)
             .setSingleChoiceItems(ALL.map { displayName(activity, it) }.toTypedArray(), selected) { _, index ->
                 selected = index
@@ -136,6 +138,8 @@ object AppLocale {
         RUSSIAN -> "Русский"
         SPANISH -> "Español"
         UKRAINIAN -> "Українська"
+        JAPANESE -> "日本語"
+        ITALIAN -> "Italiano"
         else -> language
     }
 
@@ -147,6 +151,8 @@ object AppLocale {
         RUSSIAN -> Locale("ru")
         SPANISH -> Locale("es")
         UKRAINIAN -> Locale("uk")
+        JAPANESE -> Locale.JAPANESE
+        ITALIAN -> Locale.ITALIAN
         else -> null
     }
 }

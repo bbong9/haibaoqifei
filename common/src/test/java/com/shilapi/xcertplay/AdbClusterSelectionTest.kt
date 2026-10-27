@@ -54,12 +54,55 @@ class AdbClusterSelectionTest {
         assertFalse(AdbClusterRouter.enabled(app))
     }
 
-    @Test fun absentPrivateTargetKeepsTheVirtualStreamEvenWhenAdbIsEnabled() {
+    @Test fun enabledAdbRoutePreparesItsNativeStreamBeforeTheWindowAppears() {
         AirPlayPersistence.saveAdbClusterEnabled(app, true)
         val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
         val config = CarPlayHostActivity::class.java.getDeclaredMethod("clusterDisplayConfig")
             .apply { isAccessible = true }.invoke(host) as AirPlayDisplayConfig
-        assertEquals(1280, config.widthPixels)
+        assertFalse(ClusterActivityOutput.hasConfirmedRoute())
+        assertEquals(1920, config.widthPixels)
         assertEquals(720, config.heightPixels)
     }
+    @Test fun legacyRouteIsOptInAndBothDirectRoutesAreMutuallyExclusive() {
+        assertFalse(AirPlayPersistence.loadLegacyClusterEnabled(app))
+        AirPlayPersistence.saveLegacyClusterEnabled(app, true)
+        assertTrue(AirPlayPersistence.loadClusterMapEnabled(app))
+        assertTrue(AirPlayPersistence.loadLegacyClusterEnabled(app))
+        assertFalse(AirPlayPersistence.loadAdbClusterEnabled(app))
+        assertEquals(com.shilapi.xcertplay.airplay.CarPlayClusterDisplay.Content.MAP,
+            AirPlayPersistence.loadClusterContent(app))
+        AirPlayPersistence.saveAdbClusterEnabled(app, true)
+        assertFalse(AirPlayPersistence.loadLegacyClusterEnabled(app))
+        AirPlayPersistence.saveLegacyClusterEnabled(app, true)
+        AirPlayPersistence.saveClusterMapEnabled(app, false)
+        assertFalse(AdbClusterRouter.enabled(app))
+    }
+
+    @Test fun legacyRoutePreservesKnownDilink5And51Priority() {
+        AirPlayPersistence.saveLegacyClusterEnabled(app, true)
+        val id = ShadowDisplayManager.addDisplay("w1920dp-h720dp-mdpi", 5)
+        shadowOf(app.getSystemService(DisplayManager::class.java).getDisplay(id)).apply {
+            setName(DiLink51ClusterLayout.BASE)
+            setFlags(Display.FLAG_PRESENTATION)
+        }
+        try { assertFalse(AdbClusterRouter.enabled(app)) }
+        finally { ShadowDisplayManager.removeDisplay(id) }
+        ShadowBuild.setFingerprint(DiLink51ClusterLayout.FINGERPRINT)
+        assertFalse(AdbClusterRouter.enabled(app))
+    }
+
+    @Test fun legacyDirectTaskCanUseTheMeasuredPublicProjectionOnlyAfterOptIn() {
+        val id = ShadowDisplayManager.addDisplay("w1920dp-h720dp-mdpi", 5)
+        shadowOf(app.getSystemService(DisplayManager::class.java).getDisplay(id)).apply {
+            setName(DiLink4ClusterDisplay.NAME)
+            setFlags(Display.FLAG_PRESENTATION)
+        }
+        try {
+            AirPlayPersistence.saveAdbClusterEnabled(app, true)
+            assertFalse(AdbClusterRouter.enabled(app))
+            AirPlayPersistence.saveLegacyClusterEnabled(app, true)
+            assertTrue(AdbClusterRouter.enabled(app))
+        } finally { ShadowDisplayManager.removeDisplay(id) }
+    }
+
 }
