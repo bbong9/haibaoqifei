@@ -41,7 +41,7 @@ case "${1:-check}" in
     ANDROID_KEY_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
     export ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD
     ./gradlew :mobile:verifyStandaloneAuthentication :mobile:lintRelease :mobile:assembleRelease --max-workers=4 --stacktrace
-    SEAL_APK="$SEAL_REPO/build/seal/DiPlay-Seal-0.2.21-seal.7.apk"
+    SEAL_APK="$SEAL_REPO/build/seal/DiPlay-Seal-0.2.21-seal.8.apk"
     cp mobile/build/outputs/apk/release/mobile-release.apk "$SEAL_APK"
     "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$SEAL_APK"
     shasum -a 256 "$SEAL_APK"

@@ -311,6 +311,11 @@ class StartupTimelineTest {
 
     @Test fun allWirelessMilestoneSchemasSurviveRedaction() {
         val cases = listOf(
+            "HOST_RETRY_SCHEDULED" to listOf("delayMs" to 2000, "waitsFor" to "bluetooth"),
+            "HOST_RETRY_SCHEDULED" to listOf("delayMs" to 16000, "waitsFor" to "wifi"),
+            "HOST_RETRY_SCHEDULED" to listOf("delayMs" to 30000, "waitsFor" to "none"),
+            "HOST_RETRY_EARLY" to listOf("radio" to "bluetooth"),
+            "HOST_RETRY_EARLY" to listOf("radio" to "wifi"),
             "CP_MFI_START" to emptyList(),
             "CP_MFI_READY" to listOf("elapsedMs" to 900),
             "CP_W_BEGIN" to listOf("gen" to 1),

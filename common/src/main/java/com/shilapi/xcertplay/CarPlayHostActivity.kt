@@ -32,6 +32,8 @@ import android.graphics.drawable.LayerDrawable
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.net.Uri
+import android.net.wifi.WifiManager
+import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -99,6 +101,7 @@ import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.media.CarPlayTouchMapper
 import com.shilapi.xcertplay.media.CarPlayVideoLayout
 import com.shilapi.xcertplay.network.CarPlayVpnService
+import com.shilapi.xcertplay.network.WifiP2pGroupManager
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.CarPlayRuntimeConfig
 import com.shilapi.xcertplay.network.WirelessStartupFailure
@@ -634,6 +637,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     // turning on then runs it at once, instead of after a back-off of up to 30 s.
     private var pendingReconnect: Runnable? = null
     private var reconnectWaitsForBluetooth = false
+    private var reconnectWaitsForWifi = false
     private val bluetoothOnReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) != BluetoothAdapter.STATE_ON) return
@@ -642,6 +646,19 @@ open class CarPlayHostActivity : ComponentActivity() {
             appendLog("Bluetooth turned on; retrying now")
             mainHandler.removeCallbacks(retry)
             mainHandler.post(retry)
+            runCatching { StartupTimeline.event(this@CarPlayHostActivity, "HOST_RETRY_EARLY", "radio" to "bluetooth") }
+        }
+    }
+    private val wifiP2pOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION ||
+                intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1) != WifiP2pManager.WIFI_P2P_STATE_ENABLED) return
+            val retry = pendingReconnect ?: return
+            if (!reconnectScheduled || !reconnectWaitsForWifi) return
+            appendLog("Wi-Fi Direct turned on; retrying now")
+            mainHandler.removeCallbacks(retry)
+            mainHandler.post(retry)
+            runCatching { StartupTimeline.event(this@CarPlayHostActivity, "HOST_RETRY_EARLY", "radio" to "wifi") }
         }
     }
     // How often the current controller reached its control loop, and whether a loss came after the
@@ -855,10 +872,13 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         SealPerformanceProfile.migrateIfNeeded(this)
         val bluetoothState = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        val wifiP2pState = IntentFilter(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(bluetoothOnReceiver, bluetoothState, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(wifiP2pOnReceiver, wifiP2pState, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(bluetoothOnReceiver, bluetoothState)
+            registerReceiver(wifiP2pOnReceiver, wifiP2pState)
         }
         NavigationWidgetUpdater.attach(applicationContext)
         CarPlayCallKeys.install(applicationContext)
@@ -1995,6 +2015,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         CarPlayScreen.destroyed(this)
         runCatching { unregisterReceiver(bluetoothOnReceiver) }
+        runCatching { unregisterReceiver(wifiP2pOnReceiver) }
         mainHandler.removeCallbacks(hideTemporarySystemBars)
         dropHeldTouch()
         discardLastPicture()
@@ -6114,7 +6135,11 @@ open class CarPlayHostActivity : ComponentActivity() {
         callPopupSessionReady = false
         updateCallPopupGuard()
         val generation = restartGeneration
-        val delayMillis = if (startupDelay != null) {
+        val waitsForWifi = englishReason.contains(WifiP2pGroupManager.WIFI_OFF_MARK, ignoreCase = true)
+        val delayMillis = if (waitsForWifi &&
+            runCatching { getSystemService(WifiManager::class.java)?.isWifiEnabled == true }.getOrDefault(false)) {
+            RECONNECT_DELAY_MILLIS
+        } else if (startupDelay != null) {
             startupDelay
         } else if (reason.contains("AirPlay iAP tunnel", ignoreCase = true)) {
             IAP_TUNNEL_RECONNECT_DELAY_MILLIS
@@ -6128,6 +6153,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             reconnectScheduled = false
             pendingReconnect = null
             reconnectWaitsForBluetooth = false
+            reconnectWaitsForWifi = false
             if (menuOpen && generation == restartGeneration) recoveryPendingAfterMenu = true
             if (
                 shuttingDown.get() ||
@@ -6148,7 +6174,16 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         pendingReconnect = retry
         reconnectWaitsForBluetooth = englishReason.contains(BluetoothRadioCheck.RADIO_OFF_MARK, true)
+        reconnectWaitsForWifi = waitsForWifi
         mainHandler.postDelayed(retry, delayMillis)
+        runCatching {
+            StartupTimeline.event(this, "HOST_RETRY_SCHEDULED", "delayMs" to delayMillis,
+                "waitsFor" to when {
+                    reconnectWaitsForBluetooth -> "bluetooth"
+                    reconnectWaitsForWifi -> "wifi"
+                    else -> "none"
+                })
+        }
     }
 
     /** Full-stack fallback when an AirPlay-only reconnect is unavailable. */

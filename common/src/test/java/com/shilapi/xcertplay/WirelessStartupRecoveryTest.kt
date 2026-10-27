@@ -3,6 +3,8 @@ package com.shilapi.xcertplay
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
 import android.content.Intent
+import android.net.wifi.WifiManager
+import android.net.wifi.p2p.WifiP2pManager
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -236,6 +238,83 @@ class WirelessStartupRecoveryTest {
     private fun bluetooth(state: Int) {
         ReflectionHelpers.getField<BroadcastReceiver>(activity, "bluetoothOnReceiver").onReceive(activity,
             Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE, state))
+    }
+
+    private val wifiOff = CarPlayStatus.Failed("Could not establish WIFI_P2P hotspot: " +
+        "Turn on Wi-Fi in the head unit's settings, then reconnect")
+
+    private fun wifiEnabled(enabled: Boolean) {
+        activity.getSystemService(WifiManager::class.java).isWifiEnabled = enabled
+    }
+
+    private fun wifiDirect(state: Int) {
+        ReflectionHelpers.getField<BroadcastReceiver>(activity, "wifiP2pOnReceiver").onReceive(activity,
+            Intent(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION).putExtra(WifiP2pManager.EXTRA_WIFI_STATE, state))
+    }
+
+    private fun reachLongReconnectBackoff() {
+        repeat(3) { attempt ->
+            report(status = CarPlayStatus.Failed("Connection closed"))
+            assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+            shadowOf(Looper.getMainLooper()).idleFor(2L shl attempt, TimeUnit.SECONDS)
+            assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        }
+        assertEquals(3, ReflectionHelpers.getField<Int>(activity, "reconnectAttempts"))
+    }
+
+    @Test fun wifiThatIsOffKeepsRetrying() {
+        wifiEnabled(false)
+        report(status = wifiOff)
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertFalse(ReflectionHelpers.getField(activity, "startupRetryStopped"))
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectWaitsForWifi"))
+    }
+
+    @Test fun wifiDirectTurningOnRunsTheRetryThatWaitsForIt() {
+        wifiEnabled(false)
+        reachLongReconnectBackoff()
+        report(status = wifiOff)
+        val pending = ReflectionHelpers.getField<Runnable>(activity, "pendingReconnect")
+        val handler = ReflectionHelpers.getField<Handler>(activity, "mainHandler")
+        assertTrue(handler.hasCallbacks(pending))
+        wifiDirect(WifiP2pManager.WIFI_P2P_STATE_ENABLED)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectWaitsForWifi"))
+        assertFalse(handler.hasCallbacks(pending))
+    }
+
+    @Test fun wifiDirectTurningOnLeavesAnyOtherRetryOnItsDelay() {
+        wifiEnabled(false)
+        reachLongReconnectBackoff()
+        report(status = CarPlayStatus.Failed("Connection closed"))
+        wifiDirect(WifiP2pManager.WIFI_P2P_STATE_ENABLED)
+        shadowOf(Looper.getMainLooper()).idleFor(15, TimeUnit.SECONDS)
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+    }
+
+    @Test fun wifiAlreadyOnWhenTheRetryIsScheduledUsesTheShortDelay() {
+        wifiEnabled(false)
+        reachLongReconnectBackoff()
+        wifiEnabled(true)
+        report(status = wifiOff)
+        shadowOf(Looper.getMainLooper()).idleFor(1_999, TimeUnit.MILLISECONDS)
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.MILLISECONDS)
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+    }
+
+    @Test fun wifiDirectStateChangeWhileDisabledDoesNothing() {
+        wifiEnabled(false)
+        reachLongReconnectBackoff()
+        report(status = wifiOff)
+        wifiDirect(WifiP2pManager.WIFI_P2P_STATE_DISABLED)
+        shadowOf(Looper.getMainLooper()).idleFor(15, TimeUnit.SECONDS)
+        assertTrue(ReflectionHelpers.getField(activity, "reconnectScheduled"))
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+        assertFalse(ReflectionHelpers.getField(activity, "reconnectScheduled"))
     }
 
     /** Fails every attempt with [status] until the retries stop, checking the screen names [cause] meanwhile. */

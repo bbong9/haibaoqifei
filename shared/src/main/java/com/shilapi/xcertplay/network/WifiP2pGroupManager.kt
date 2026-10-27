@@ -764,7 +764,7 @@ class WifiP2pGroupManager(
         if (!granted) throw IOException(if (Build.VERSION.SDK_INT >= 33)
             "Allow Nearby devices for DiPlay in the head unit's app permissions"
             else "Allow precise Location for DiPlay in the head unit's app permissions")
-        if (wifiEnabled == false) throw IOException("Turn on Wi-Fi in the head unit's settings, then reconnect")
+        if (wifiEnabled == false) throw IOException("$WIFI_OFF_MARK in the head unit's settings, then reconnect")
         // Location mode is diagnostic only: AOSP createGroup does not require it to be on.
         // Do not block firmware where Wi-Fi Direct works with Location services disabled.
         return !(wifiEnabled == true && fiveGhzSupported == false)
@@ -959,13 +959,14 @@ class WifiP2pGroupManager(
         val passphrase: String,
     )
 
-    private companion object {
-        const val TAG = "xcertplay-usb"
-        const val NANOS_PER_MILLISECOND = 1_000_000L
-        const val REMOVE_GROUP_TIMEOUT_MILLIS = 2_000L
-        const val UNKNOWN_CHANNEL = 0
-        val REQUEST_POLL_NANOS: Long = TimeUnit.MILLISECONDS.toNanos(500)
-        const val TOKEN_ALPHABET =
+    companion object {
+        const val WIFI_OFF_MARK = "Turn on Wi-Fi"
+        private const val TAG = "xcertplay-usb"
+        private const val NANOS_PER_MILLISECOND = 1_000_000L
+        private const val REMOVE_GROUP_TIMEOUT_MILLIS = 2_000L
+        private const val UNKNOWN_CHANNEL = 0
+        private val REQUEST_POLL_NANOS: Long = TimeUnit.MILLISECONDS.toNanos(500)
+        private const val TOKEN_ALPHABET =
             "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
     }
 }
