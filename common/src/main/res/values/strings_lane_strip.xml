@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">Show lanes on turn card (experimental)</string>
+    <string name="settings_cluster_lane_strip_description">Requires lane information from the iPhone navigation app. Nothing appears when an app such as Amap does not provide it.</string>
+</resources>

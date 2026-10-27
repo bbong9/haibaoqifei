@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">Показувати смуги на картці повороту (експериментально)</string>
+    <string name="settings_cluster_lane_strip_description">Потрібні дані про смуги від навігаційного застосунку iPhone. Якщо застосунок, наприклад Amap, їх не надає, смуги не з’являться.</string>
+</resources>

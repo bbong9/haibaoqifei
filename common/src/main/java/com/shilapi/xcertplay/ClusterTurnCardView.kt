@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
@@ -16,6 +17,8 @@ import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.airplay.ClusterTurnCardOverlay
 import com.shilapi.xcertplay.hud.ClusterTurnGuidance
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
+import kotlin.math.min
 
 /**
  * Instruction card drawn by DiPlay on top of the dashboard map.
@@ -27,6 +30,7 @@ import com.shilapi.xcertplay.hud.ClusterTurnGuidance
  */
 internal class ClusterTurnCardView(context: Context) : View(context) {
     private var guidance: ClusterTurnGuidance? = null
+    private var lanes: List<LaneGuidanceLane> = emptyList()
     private var night = false
     private var xPercent = ClusterTurnCardOverlay.DEFAULT_X_PERCENT
     private var yPercent = ClusterTurnCardOverlay.DEFAULT_Y_PERCENT
@@ -55,6 +59,12 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
     private val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(224, 235, 235, 240); typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
+    private val lanePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val lanePath = Path()
     private val rect = RectF()
     private var glyph: Drawable? = null
     private var glyphTag: Int = -1
@@ -117,6 +127,39 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         invalidate()
     }
 
+    fun setLanes(next: List<LaneGuidanceLane>) {
+        val displayed = next.take(8)
+        if (lanes == displayed) return
+        lanes = displayed
+        invalidate()
+    }
+
+    internal fun displayedLaneCount(): Int = if (guidance == null) 0 else lanes.size
+
+    internal fun laneRowRect(): RectF? {
+        if (guidance == null || lanes.isEmpty() || width <= 0 || height <= 0) return null
+        val card = ClusterTurnCardOverlay.card(width, height, xPercent, yPercent, sizePercent)
+        val rowHeight = card.height * 0.42f
+        val desired = rowHeight * (lanes.size * 0.8f + (lanes.size - 1) * 0.08f)
+        // The card is positioned in panel coordinates, so clamp against the panel, not the card.
+        val margin = min(4, (width - 1) / 2)
+        val maxStrip = (width - (dp(8f) * 2).toInt()).coerceAtLeast(1)
+            .coerceAtMost(width - margin * 2)
+        val stripWidth = desired.toInt().coerceAtLeast(1).coerceAtMost(maxStrip)
+        val stripLeft = (card.left + card.width / 2f - stripWidth / 2f).toInt()
+            .coerceIn(margin, width - stripWidth - margin)
+        val top = card.top + card.height + card.height * 0.05f
+        return RectF(stripLeft.toFloat(), top, (stripLeft + stripWidth).toFloat(), top + rowHeight)
+    }
+
+    internal fun infoStripTop(): Float {
+        val card = ClusterTurnCardOverlay.card(width, height, xPercent, yPercent, sizePercent)
+        val infoHeight = (card.height * 0.40f).coerceAtLeast(34f)
+        val gap = card.height * 0.05f
+        return laneRowRect()?.let { it.bottom + gap }
+            ?: (card.top + card.height + gap).coerceAtMost(height - infoHeight)
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(
             MeasureSpec.getSize(widthMeasureSpec).coerceAtLeast(1),
@@ -161,16 +204,16 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
                 textLeft, card.top + h * 0.72f, roadPaint,
             )
         }
-        drawInfoStrip(canvas, next, card.left, (card.top + h).toInt(), w.toInt(), h.toInt())
+        laneRowRect()?.let { drawLaneRow(canvas, it) }
+        drawInfoStrip(canvas, next, card.left, w.toInt(), h.toInt())
     }
 
     /** The arrival/duration/distance pill that hangs under the card, like the stock nav bar. */
-    private fun drawInfoStrip(canvas: Canvas, next: ClusterTurnGuidance, left: Int, belowTop: Int, width: Int, cardHeight: Int) {
+    private fun drawInfoStrip(canvas: Canvas, next: ClusterTurnGuidance, left: Int, width: Int, cardHeight: Int) {
         val parts = infoParts(next)
         if (parts.isEmpty()) return
         val h = (cardHeight * 0.40f).coerceAtLeast(34f)
-        val gap = cardHeight * 0.05f
-        val top = (belowTop + gap).coerceAtMost(height - h)
+        val top = infoStripTop()
         infoPaint.textSize = h * 0.42f
         val separator = "   ·   "
         val text = parts.joinToString(separator)
@@ -189,6 +232,75 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         val drawWidth = paintMeasure(draw)
         val centerX = stripLeft + stripWidth / 2f
         canvas.drawText(draw, centerX - drawWidth / 2f, top + h * 0.69f, infoPaint)
+    }
+
+    private fun drawLaneRow(canvas: Canvas, row: RectF) {
+        canvas.drawRoundRect(row, row.height() / 2f, row.height() / 2f, glassPaint)
+        canvas.drawRoundRect(row, row.height() / 2f, row.height() / 2f, strokePaint)
+        val unit = row.width() / (lanes.size * 0.8f + (lanes.size - 1) * 0.08f)
+        val laneWidth = unit * 0.8f
+        val gap = unit * 0.08f
+        lanes.forEachIndexed { index, lane ->
+            val centerX = row.left + index * (laneWidth + gap) + laneWidth / 2f
+            val primary = LaneArrowShape.of(lane.angle)
+            val highlight = lane.highlightAngle?.let(LaneArrowShape::of)
+            val split = lane.recommended && highlight != null && highlight != primary
+            drawLaneArrow(canvas, row, centerX, laneWidth, primary, lane.recommended && !split)
+            if (split) drawLaneArrow(canvas, row, centerX, laneWidth, highlight!!, true)
+        }
+    }
+
+    private fun drawLaneArrow(canvas: Canvas, row: RectF, cx: Float, laneWidth: Float,
+        shape: LaneArrowShape, emphasized: Boolean) {
+        val h = row.height()
+        val top = row.top
+        val left = shape == LaneArrowShape.SLIGHT_LEFT || shape == LaneArrowShape.LEFT || shape == LaneArrowShape.U_TURN_LEFT
+        val direction = if (left) -1f else 1f
+        val tipX: Float
+        val tipY: Float
+        val unitX: Float
+        val unitY: Float
+        lanePath.reset()
+        when (shape) {
+            LaneArrowShape.STRAIGHT -> {
+                tipX = cx; tipY = top + h * 0.22f; unitX = 0f; unitY = -1f
+                lanePath.moveTo(cx, top + h * 0.82f)
+                lanePath.lineTo(tipX, tipY)
+            }
+            LaneArrowShape.SLIGHT_LEFT, LaneArrowShape.SLIGHT_RIGHT -> {
+                tipX = cx + direction * laneWidth * 0.22f; tipY = top + h * 0.24f
+                unitX = direction * 0.45f; unitY = -0.893f
+                lanePath.moveTo(cx, top + h * 0.82f)
+                lanePath.lineTo(cx, top + h * 0.55f)
+                lanePath.lineTo(tipX, tipY)
+            }
+            LaneArrowShape.LEFT, LaneArrowShape.RIGHT -> {
+                tipX = cx + direction * laneWidth * 0.31f; tipY = top + h * 0.32f
+                unitX = direction; unitY = 0f
+                lanePath.moveTo(cx, top + h * 0.82f)
+                lanePath.lineTo(cx, top + h * 0.48f)
+                lanePath.quadTo(cx, tipY, tipX, tipY)
+            }
+            LaneArrowShape.U_TURN_LEFT, LaneArrowShape.U_TURN_RIGHT -> {
+                tipX = cx + direction * laneWidth * 0.25f; tipY = top + h * 0.64f
+                unitX = 0f; unitY = 1f
+                lanePath.moveTo(cx - direction * laneWidth * 0.18f, top + h * 0.82f)
+                lanePath.lineTo(cx - direction * laneWidth * 0.18f, top + h * 0.39f)
+                lanePath.cubicTo(cx - direction * laneWidth * 0.18f, top + h * 0.14f,
+                    tipX, top + h * 0.14f, tipX, top + h * 0.39f)
+                lanePath.lineTo(tipX, tipY)
+            }
+        }
+        val head = min(laneWidth * 0.20f, h * 0.14f)
+        val baseX = tipX - unitX * head
+        val baseY = tipY - unitY * head
+        lanePath.moveTo(baseX - unitY * head * 0.65f, baseY + unitX * head * 0.65f)
+        lanePath.lineTo(tipX, tipY)
+        lanePath.lineTo(baseX + unitY * head * 0.65f, baseY - unitX * head * 0.65f)
+        lanePaint.color = distancePaint.color
+        lanePaint.alpha = if (emphasized) 255 else (255 * 0.35f).toInt()
+        lanePaint.strokeWidth = laneWidth * 0.12f
+        canvas.drawPath(lanePath, lanePaint)
     }
 
     private fun paintMeasure(text: String): Float = infoPaint.measureText(text)

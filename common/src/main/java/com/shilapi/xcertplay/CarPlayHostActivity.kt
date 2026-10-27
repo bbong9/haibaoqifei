@@ -96,6 +96,8 @@ import com.shilapi.xcertplay.airplay.AirPlaySessionListener
 import com.shilapi.xcertplay.airplay.CarPlayMediaEngine
 import com.shilapi.xcertplay.airplay.SafeAreaRect
 import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import com.shilapi.xcertplay.location.AndroidCarPlayLocationProvider
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.media.CarPlayTouchMapper
@@ -471,6 +473,12 @@ open class CarPlayHostActivity : ComponentActivity() {
     // Keep one surface per layer alive, including while its map card is hidden.
     private val clusterLayers = mutableMapOf<Boolean, ClusterMapPresentation>()
     private var clusterTurnGuidance: com.shilapi.xcertplay.hud.ClusterTurnGuidance? = null
+    private val clusterLaneListener: (List<LaneGuidanceLane>) -> Unit = { ClusterActivityOutput.setLanes(it) }
+    private val clusterLanesChanged: (List<LaneGuidanceLane>) -> Unit = { lanes ->
+        appendLog(LaneStripDiagnostics.change(lanes))
+        val displayed = if (AirPlayPersistence.loadClusterLaneStrip(this)) lanes else emptyList()
+        (clusterLayers.values + listOfNotNull(clusterPresentation)).distinct().forEach { it.setLanes(displayed) }
+    }
     private val clusterTurnOverlayListener: (com.shilapi.xcertplay.hud.ClusterTurnGuidance?) -> Unit = { guidance ->
         runOnUiThread {
             clusterTurnGuidance = guidance
@@ -881,6 +889,8 @@ open class CarPlayHostActivity : ComponentActivity() {
             registerReceiver(wifiP2pOnReceiver, wifiP2pState)
         }
         NavigationWidgetUpdater.attach(applicationContext)
+        ClusterActivityOutput.onLanesChanged = clusterLanesChanged
+        CarPlayGlance.laneListener = clusterLaneListener
         CarPlayCallKeys.install(applicationContext)
         CenterMapOverlay.requestShow = ::showCenterMap
         MapMirrors.sink = mirrorSink
@@ -1562,6 +1572,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             presentation.setTurnCardOpacity(effectiveOpacity)
             presentation.setTurnCardNightMode(effectiveNight)
             presentation.setTurnCardGuidance(if (overlay) clusterTurnGuidance else null)
+            presentation.setLanes(if (AirPlayPersistence.loadClusterLaneStrip(this)) ClusterActivityOutput.lanes else emptyList())
         }
     }
     private fun dismissClusterPresentation() {
@@ -2053,6 +2064,8 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         if (MapMirrors.onChanged === mirrorsChanged) MapMirrors.onChanged = null
         dismissClusterPresentation()
+        if (CarPlayGlance.laneListener === clusterLaneListener) CarPlayGlance.laneListener = null
+        if (ClusterActivityOutput.onLanesChanged === clusterLanesChanged) ClusterActivityOutput.onLanesChanged = null
         mainHandler.removeCallbacks(applyDisplaySize)
         mainHandler.removeCallbacks(expireOldLogLines)
         mainHandler.removeCallbacks(pollConfiguration)

@@ -14,6 +14,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import java.lang.ref.WeakReference
 
 /** A separate task for stream 111. Routing is control traffic; video stays in the app process. */
@@ -101,6 +102,7 @@ class AdbClusterActivity : Activity() {
         turnCard?.setOpacity(ClusterActivityOutput.cardOpacity)
         turnCard?.setNightMode(ClusterActivityOutput.cardNight)
         turnCard?.setGuidance(if (ClusterActivityOutput.streamActive) ClusterActivityOutput.guidance else null)
+        turnCard?.setLanes(if (AirPlayPersistence.loadClusterLaneStrip(this)) ClusterActivityOutput.lanes else emptyList())
         updateSafeAreaPreview()
     }
 
@@ -200,6 +202,9 @@ internal object ClusterActivityOutput {
 
     var guidance: com.shilapi.xcertplay.hud.ClusterTurnGuidance? = null
         private set
+    @Volatile var lanes: List<LaneGuidanceLane> = emptyList()
+        private set
+    var onLanesChanged: ((List<LaneGuidanceLane>) -> Unit)? = null
     var cardX = com.shilapi.xcertplay.airplay.ClusterTurnCardOverlay.DEFAULT_X_PERCENT
         private set
     var cardY = com.shilapi.xcertplay.airplay.ClusterTurnCardOverlay.DEFAULT_Y_PERCENT
@@ -211,9 +216,27 @@ internal object ClusterActivityOutput {
     var cardNight = false
         private set
 
+    fun setLanes(next: List<LaneGuidanceLane>) {
+        val copy = next.toList()
+        main.post {
+            if (lanes != copy) {
+                lanes = copy
+                activity.get()?.updateTurnCard()
+                onLanesChanged?.invoke(copy)
+            }
+        }
+    }
+
+    private fun clearLanes() {
+        if (lanes.isEmpty()) return
+        lanes = emptyList()
+        onLanesChanged?.invoke(lanes)
+    }
+
     fun setTurnCard(next: com.shilapi.xcertplay.hud.ClusterTurnGuidance?, x: Int, y: Int,
         size: Int, opacity: Int, night: Boolean) {
         guidance = next
+        if (next == null) clearLanes()
         cardX = x
         cardY = y
         cardSize = size
@@ -350,6 +373,7 @@ internal object ClusterActivityOutput {
         surfaceOwner = null
         launchPending = false
         guidance = null
+        clearLanes()
         previewOwner = null
         previewHost.clear()
         previewRect = null

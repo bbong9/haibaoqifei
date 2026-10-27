@@ -18,6 +18,17 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class ClusterMapPresentationTest {
+    @Test fun lanesAreForwardedToThePresentationTurnCard() = withPresentation { presentation ->
+        val guidance = com.shilapi.xcertplay.hud.ClusterTurnGuidance(2, 0, 80, "Road")
+        val lanes = listOf(com.shilapi.xcertplay.iap2.message.LaneGuidanceLane(0, 2, 90, null))
+        presentation.setTurnCardGuidance(guidance)
+        presentation.setLanes(lanes)
+        val card: ClusterTurnCardView = org.robolectric.util.ReflectionHelpers.getField(presentation, "turnCardView")
+        assertEquals(1, card.displayedLaneCount())
+        presentation.setLanes(emptyList())
+        assertEquals(0, card.displayedLaneCount())
+    }
+
     @Test fun repeatedActiveNotificationsDoNotRestartTheFade() = withMeasuredPresentation { presentation ->
         presentation.setStreamActive(true)
         val video: android.view.View = org.robolectric.util.ReflectionHelpers.getField(presentation, "videoView")

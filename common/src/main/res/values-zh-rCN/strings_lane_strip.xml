@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">转向卡显示车道（实验性）</string>
+    <string name="settings_cluster_lane_strip_description">需要 iPhone 导航应用提供车道信息；高德等应用若不提供则不会显示。</string>
+</resources>

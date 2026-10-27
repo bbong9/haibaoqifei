@@ -2370,6 +2370,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 AirPlayPersistence.loadClusterTurnCardOverlaySizePercent(this),
                             ) { it -> getString(R.string.turn_card_overlay_size_option, it) }
                                 .also { it.onSave = { v -> AirPlayPersistence.saveClusterTurnCardOverlaySizePercent(this, v) } })
+                            toggle(card, getString(R.string.settings_cluster_lane_strip),
+                                getString(R.string.settings_cluster_lane_strip_description),
+                                AirPlayPersistence.loadClusterLaneStrip(this)) {
+                                AirPlayPersistence.saveClusterLaneStrip(this, it)
+                            }
                             card.addView(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_opacity),
                                 ClusterTurnCardOverlay.opacityPercents,
@@ -6080,6 +6085,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         AdbClusterRouter.report(appContext).lineSequence().forEach { line ->
             DiagnosticRedactor.redact(line)?.let { appendLine(it) }
         }
+        DiagnosticRedactor.redact(LaneStripDiagnostics.report(appContext))?.let { appendLine(it) }
         appendLine()
         appendLine("--- Standalone HUD compatibility ---")
         appendLine(BydOutputSettings.standaloneHudDiagnosticReport(appContext))

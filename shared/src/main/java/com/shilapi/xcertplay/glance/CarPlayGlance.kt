@@ -42,6 +42,16 @@ object CarPlayGlance {
 
     /** The last strip written to the log: Apple Maps repeats it while the overlap lasts. */
     private var loggedLanes: List<LaneGuidanceLane>? = null
+    private var laneUpdates = 0
+    private var laneMax = 0
+    private var lastLanes: List<LaneGuidanceLane> = emptyList()
+
+    data class LaneDiagnostics(val updates: Int, val max: Int, val last: List<LaneGuidanceLane>)
+
+    /** Changes received from 0x5204 in this process, independent of the display setting. */
+    fun laneDiagnostics(): LaneDiagnostics = synchronized(this) {
+        LaneDiagnostics(laneUpdates, laneMax, lastLanes.toList())
+    }
 
     /** Refresh time-dependent guidance even when no new metadata frame has arrived. */
     fun snapshot(): Snapshot {
@@ -55,8 +65,16 @@ object CarPlayGlance {
             // Lane guidance is a side channel: log it, hand it to whoever draws lanes, and leave
             // the route/now-playing state alone.
             val lanes = runCatching { Iap2LaneGuidance.parse(frame.payload) }.getOrDefault(emptyList())
-            if (lanes != loggedLanes) {
-                loggedLanes = lanes
+            val changed = synchronized(this) {
+                if (lanes == loggedLanes) false else {
+                    loggedLanes = lanes
+                    laneUpdates++
+                    laneMax = maxOf(laneMax, lanes.size)
+                    lastLanes = lanes
+                    true
+                }
+            }
+            if (changed) {
                 android.util.Log.i(TAG, "0x5204 " + describeLanes(lanes, frame.payload))
             }
             laneListener?.invoke(lanes)
@@ -76,15 +94,18 @@ object CarPlayGlance {
 
     fun setConnected(next: Boolean) {
         val changed = synchronized(this) {
-            if (connected == next) return
-            connected = next
-            if (!next) {
-                route.clear()
-                song.clear()
+            if (!next) loggedLanes = null
+            if (connected == next) null else {
+                connected = next
+                if (!next) {
+                    route.clear()
+                    song.clear()
+                }
+                publishLocked()
             }
-            publishLocked()
         }
         changed?.let { listener?.invoke(it) }
+        if (!next) laneListener?.invoke(emptyList())
     }
 
     /**

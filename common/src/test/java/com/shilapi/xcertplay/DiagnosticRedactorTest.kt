@@ -5,6 +5,28 @@ import org.junit.Test
 import java.nio.file.Files
 
 class DiagnosticRedactorTest {
+    @Test fun laneStripChangesAndRoutingSummarySurviveRedactionAndLogExport() {
+        val lines = listOf(
+            "Lane strip: lanes=4 recommended=2 angles=0,90,0,-45 highlights=-,-,90,-",
+            "Lane strip: cleared",
+            "laneStrip=on laneUpdates=12 laneMax=4 lastLanes=0:0:0:-,1:0:90:-,2:2:0:90,3:0:-45:-",
+            "laneStrip=off laneUpdates=0 laneMax=0 lastLanes=-",
+        )
+        val folder = Files.createTempDirectory("diplay-lane-report").toFile()
+        try {
+            val file = folder.resolve("diplay.log")
+            SessionLogFile(file).use { log ->
+                log.reset("started")
+                lines.forEach { line ->
+                    assertEquals(line, DiagnosticRedactor.redact(line))
+                    log.append(line)
+                }
+            }
+            val report = file.readText()
+            lines.forEach { assertTrue(report.contains(it)) }
+        } finally { folder.deleteRecursively() }
+    }
+
     @Test fun additionalTroubleshootingMetadataSurvivesSavedReportWithoutPayloads() {
         val lines = listOf(
             "wireless startup elapsedMs=10000 authenticated=true wifiConfigs=2 startRequests=1 tcpAccepted=0 sessionActive=false waitingFor=WiFi_discovery_or_AirPlay_TCP startRequestAgeMs=9000 firstTcpAfterStartMs=none",

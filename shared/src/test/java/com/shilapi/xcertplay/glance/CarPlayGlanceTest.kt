@@ -12,6 +12,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class) // Lane guidance logs through android.util.Log.
 class CarPlayGlanceTest {
@@ -155,5 +156,40 @@ class CarPlayGlanceTest {
         assertEquals(90, strips[0][1].highlightAngle)
         assertTrue(strips[1].isEmpty())
         assertEquals(before, CarPlayGlance.snapshot())
+    }
+
+    @Test
+    fun disconnectClearsLanesAndAllowsTheSameStripToBeLoggedAgain() {
+        CarPlayGlance.setConnected(true)
+        val seen = mutableListOf<List<LaneGuidanceLane>>()
+        CarPlayGlance.laneListener = { seen += it }
+        val update = frame(0x5204) { group(2) { u16(0, 2); u8(1, 2); i16(2, 90) } }
+        val before = CarPlayGlance.laneDiagnostics().updates
+        ShadowLog.clear()
+
+        CarPlayGlance.onFrame(update)
+        CarPlayGlance.onFrame(update)
+        assertEquals(before + 1, CarPlayGlance.laneDiagnostics().updates)
+        CarPlayGlance.setConnected(false)
+        assertTrue(seen.last().isEmpty())
+        CarPlayGlance.setConnected(true)
+        CarPlayGlance.onFrame(update)
+
+        assertEquals(seen.first(), seen.last())
+        assertEquals(before + 2, CarPlayGlance.laneDiagnostics().updates)
+        assertEquals(2, ShadowLog.getLogsForTag("DiPlay-Lane").size)
+    }
+
+    @Test
+    fun disconnectedStateStillClearsAReceivedStrip() {
+        val seen = mutableListOf<List<LaneGuidanceLane>>()
+        CarPlayGlance.laneListener = { seen += it }
+        val update = frame(0x5204) { group(2) { u16(0, 0); u8(1, 0); i16(2, 0) } }
+        CarPlayGlance.onFrame(update)
+        val before = CarPlayGlance.laneDiagnostics().updates
+        CarPlayGlance.setConnected(false)
+        assertTrue(seen.last().isEmpty())
+        CarPlayGlance.onFrame(update)
+        assertEquals(before + 1, CarPlayGlance.laneDiagnostics().updates)
     }
 }

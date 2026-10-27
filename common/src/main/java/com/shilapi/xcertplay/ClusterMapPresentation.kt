@@ -30,6 +30,7 @@ import android.widget.ProgressBar
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.hud.ClusterTurnGuidance
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 
 /**
  * Shows CarPlay's instrument-cluster stream on a BYD cluster projection display.
@@ -236,6 +237,10 @@ internal class ClusterMapPresentation(
 
     fun setTurnCardGuidance(guidance: ClusterTurnGuidance?) {
         turnCardView?.setGuidance(guidance)
+    }
+
+    fun setLanes(lanes: List<LaneGuidanceLane>) {
+        turnCardView?.setLanes(lanes)
     }
 
     companion object {

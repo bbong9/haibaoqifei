@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">Показывать полосы на карточке поворота (экспериментально)</string>
+    <string name="settings_cluster_lane_strip_description">Нужны данные о полосах от навигационного приложения iPhone. Если приложение, например Amap, их не передаёт, полосы не отображаются.</string>
+</resources>

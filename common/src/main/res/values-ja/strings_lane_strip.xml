@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">曲がる案内カードに車線を表示（実験的機能）</string>
+    <string name="settings_cluster_lane_strip_description">iPhone のナビアプリからの車線情報が必要です。高德などのアプリが情報を提供しない場合は表示されません。</string>
+</resources>

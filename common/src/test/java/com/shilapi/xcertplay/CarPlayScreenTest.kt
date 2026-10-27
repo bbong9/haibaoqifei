@@ -7,9 +7,12 @@ import android.content.pm.ActivityInfo
 import android.hardware.usb.UsbManager
 import android.view.View
 import android.view.ViewGroup
+import android.os.Looper
 import android.widget.Switch
 import com.shilapi.xcertplay.backup.SettingsBackupCodec
+import com.shilapi.xcertplay.glance.CarPlayGlance
 import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.iap2.message.Iap2Messages
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -65,6 +68,24 @@ class CarPlayScreenTest {
         assertFalse(AirPlayPersistence.loadCarPlaySameTask(app))
         assertEquals(CarPlayHostActivity::class.java, CarPlayScreen.target(app))
         assertEquals(CarPlayHostActivity::class.java.name, CarPlayScreen.intent(app).component?.className)
+    }
+
+    @Test fun theHostConnectsLaneEventsToItsDiagnosticLogAndClearsOnDisconnect() {
+        val screen = open(CarPlayHostActivity::class.java)
+        shadowOf(Looper.getMainLooper()).idle()
+        CarPlayGlance.setConnected(true)
+        CarPlayGlance.onFrame(Iap2Messages.buildRaw(0x5204) {
+            group(2) { u16(0, 0); u8(1, 2); i16(2, 0); i16(3, 90) }
+        })
+        shadowOf(Looper.getMainLooper()).idle()
+        val file = java.io.File(app.filesDir, "logs/diplay.log")
+        assertTrue(file.readText().contains("Lane strip: lanes=1 recommended=0 angles=0 highlights=90"))
+        CarPlayGlance.setConnected(false)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(ClusterActivityOutput.lanes.isEmpty())
+        assertTrue(file.readText().contains("Lane strip: cleared"))
+        screen.pause().stop().destroy()
+        assertNull(CarPlayGlance.laneListener)
     }
 
     @Test fun onlyTheNewDeclarationJoinsDiPlaysTask() {

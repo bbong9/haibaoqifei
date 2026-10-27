@@ -1,16 +1,55 @@
 package com.shilapi.xcertplay
 
 import android.graphics.SurfaceTexture
+import android.os.Looper
 import android.view.Surface
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
+import java.lang.ref.WeakReference
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.LooperMode
+import org.robolectric.Shadows.shadowOf
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class ClusterActivityOutputTest {
+    @Test
+    @LooperMode(LooperMode.Mode.PAUSED)
+    fun laneUpdatesArePostedToMainDeduplicatedAndClearedWhenGuidanceEnds() {
+        ClusterActivityOutput.stopForSettings()
+        val window = mock(AdbClusterActivity::class.java)
+        ClusterActivityOutput.activity = WeakReference(window)
+        val updates = mutableListOf<List<LaneGuidanceLane>>()
+        ClusterActivityOutput.onLanesChanged = { updates += it }
+        val strip = listOf(LaneGuidanceLane(0, 2, 90, null))
+        try {
+            Thread { ClusterActivityOutput.setLanes(strip) }.apply { start(); join() }
+            assertTrue(ClusterActivityOutput.lanes.isEmpty())
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(strip, ClusterActivityOutput.lanes)
+            assertEquals(listOf(strip), updates)
+            verify(window, times(1)).updateTurnCard()
+
+            Thread { ClusterActivityOutput.setLanes(strip) }.apply { start(); join() }
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(1, updates.size)
+            verify(window, times(1)).updateTurnCard()
+
+            ClusterActivityOutput.setTurnCard(null, 20, 30, 55, 85, false)
+            assertTrue(ClusterActivityOutput.lanes.isEmpty())
+            assertTrue(updates.last().isEmpty())
+        } finally {
+            ClusterActivityOutput.onLanesChanged = null
+            ClusterActivityOutput.stopForSettings()
+        }
+    }
+
     @Test fun launchRejectsWrongTokenAndDisplayAndStopInvalidatesTheTicket() {
         val app = org.robolectric.RuntimeEnvironment.getApplication()
         AirPlayPersistence.saveAdbClusterEnabled(app, true)

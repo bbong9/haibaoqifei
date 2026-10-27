@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">Mostrar carriles en la tarjeta de giro (experimental)</string>
+    <string name="settings_cluster_lane_strip_description">Requiere datos de carriles de la aplicación de navegación del iPhone. No se mostrará nada si una aplicación como Amap no los proporciona.</string>
+</resources>

@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">轉向卡顯示車道（實驗性）</string>
+    <string name="settings_cluster_lane_strip_description">需要 iPhone 導航 App 提供車道資訊；高德等 App 若不提供則不會顯示。</string>
+</resources>

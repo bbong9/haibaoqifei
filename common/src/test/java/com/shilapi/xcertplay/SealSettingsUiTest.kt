@@ -15,6 +15,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.MfiTarget
@@ -186,6 +187,30 @@ class SealSettingsUiTest {
         assertHas(screen, R.string.adb_cluster_activity_mode)
         assertSearchCategory(screen, R.string.carplay_map_on_instrument_cluster_experimental, SettingsCategory.NAVIGATION)
         assertSearchCategory(screen, R.string.adb_cluster_activity_mode, SettingsCategory.NAVIGATION)
+    }
+
+    @Test fun laneStripAppearsOnlyForTheCustomCardInSealNavigationAndAppliesImmediately() {
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        assertHas(screen, R.string.settings_cluster_lane_strip)
+        assertSearchCategory(screen, R.string.settings_cluster_lane_strip, SettingsCategory.NAVIGATION)
+        var refreshed = 0
+        AirPlayPersistence.overlaySettingsListener = { refreshed++ }
+        val toggle = descendants(categoryContent(screen)).filterIsInstance<Switch>()
+            .single { it.contentDescription == screen.getString(R.string.settings_cluster_lane_strip) }
+        toggle.isChecked = true
+        assertTrue(AirPlayPersistence.loadClusterLaneStrip(context))
+        assertEquals(1, refreshed)
+        assertFalse(PendingReconnect.isPending(null))
+
+        for (content in CarPlayClusterDisplay.Content.entries.filter { it != CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD }) {
+            AirPlayPersistence.saveClusterContent(context, content)
+            openCategory(screen, SettingsCategory.NAVIGATION)
+            assertMissing(screen, R.string.settings_cluster_lane_strip)
+        }
+        AirPlayPersistence.overlaySettingsListener = null
     }
 
     @Test fun otherEditionsKeepAdvancedAndItsOriginalControls() {

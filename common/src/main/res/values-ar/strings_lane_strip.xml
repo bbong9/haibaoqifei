@@ -1,0 +1,4 @@
+<resources>
+    <string name="settings_cluster_lane_strip">عرض المسارات في بطاقة الانعطاف (تجريبي)</string>
+    <string name="settings_cluster_lane_strip_description">يتطلب معلومات المسارات من تطبيق الملاحة على iPhone. لن يظهر شيء إذا لم يوفرها التطبيق، مثل Amap.</string>
+</resources>
