@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">عرض شاشة الوسط على لوحة العدادات (تجريبي)</string>
+    <string name="settings_cluster_mirror_main_summary">تعرض لوحة العدادات صورة CarPlay نفسها على الشاشة الوسطى، بما فيها عرض متابعة السيارة والمسارات في Amap. يظهر كل ما على الشاشة الوسطى في العدادات. يستخدم هذا مفكك ترميز فيديو إضافيًا. للحفاظ على 60 إطارًا، تقتصر دقة الشاشة الوسطى على 75٪ عند التفعيل؛ أعد الاتصال للتطبيق.</string>
+    <string name="settings_cluster_mirror_size">حجم الصورة المتزامنة</string>
+    <string name="settings_cluster_mirror_size_safe">احتواء داخل المنطقة الآمنة</string>
+    <string name="settings_cluster_mirror_size_full">ملء ارتفاع العدادات</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">مزامنة العدادات مفعلة: للحفاظ على 60 إطارًا، الدقة الفعلية بحد أقصى 75٪.</string>
+</resources>

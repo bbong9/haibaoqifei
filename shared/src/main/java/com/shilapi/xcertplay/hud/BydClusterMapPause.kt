@@ -25,6 +25,9 @@ internal object BydClusterMapPause {
     /** Whether DiPlay's map window is on the cluster. */
     @Volatile var clusterMapShown = false
 
+    /** The dashboard is showing the main-screen mirror instead of the cluster stream. */
+    @Volatile var mainMirrorShown = false
+
     /** The running CarPlay session, told every second whether the iPhone should draw the cluster map. */
     @Volatile var streamControl: ((Boolean) -> Unit)? = null
 
@@ -53,6 +56,10 @@ internal object BydClusterMapPause {
     private fun tick() {
         val app = context ?: return
         val control = streamControl
+        if (mainMirrorShown) {
+            control?.invoke(false)
+            return
+        }
         val pauseMap = control != null && clusterMapShown && BydOutputSettings.clusterStreamPause(app)
         val followNavi = onNaviMode != null
         if (!pauseMap && !followNavi) {

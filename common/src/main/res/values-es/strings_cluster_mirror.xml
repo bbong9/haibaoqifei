@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">Mostrar la pantalla central en el cuadro (experimental)</string>
+    <string name="settings_cluster_mirror_main_summary">El cuadro muestra la misma imagen de CarPlay que la pantalla central, incluida la vista de seguimiento y los carriles de Amap. Todo lo que aparece en la pantalla central aparece en el cuadro. Usa un decodificador de vídeo adicional. Para mantener 60 fps, la resolución central se limita al 75 % al activarlo; vuelve a conectar para aplicarlo.</string>
+    <string name="settings_cluster_mirror_size">Tamaño de la imagen sincronizada</string>
+    <string name="settings_cluster_mirror_size_safe">Ajustar al área segura</string>
+    <string name="settings_cluster_mirror_size_full">Llenar la altura del cuadro</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">Sincronización del cuadro activada: la resolución real se limita al 75 % para mantener 60 fps.</string>
+</resources>

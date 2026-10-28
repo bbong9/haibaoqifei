@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">Показывать центральный экран на приборной панели (экспериментально)</string>
+    <string name="settings_cluster_mirror_main_summary">На приборной панели показывается та же картинка CarPlay, что и на центральном экране, включая движение по карте и полосы в Amap. Всё содержимое центрального экрана повторяется на панели. Используется дополнительный видеодекодер. Для 60 кадров/с разрешение центрального экрана при включении ограничено 75%; переподключитесь для применения.</string>
+    <string name="settings_cluster_mirror_size">Размер синхронизированного изображения</string>
+    <string name="settings_cluster_mirror_size_safe">Вместить в безопасную область</string>
+    <string name="settings_cluster_mirror_size_full">Заполнить высоту панели</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">Синхронизация панели включена: для 60 кадров/с фактическое разрешение ограничено 75%.</string>
+</resources>

@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">儀表與中控螢幕同步（實驗性）</string>
+    <string name="settings_cluster_mirror_main_summary">儀表顯示與中控螢幕相同的 CarPlay 畫面，使用高德導航時可看到跟車畫面和車道。中控顯示什麼，儀表就顯示什麼。會額外使用一個影片解碼器。為維持 60 幀，開啟後中控解析度最高為 75%，重新連線後生效。</string>
+    <string name="settings_cluster_mirror_size">同步畫面大小</string>
+    <string name="settings_cluster_mirror_size_safe">放在安全區內</string>
+    <string name="settings_cluster_mirror_size_full">填滿儀表高度</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">儀表同步已開啟：為維持 60 幀，實際解析度最高為 75%。</string>
+</resources>

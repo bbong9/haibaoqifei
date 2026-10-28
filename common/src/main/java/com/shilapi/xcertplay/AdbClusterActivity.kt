@@ -6,6 +6,7 @@ import android.os.Looper
 import android.graphics.drawable.ColorDrawable
 import java.util.UUID
 import android.graphics.Color
+import android.graphics.RectF
 import android.os.Bundle
 import android.view.Gravity
 import android.view.Surface
@@ -53,6 +54,7 @@ class AdbClusterActivity : Activity() {
             if (next != null && ClusterActivityOutput.activity.get() === this)
                 ClusterActivityOutput.attach(this, next)
         }.also { videoTexture = it }
+        video.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateMirrorLayout() }
         val legacy = AirPlayPersistence.loadLegacyClusterEnabled(this)
         val videoRegion = FrameLayout(this)
         videoRegion.addView(video, FrameLayout.LayoutParams(-1, -1))
@@ -99,16 +101,41 @@ class AdbClusterActivity : Activity() {
     }
 
     internal fun updateStream() {
-        waiting?.visibility = if (ClusterActivityOutput.streamActive) View.GONE else View.VISIBLE
+        val hasPicture = if (ClusterActivityOutput.mirrorEnabled) {
+            ClusterActivityOutput.mirrorAttached && ClusterActivityOutput.mirrorPresented
+        } else ClusterActivityOutput.streamActive
+        waiting?.visibility = if (hasPicture) View.GONE else View.VISIBLE
         waiting?.text = ""
+        updateMirrorLayout()
         updateTurnCard()
+    }
+
+    internal fun updateMirrorLayout() {
+        val video = videoTexture ?: return
+        if (!ClusterActivityOutput.mirrorEnabled || video.width <= 0 || video.height <= 0) {
+            video.setContentRect(null)
+            ClusterActivityOutput.mirrorRect = null
+            return
+        }
+        val safe = AirPlayPersistence.loadClusterSafeAreaRect(this)
+            ?: DiLink4ClusterDisplay.defaultSafeAreaRect(
+                markerXPercent = AirPlayPersistence.loadClusterMarkerXPercent(this),
+                markerYPercent = AirPlayPersistence.loadClusterMarkerYPercent(this))
+        val scaledSafe = com.shilapi.xcertplay.airplay.AirPlaySafeArea.scaleRect(safe,
+            DiLink4ClusterDisplay.STREAM_WIDTH, DiLink4ClusterDisplay.STREAM_HEIGHT, video.width, video.height)
+        val rect = ClusterMirrorLayout.plan(video.width, video.height,
+            ClusterActivityOutput.mirrorSourceWidth, ClusterActivityOutput.mirrorSourceHeight,
+            scaledSafe, AirPlayPersistence.loadClusterMirrorSize(this))
+        video.setContentRect(rect)
+        ClusterActivityOutput.mirrorRect = RectF(rect)
     }
 
     internal fun updateTurnCard() {
         turnCard?.setLayout(ClusterActivityOutput.cardX, ClusterActivityOutput.cardY, ClusterActivityOutput.cardSize)
         turnCard?.setOpacity(ClusterActivityOutput.cardOpacity)
         turnCard?.setNightMode(ClusterActivityOutput.cardNight)
-        turnCard?.setGuidance(if (ClusterActivityOutput.streamActive) ClusterActivityOutput.guidance else null)
+        turnCard?.setGuidance(if (ClusterActivityOutput.streamActive && !ClusterActivityOutput.mirrorEnabled)
+            ClusterActivityOutput.guidance else null)
         turnCard?.setLanes(if (AirPlayPersistence.loadClusterLaneStrip(this)) ClusterActivityOutput.lanes else emptyList())
         updateSafeAreaPreview()
     }
@@ -171,6 +198,17 @@ internal object ClusterActivityOutput {
     @Volatile private var expectedDisplay = -1
     @Volatile var framesPresented: Long = 0
         private set
+    var mirrorEnabled = false
+        private set
+    var mirrorAttached = false
+        private set
+    var mirrorPresented = false
+        private set
+    var mirrorSourceWidth = 16
+        private set
+    var mirrorSourceHeight = 9
+        private set
+    var mirrorRect: RectF? = null
     private var launchHost = WeakReference<Activity>(null)
     private var legacyPresented = false
     private val retryTick = Runnable {
@@ -190,8 +228,30 @@ internal object ClusterActivityOutput {
 
     fun acceptsToken(token: String?): Boolean = token != null && token == launchToken && (hostOwner != null || previewHost.get() != null)
     fun countPresented(token: String?) {
-        if (acceptsToken(token)) framesPresented++
+        if (acceptsToken(token)) {
+            framesPresented++
+            if (mirrorAttached && !mirrorPresented) {
+                mirrorPresented = true
+                activity.get()?.updateStream()
+            }
+        }
     }
+
+    fun setMirrorState(enabled: Boolean, attached: Boolean, sourceWidth: Int, sourceHeight: Int) {
+        val width = sourceWidth.takeIf { it > 0 } ?: 16
+        val height = sourceHeight.takeIf { it > 0 } ?: 9
+        if (mirrorEnabled == enabled && mirrorAttached == attached &&
+            mirrorSourceWidth == width && mirrorSourceHeight == height) return
+        val newAttachment = attached && (!mirrorAttached || !mirrorEnabled)
+        mirrorEnabled = enabled
+        mirrorAttached = attached
+        if (!attached || newAttachment) mirrorPresented = false
+        mirrorSourceWidth = width
+        mirrorSourceHeight = height
+        activity.get()?.updateStream()
+    }
+
+    fun refreshMirrorLayout() { activity.get()?.updateMirrorLayout() }
     fun hasConfirmedRoute(): Boolean = activity.get()?.let { !it.isFinishing && !it.isDestroyed } == true &&
         expectedDisplay > 0
     fun diagnosticDisplay(): Int? = expectedDisplay.takeIf { hasConfirmedRoute() }
@@ -402,6 +462,8 @@ internal object ClusterActivityOutput {
         previewOwner = null
         previewHost.clear()
         previewRect = null
+        setMirrorState(false, false, 16, 9)
+        mirrorRect = null
         setStreamActive(false)
         val oldActivity = activity.get()
         activity.clear()

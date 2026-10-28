@@ -105,6 +105,8 @@ object AirPlayPersistence {
     private const val KEY_CLUSTER_MAP_SCALE = "cluster_map_scale_percent"
     private const val KEY_CLUSTER_CONTENT = "cluster_content"
     private const val KEY_CLUSTER_LANE_STRIP = "cluster_lane_strip"
+    private const val KEY_CLUSTER_MIRROR_MAIN = "cluster_mirror_main"
+    private const val KEY_CLUSTER_MIRROR_SIZE = "cluster_mirror_size"
     private const val KEY_CLUSTER_MARKER_X = "cluster_marker_horizontal_step"
     private const val KEY_CLUSTER_MARKER_Y = "cluster_marker_vertical_step"
     private const val KEY_CLUSTER_SMALL_WINDOW_MODE = "cluster_small_window_mode"
@@ -1054,6 +1056,26 @@ object AirPlayPersistence {
     fun saveClusterLaneStrip(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_CLUSTER_LANE_STRIP, enabled).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorMain(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CLUSTER_MIRROR_MAIN, false)
+
+    fun saveClusterMirrorMain(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_CLUSTER_MIRROR_MAIN, enabled).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorSize(context: Context): ClusterMirrorSize =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_CLUSTER_MIRROR_SIZE, null)
+            ?.let { value -> ClusterMirrorSize.entries.firstOrNull { it.name == value } }
+            ?: ClusterMirrorSize.SAFE_AREA
+
+    fun saveClusterMirrorSize(context: Context, size: ClusterMirrorSize) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_CLUSTER_MIRROR_SIZE, size.name).apply()
         overlaySettingsListener?.invoke()
     }
 

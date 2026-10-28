@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">Show the centre screen on the cluster (experimental)</string>
+    <string name="settings_cluster_mirror_main_summary">The cluster shows the same CarPlay picture as the centre screen, including the following view and lanes in Amap. Whatever is on the centre screen also appears on the cluster. This uses one additional video decoder. To keep 60 fps, the centre-screen resolution is capped at 75% while enabled; reconnect to apply.</string>
+    <string name="settings_cluster_mirror_size">Mirrored picture size</string>
+    <string name="settings_cluster_mirror_size_safe">Fit inside the safe area</string>
+    <string name="settings_cluster_mirror_size_full">Fill the cluster height</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">Cluster mirroring is on: the actual resolution is capped at 75% to maintain 60 fps.</string>
+</resources>

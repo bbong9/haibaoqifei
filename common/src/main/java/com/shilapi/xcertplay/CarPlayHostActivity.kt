@@ -470,6 +470,10 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var currentSurfaceTexture: SurfaceTexture? = null
     private var clusterPresentation: ClusterMapPresentation? = null
     private var clusterSurface: Surface? = null
+    private var clusterMirrorAttached: Surface? = null
+    private var clusterMirrorSink: AndroidMediaSink? = null
+    private var clusterMirrorTransitionPending = false
+    private var clusterMirrorLogState: String? = null
     private var clusterMonitor: DiLink51ClusterMonitor? = null
     private var detectedCluster = ClusterActivityState.Snapshot(null, false)
     // Keep one surface per layer alive, including while its map card is hidden.
@@ -507,6 +511,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var clusterReleasedWhileIdle = false
     private val releaseIdleCluster = Runnable {
         if (SCREEN_TYPE_ALT in activeScreenStreamTypes || isDestroyed || clusterReleasedWhileIdle) return@Runnable
+        if (clusterMirrorAttached != null || (ClusterMirrorPolicy.enabled(this) && clusterOutputReady())) return@Runnable
         // DiLink 5.1 keeps its own cluster layers; nothing there has shown this problem.
         if (DiLink51ClusterLayout.supported() || !AirPlayPersistence.loadClusterMapEnabled(this)) return@Runnable
         clusterReleasedWhileIdle = true
@@ -534,6 +539,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var sessionDisplay: CarPlaySessionDisplay? = null
     private var touchOutsideContent = false
     private var displayScalePercent = 100
+    private var sessionResolutionPercent = 100
     private var displayScaleTenths = CarPlayDisplayScale.DEFAULT_TENTHS
     private var uiScalePercent = CarPlayUiScale.DEFAULT
     private var displayDiagnosticAttempt: String? = null
@@ -1359,7 +1365,15 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (!menuOpen) temporarySystemBarsEnabled = AirPlayPersistence.loadTemporarySystemBars(this)
         settingsGestureHint?.text = settingsGestureHintText()
         ensureClusterPresentation()
-        AirPlayPersistence.overlaySettingsListener = { runOnUiThread { applyClusterTurnOverlay() } }
+        AirPlayPersistence.overlaySettingsListener = { runOnUiThread {
+            if (ClusterMirrorPolicy.enabled(this) && clusterReleasedWhileIdle && clusterOutputReady()) {
+                clusterReleasedWhileIdle = false
+                ensureClusterPresentation()
+            }
+            applyClusterVideo()
+            ClusterActivityOutput.refreshMirrorLayout()
+            applyClusterTurnOverlay()
+        } }
         com.shilapi.xcertplay.hud.BydNavigationOutputs.setTurnOverlayListener(clusterTurnOverlayListener)
         mainHandler.removeCallbacks(refreshTurnOverlay)
         mainHandler.post(refreshTurnOverlay)
@@ -1456,7 +1470,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         // Handed back after CarPlay left; the next cluster stream takes the cluster again.
         if (clusterReleasedWhileIdle) return
-        clusterSurface?.let { sink?.setSurface(SCREEN_TYPE_ALT, it) }
+        applyClusterVideo()
         if (AdbClusterRouter.enabled(this)) {
             ClusterActivityOutput.bind(this, taskId) { onClusterSurface(it) }
             ClusterActivityOutput.setStreamActive(SCREEN_TYPE_ALT in activeScreenStreamTypes)
@@ -1614,6 +1628,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         clusterPresentation = null
         clusterSurface?.let { sink?.clearSurface(SCREEN_TYPE_ALT, it) }
         clusterSurface = null
+        applyClusterVideo()
         presentations.forEach { runCatching { it.dismiss() } }
         com.shilapi.xcertplay.hud.BydNavigationOutputs.setClusterMapShown(false)
         controller?.setDashboardMapOutputVisible(false)
@@ -1633,9 +1648,92 @@ open class CarPlayHostActivity : ComponentActivity() {
                 !adbClusterConfigured && controller != null) {
                 ClusterActivityOutput.setStreamActive(false)
                 reconnectAfterLoss("DiLink 4 cluster confirmed; requesting its native stream")
-            } else if (clusterOutputReady()) sink?.setSurface(SCREEN_TYPE_ALT, surface)
+            } else if (clusterOutputReady()) applyClusterVideo()
+        } else {
+            applyClusterVideo()
         }
         updateClusterMapShown()
+    }
+
+    /** Reconciles the current instrument surface without letting two decoders draw to it. */
+    private fun applyClusterVideo() {
+        val surface = clusterSurface
+        val currentSink = sink
+        val enabled = ClusterMirrorPolicy.enabled(this)
+        val ready = clusterOutputReady()
+        val route = ClusterActivityOutput.hasConfirmedRoute()
+        val shouldMirror = enabled && ready && route && surface?.isValid == true &&
+            !clusterReleasedWhileIdle && currentSink != null
+        val source = sessionDisplay
+        fun publish() {
+            ClusterActivityOutput.setMirrorState(enabled, clusterMirrorAttached != null,
+                source?.width ?: 16, source?.height ?: 9)
+        }
+        val attached = clusterMirrorAttached
+        if (attached != null && (!shouldMirror || attached !== surface || clusterMirrorSink !== currentSink)) {
+            val owner = clusterMirrorSink
+            clusterMirrorAttached = null
+            clusterMirrorSink = null
+            com.shilapi.xcertplay.hud.BydNavigationOutputs.setClusterMainMirrorShown(false)
+            publish()
+            if (owner != null) {
+                owner.setMirrorSurface(SCREEN_TYPE_MAIN, CLUSTER_MIRROR_KEY, null)
+                clusterMirrorTransitionPending = true
+                owner.whenMirrorReleased(SCREEN_TYPE_MAIN, CLUSTER_MIRROR_KEY) {
+                    mainHandler.post {
+                        clusterMirrorTransitionPending = false
+                        if (!isDestroyed) applyClusterVideo()
+                    }
+                }
+            }
+            if (!enabled && SCREEN_TYPE_ALT !in activeScreenStreamTypes) {
+                mainHandler.removeCallbacks(releaseIdleCluster)
+                mainHandler.postDelayed(releaseIdleCluster, CLUSTER_IDLE_RELEASE_MILLIS)
+            }
+        }
+        publish()
+        val status = if (clusterMirrorAttached != null)
+            "on size=${AirPlayPersistence.loadClusterMirrorSize(this).name}"
+        else "off reason=${when {
+            !enabled -> "setting"
+            !ready || currentSink == null -> "session"
+            !route || clusterReleasedWhileIdle -> "route"
+            else -> "surface"
+        }}"
+        if (status != clusterMirrorLogState) {
+            clusterMirrorLogState = status
+            appendLog("Cluster mirror: $status")
+        }
+        if (clusterMirrorTransitionPending) return
+        if (shouldMirror) {
+            if (clusterMirrorAttached === surface && clusterMirrorSink === currentSink) return
+            val nextSurface = checkNotNull(surface)
+            val nextSink = checkNotNull(currentSink)
+            nextSink.clearSurface(SCREEN_TYPE_ALT, nextSurface)
+            val detach = nextSink.beginSurfaceDetachForStream(SCREEN_TYPE_ALT, nextSurface)
+            clusterMirrorTransitionPending = true
+            Thread({
+                if (!detach.await()) detach.awaitUntilReleased()
+                mainHandler.post {
+                    clusterMirrorTransitionPending = false
+                    if (isDestroyed) return@post
+                    if (sink === nextSink && clusterSurface === nextSurface &&
+                        ClusterMirrorPolicy.enabled(this) && clusterOutputReady() &&
+                        ClusterActivityOutput.hasConfirmedRoute() && nextSurface.isValid && !clusterReleasedWhileIdle) {
+                        nextSink.setMirrorSurface(SCREEN_TYPE_MAIN, CLUSTER_MIRROR_KEY, nextSurface)
+                        clusterMirrorAttached = nextSurface
+                        clusterMirrorSink = nextSink
+                        com.shilapi.xcertplay.hud.BydNavigationOutputs.setClusterMainMirrorShown(true)
+                        mainHandler.removeCallbacks(releaseIdleCluster)
+                        applyClusterVideo()
+                    } else {
+                        applyClusterVideo()
+                    }
+                }
+            }, "cluster-mirror-handoff").apply { isDaemon = true }.start()
+        } else if (ready) {
+            surface?.let { currentSink?.setSurface(SCREEN_TYPE_ALT, it) }
+        }
     }
 
     private var adbClusterConfigured = false
@@ -5036,7 +5134,10 @@ open class CarPlayHostActivity : ComponentActivity() {
                 "tv=${AndroidTvInputMode.isTelevision(this)} " +
                 "touchscreen=${resources.configuration.touchscreen}",
         )
-        val requestedResolutionPercent = displayScalePercent
+        val mirrorResolutionCap = ClusterMirrorPolicy.enabled(this)
+        val requestedResolutionPercent = ClusterMirrorPolicy.resolutionPercent(displayScalePercent, mirrorResolutionCap)
+        if (mirrorResolutionCap) appendLog("Cluster mirror: resolution cap saved=$displayScalePercent effective=$requestedResolutionPercent fps=$fps")
+        sessionResolutionPercent = requestedResolutionPercent
         val requestedResolutionDisplay = CarPlayDisplayScale.applyPercent(baseDisplay, requestedResolutionPercent)
         var resolutionDisplay = requestedResolutionDisplay
         val requestedPercent = uiScalePercent
@@ -5059,7 +5160,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             scaledDisplay = resolutionDisplay
             appendLog("Larger CarPlay canvas unavailable reason=${failedCanvas.reason}; using Default icon and text size")
             // Removing the smaller-controls enlargement may leave a separately enlarged resolution.
-            if (displayScalePercent > 100) {
+            if (requestedResolutionPercent > 100) {
                 val resolutionSupport = largerCanvasSupport(scaledDisplay)
                 support = resolutionSupport.copy(
                     reason = if (resolutionSupport.supported) failedCanvas.reason else resolutionSupport.reason,
@@ -5067,9 +5168,10 @@ open class CarPlayHostActivity : ComponentActivity() {
                 )
             }
         }
-        if (!support.supported && displayScalePercent > 100) {
+        if (!support.supported && requestedResolutionPercent > 100) {
             resolutionFallback = true
             displayScalePercent = 100
+            sessionResolutionPercent = 100
             displayScaleTenths = CarPlayDisplayScale.DEFAULT_TENTHS
             AirPlayPersistence.saveDisplayScalePercent(this, displayScalePercent)
             AirPlayPersistence.saveDisplayScaleTenths(this, displayScaleTenths)
@@ -5455,7 +5557,10 @@ open class CarPlayHostActivity : ComponentActivity() {
                         return@runOnUiThread
                     }
                     activeAirPlaySession = session
-                    if (!session.hasRenderedMainFrame) clusterSurface?.let { sink?.clearSurface(SCREEN_TYPE_ALT, it) }
+                    if (!session.hasRenderedMainFrame) {
+                        clusterSurface?.let { sink?.clearSurface(SCREEN_TYPE_ALT, it) }
+                        applyClusterVideo()
+                    }
                     val pending = pendingIphoneCornerMask
                     if (pending?.first === session) {
                         installIphoneCornerMask(session, pending.second.first, pending.second.second)
@@ -5510,6 +5615,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                     startupRetryBudget.disconnected()
                     activeAirPlaySession = null
                     clusterSurface?.let { sink?.clearSurface(SCREEN_TYPE_ALT, it) }
+                    applyClusterVideo()
                     clearIphoneCornerMask()
                     CarPlayBackgroundSession.active = false
                     callPopupSessionReady = false
@@ -5825,6 +5931,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             displayRotation(), hideTopBar, hideBottomBar, effectiveSize.width, effectiveSize.height,
             viewAreas = pendingViewAreas,
             statusBarShown = statusBarShown(),
+            resolutionPercent = sessionResolutionPercent,
         )
         sessionDisplay = display
         videoView?.let { updateVideoLayout(it.width, it.height) }
@@ -6302,6 +6409,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         updateCallPopupGuard()
         val oldController = controller
         val oldSink = sink
+        applyClusterVideo()
         CarPlayMediaKeys.detach(oldController)
         CarPlayBackgroundSession.clear(oldController, keepOwner = true)
         controller = null
@@ -6516,6 +6624,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         mainHandler.removeCallbacks(applyDisplaySize)
         val oldController = controller
         val oldSink = sink
+        applyClusterVideo()
         CarPlayMediaKeys.detach(oldController)
         CarPlayBackgroundSession.clear(oldController)
         controller = null
@@ -6686,7 +6795,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private fun attachSurface(surface: Surface) {
         sink?.setSurface(SCREEN_TYPE_MAIN, surface)
         if (AirPlayPersistence.loadClusterMapEnabled(this)) {
-            if (clusterOutputReady()) clusterSurface?.let { sink?.setSurface(SCREEN_TYPE_ALT, it) }
+            if (clusterOutputReady()) applyClusterVideo()
         } else {
             sink?.setSurface(SCREEN_TYPE_ALT, surface)
         }
@@ -7133,6 +7242,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         const val TAG = "xcertplay-usb"
         const val SCREEN_TYPE_MAIN = 110
         const val SCREEN_TYPE_ALT = 111
+        const val CLUSTER_MIRROR_KEY = "cluster"
         // On the teardown thread: bounded sequencing wait. Release notification retains ownership beyond
         // this budget when a codec is still busy.
         const val SINK_RELEASE_WAIT_MILLIS = 2_000L
@@ -7200,6 +7310,8 @@ internal data class CarPlaySessionDisplay(
     val viewAreas: CarPlayViewAreas? = null,
     /** Whether the status bar was on screen when the session started, or null when unknown. */
     val statusBarShown: Boolean? = null,
+    /** Resolution percentage actually used when this session was configured. */
+    val resolutionPercent: Int? = null,
 )
 
 /**

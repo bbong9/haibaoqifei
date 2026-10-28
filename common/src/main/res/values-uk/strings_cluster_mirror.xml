@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">Показувати центральний екран на панелі приладів (експериментально)</string>
+    <string name="settings_cluster_mirror_main_summary">На панелі приладів показується те саме зображення CarPlay, що й на центральному екрані, зокрема рух мапою та смуги в Amap. Усе з центрального екрана повторюється на панелі. Використовується додатковий відеодекодер. Для 60 кадрів/с роздільність центрального екрана обмежена 75%; перепідключіться, щоб застосувати.</string>
+    <string name="settings_cluster_mirror_size">Розмір синхронізованого зображення</string>
+    <string name="settings_cluster_mirror_size_safe">Умістити в безпечній області</string>
+    <string name="settings_cluster_mirror_size_full">Заповнити висоту панелі</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">Синхронізацію панелі ввімкнено: для 60 кадрів/с фактичну роздільність обмежено 75%.</string>
+</resources>

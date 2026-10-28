@@ -1,0 +1,8 @@
+<resources>
+    <string name="settings_cluster_mirror_main">センター画面をメーターに表示（実験的機能）</string>
+    <string name="settings_cluster_mirror_main_summary">メーターにセンター画面と同じ CarPlay 映像を表示し、高德ナビの追従画面と車線も確認できます。センター画面の内容がそのまま表示され、動画デコーダーを追加で一つ使用します。60 fps を維持するため、有効時のセンター画面の解像度は最大 75% です。再接続後に適用されます。</string>
+    <string name="settings_cluster_mirror_size">同期映像のサイズ</string>
+    <string name="settings_cluster_mirror_size_safe">安全領域に収める</string>
+    <string name="settings_cluster_mirror_size_full">メーターの高さに合わせる</string>
+    <string name="settings_resolution_capped_by_cluster_mirror">メーター同期が有効です。60 fps を維持するため、実際の解像度は最大 75% です。</string>
+</resources>

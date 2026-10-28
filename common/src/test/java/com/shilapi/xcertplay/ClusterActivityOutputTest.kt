@@ -19,6 +19,30 @@ import org.mockito.Mockito.verify
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class ClusterActivityOutputTest {
+    @Test fun mirrorFrameClearsWaitingEvenWhenTheClusterStreamIsInactive() {
+        val owner = Any()
+        val token = "01234567-89ab-cdef-0123-456789abcdef"
+        val window = org.robolectric.Robolectric.buildActivity(AdbClusterActivity::class.java).get()
+        val waiting = android.widget.TextView(window)
+        ClusterActivityOutput.stopForSettings()
+        ClusterActivityOutput.bind(owner, 4) { }
+        ClusterActivityOutput::class.java.getDeclaredField("launchToken")
+            .apply { isAccessible = true }.set(ClusterActivityOutput, token)
+        AdbClusterActivity::class.java.getDeclaredField("waiting")
+            .apply { isAccessible = true }.set(window, waiting)
+        ClusterActivityOutput.activity = WeakReference(window)
+        try {
+            ClusterActivityOutput.setStreamActive(false)
+            ClusterActivityOutput.setMirrorState(true, true, 1940, 1092)
+            assertEquals(android.view.View.VISIBLE, waiting.visibility)
+            ClusterActivityOutput.countPresented(token)
+            assertEquals(android.view.View.GONE, waiting.visibility)
+            ClusterActivityOutput.setStreamActive(false)
+            assertEquals(android.view.View.GONE, waiting.visibility)
+            ClusterActivityOutput.setMirrorState(false, false, 16, 9)
+            assertEquals(android.view.View.VISIBLE, waiting.visibility)
+        } finally { ClusterActivityOutput.stop(owner) }
+    }
     @Test
     @LooperMode(LooperMode.Mode.PAUSED)
     fun laneUpdatesArePostedToMainDeduplicatedAndClearedWhenGuidanceEnds() {
