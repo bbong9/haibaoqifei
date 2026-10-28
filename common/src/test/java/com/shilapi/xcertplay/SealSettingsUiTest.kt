@@ -344,7 +344,7 @@ class SealSettingsUiTest {
         val rootDir = File(requireNotNull(System.getProperty("user.dir")))
         val project = if (rootDir.name == "common") rootDir.parentFile else rootDir
         val directory = File(project, "build/seal-settings-screenshots").apply { mkdirs() }
-        for (category in listOf(SettingsCategory.DISPLAY, SettingsCategory.NAVIGATION, SettingsCategory.VEHICLE)) {
+        for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.DISPLAY, SettingsCategory.NAVIGATION, SettingsCategory.VEHICLE)) {
             openCategory(screen, category)
             layoutRoot(screen)
             val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)

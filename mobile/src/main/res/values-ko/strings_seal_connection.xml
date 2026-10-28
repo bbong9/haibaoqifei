@@ -1,0 +1,3 @@
+<resources>
+    <string name="default_connection_description">DiPlay를 열 때 연결된 iPhone이 기본 모드보다 우선합니다. DiPlay가 표시된 상태에서 iPhone 케이블을 연결하면 USB로 전환됩니다. 수동 연결 버튼은 선택한 모드를 사용합니다.</string>
+</resources>

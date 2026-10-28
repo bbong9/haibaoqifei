@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">Görüntüleme süresi</string>
+    <string name="settings_cluster_music_seconds_summary">Şarkı değiştikten sonra kartın gösterileceği süre; kalıcı modda şarkı başlığının görünme süresi.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d sn</string>
+</resources>

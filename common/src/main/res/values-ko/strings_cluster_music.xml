@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">표시 시간</string>
+    <string name="settings_cluster_music_seconds_summary">곡이 바뀐 후 카드가 표시되는 시간입니다. 계속 표시 모드에서는 곡 제목이 표시되는 시간입니다.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d초</string>
+</resources>

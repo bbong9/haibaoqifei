@@ -84,6 +84,8 @@ class WirelessSlowRetryTest {
     private fun stopped() = ReflectionHelpers.getField<Boolean>(activity, "startupRetryStopped")
     private fun scheduled() = ReflectionHelpers.getField<Runnable?>(activity, "slowRetry")
     private fun idle(seconds: Long) = shadowOf(Looper.getMainLooper()).idleFor(seconds, TimeUnit.SECONDS)
+    private fun awaitLog() = assertTrue("session log writer did not drain",
+        ReflectionHelpers.getField<SessionLogFile>(activity, "sessionLog").awaitIdle(2_000))
 
     private fun exhaustBudget() {
         repeat(5) { assertNotNull(budget().nextDelayMillis()) }
@@ -112,6 +114,7 @@ class WirelessSlowRetryTest {
         assertEquals(5, budget().retries)
         report()
         assertTrue(stopped())
+        awaitLog()
         assertTrue(log.readText().contains("wireless startup recovery stopped"))
         assertTrue(log.readText().contains("wireless startup slow retry in 30000ms"))
         assertTrue(stage.text.toString().contains("every 30 seconds"))
@@ -141,6 +144,7 @@ class WirelessSlowRetryTest {
         acl(selected)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(1, generation())
+        awaitLog()
         assertTrue(log.readText().contains("wireless startup slow retry now trigger=bluetooth"))
         assertFalse(log.readText().contains(selected, ignoreCase = true))
     }
@@ -215,6 +219,7 @@ class WirelessSlowRetryTest {
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "onResume")
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(1, generation())
+        awaitLog()
         assertTrue(log.readText().contains("wireless startup slow retry now trigger=resume"))
         idle(30)
         assertEquals(1, generation())
@@ -352,6 +357,7 @@ class WirelessSlowRetryTest {
             assertTrue(lines.any { it.contains("HOST_SLOW_RETRY trigger=bluetooth") })
             lines.forEach { assertEquals(it, DiagnosticRedactor.redact(it)) }
             assertFalse(timeline.readText().contains(selected, ignoreCase = true))
+            awaitLog()
             assertFalse(log.readText().contains(selected, ignoreCase = true))
         } finally {
             ReflectionHelpers.setStaticField(StartupTimeline::class.java, "target", previous)
