@@ -9,6 +9,7 @@ object WirelessStartupPolicy {
     const val STABLE_SAMPLES = 3
     const val FIRST_TCP_MILLIS = 30_000L
     const val MAX_STARTUP_RETRIES = 5
+    const val SLOW_RETRY_MILLIS = 30_000L
     const val STABLE_SESSION_MILLIS = 60_000L
 }
 

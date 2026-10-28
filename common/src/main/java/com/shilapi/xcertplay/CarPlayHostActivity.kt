@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -644,6 +645,9 @@ open class CarPlayHostActivity : ComponentActivity() {
     // The scheduled retry, and whether its failure asked the driver to turn Bluetooth on. Bluetooth
     // turning on then runs it at once, instead of after a back-off of up to 30 s.
     private var pendingReconnect: Runnable? = null
+    private var slowRetry: Runnable? = null
+    private var slowRetryTrigger = "timer"
+    private var slowRetryDeferredAfterMenu = false
     private var reconnectWaitsForBluetooth = false
     private var reconnectWaitsForWifi = false
     private val bluetoothOnReceiver = object : BroadcastReceiver() {
@@ -667,6 +671,25 @@ open class CarPlayHostActivity : ComponentActivity() {
             mainHandler.removeCallbacks(retry)
             mainHandler.post(retry)
             runCatching { StartupTimeline.event(this@CarPlayHostActivity, "HOST_RETRY_EARLY", "radio" to "wifi") }
+        }
+    }
+    private val bluetoothConnectedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED || slowRetry == null) return
+            val selected = DiPlayPreferences.phoneAddress(context)
+            if (selected != null) {
+                if (Build.VERSION.SDK_INT >= 31 &&
+                    context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return
+                val device = if (Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                } ?: return
+                val address = runCatching { device.address }.getOrNull() ?: return
+                if (!address.equals(selected, ignoreCase = true)) return
+            }
+            runSlowRetryNow("bluetooth")
         }
     }
     // How often the current controller reached its control loop, and whether a loss came after the
@@ -880,12 +903,15 @@ open class CarPlayHostActivity : ComponentActivity() {
         }
         SealPerformanceProfile.migrateIfNeeded(this)
         val bluetoothState = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        val bluetoothConnected = IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED)
         val wifiP2pState = IntentFilter(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(bluetoothOnReceiver, bluetoothState, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(bluetoothConnectedReceiver, bluetoothConnected, Context.RECEIVER_NOT_EXPORTED)
             registerReceiver(wifiP2pOnReceiver, wifiP2pState, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(bluetoothOnReceiver, bluetoothState)
+            registerReceiver(bluetoothConnectedReceiver, bluetoothConnected)
             registerReceiver(wifiP2pOnReceiver, wifiP2pState)
         }
         NavigationWidgetUpdater.attach(applicationContext)
@@ -1254,6 +1280,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        runSlowRetryNow("resume")
         runCatching { StartupTimeline.event(this, "HOST_RESUME") }
         if (SealPerformanceProfile.enabled(this) && usbAttachments == null) {
             usbAttachments = IphoneUsbConnection.observe(this) { device ->
@@ -2025,7 +2052,9 @@ open class CarPlayHostActivity : ComponentActivity() {
             return
         }
         CarPlayScreen.destroyed(this)
+        cancelSlowRetry()
         runCatching { unregisterReceiver(bluetoothOnReceiver) }
+        runCatching { unregisterReceiver(bluetoothConnectedReceiver) }
         runCatching { unregisterReceiver(wifiP2pOnReceiver) }
         mainHandler.removeCallbacks(hideTemporarySystemBars)
         dropHeldTouch()
@@ -2151,6 +2180,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             setOnClickListener {
                 if (!CarPlayBackgroundSession.isOwner(this@CarPlayHostActivity) ||
                     shuttingDown.get() || menuOpen || handshakeResetInProgress) return@setOnClickListener
+                cancelSlowRetry()
                 startupRetryBudget.manualRetry()
                 startupRetryStopped = false
                 reconnectAttempts = 0
@@ -5448,6 +5478,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 runOnUiThread {
                     if (controllerGeneration != restartGeneration || activeAirPlaySession !== session || shuttingDown.get()) return@runOnUiThread
                     val firstFrame = startupRetryBudget.firstFrame(session, android.os.SystemClock.elapsedRealtime())
+                    if (firstFrame) cancelSlowRetry()
                     if (firstFrame) appendLog("Main video first frame rendered; cluster output may start")
                     ensureClusterPresentation()
                     if (!firstFrame) return@runOnUiThread
@@ -6128,9 +6159,12 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (startupFailure != null && startupDelay == null) {
             startupRetryStopped = true
             startupRetryButton?.visibility = View.VISIBLE
+            val slow = startupFailure.retryable && wirelessEnabled
+            val retryMessage = if (slow) R.string.wireless_startup_slow_retry else R.string.wireless_startup_retries_exhausted
             if (knownCause != null) {
                 setConnectionStage("${getString(ConnectionFailureGuidance.stage(knownCause))}\n" +
-                    getString(R.string.wireless_startup_retries_exhausted))
+                    getString(retryMessage), "${englishResources.getString(ConnectionFailureGuidance.stage(knownCause))}\n" +
+                    englishResources.getString(retryMessage))
             } else if (startupFailure == WirelessStartupFailure.HOTSPOT_CONFIGURATION) {
                 // Its cause is in English, for the report; the help line below says what to check.
                 setConnectionStage("${getString(R.string.hotspot_network_not_ready)}\n" +
@@ -6138,10 +6172,11 @@ open class CarPlayHostActivity : ComponentActivity() {
             } else if (!startupFailure.retryable) {
                 setConnectionStage(reason, englishReason)
             } else {
-                setConnectionStage("$reason\n${getString(R.string.wireless_startup_retries_exhausted)}",
-                    "$englishReason\n${englishResources.getString(R.string.wireless_startup_retries_exhausted)}")
+                setConnectionStage("$reason\n${getString(retryMessage)}",
+                    "$englishReason\n${englishResources.getString(retryMessage)}")
             }
             appendLog("wireless startup recovery stopped generation=$restartGeneration reason=$startupFailure retries=${startupRetryBudget.retries}")
+            if (slow) scheduleSlowRetry()
             return
         }
         reconnectScheduled = true
@@ -6197,6 +6232,46 @@ open class CarPlayHostActivity : ComponentActivity() {
                     else -> "none"
                 })
         }
+    }
+
+    private fun cancelSlowRetry() {
+        slowRetry?.let { mainHandler.removeCallbacks(it) }
+        slowRetry = null
+    }
+
+    private fun scheduleSlowRetry() {
+        cancelSlowRetry()
+        val generation = restartGeneration
+        slowRetryTrigger = "timer"
+        val retry = Runnable {
+            slowRetry = null
+            if (!CarPlayBackgroundSession.isOwner(this) || shuttingDown.get() || handshakeResetInProgress ||
+                !startupRetryStopped || generation != restartGeneration) return@Runnable
+            if (menuOpen) {
+                recoveryPendingAfterMenu = true
+                slowRetryDeferredAfterMenu = true
+                // The existing menu recovery restarts the stack without resetting the retry budget.
+                startupRetryStopped = false
+                return@Runnable
+            }
+            startupRetryStopped = false
+            startupRetryButton?.visibility = View.GONE
+            reconnectAttempts = 0
+            appendLog("wireless startup slow retry now trigger=$slowRetryTrigger")
+            runCatching { StartupTimeline.event(this, "HOST_SLOW_RETRY", "trigger" to slowRetryTrigger) }
+            restartCarPlay("Reconnecting after slow retry")
+        }
+        slowRetry = retry
+        mainHandler.postDelayed(retry, WirelessStartupPolicy.SLOW_RETRY_MILLIS)
+        appendLog("wireless startup slow retry in ${WirelessStartupPolicy.SLOW_RETRY_MILLIS}ms generation=$generation")
+        runCatching { StartupTimeline.event(this, "HOST_SLOW_RETRY_SCHEDULED", "delayMs" to WirelessStartupPolicy.SLOW_RETRY_MILLIS) }
+    }
+
+    private fun runSlowRetryNow(trigger: String) {
+        val retry = slowRetry ?: return
+        slowRetryTrigger = trigger
+        mainHandler.removeCallbacks(retry)
+        mainHandler.post(retry)
     }
 
     /** Full-stack fallback when an AirPlay-only reconnect is unavailable. */
@@ -6395,11 +6470,15 @@ open class CarPlayHostActivity : ComponentActivity() {
         failurePendingAfterMenu = null
         val recoveryPending = recoveryPendingAfterMenu || failure != null
         recoveryPendingAfterMenu = false
+        val repeatedSlowFailure = slowRetryDeferredAfterMenu && failure?.startupFailure != null &&
+            startupFailureGeneration == restartGeneration
+        slowRetryDeferredAfterMenu = false
         if (reconnect) {
+            cancelSlowRetry()
             startupRetryBudget.manualRetry()
             startupRetryStopped = false
         }
-        if (failure?.startupFailure != null && !reconnect) {
+        if (failure?.startupFailure != null && !reconnect && !repeatedSlowFailure) {
             createStatusReporter(restartGeneration)(failure)
         } else if (failure?.wifiResetRequired == true && (!reconnect || wirelessEnabled)) {
             createStatusReporter(restartGeneration)(failure)
@@ -6421,6 +6500,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     private fun shutdown(terminateProcess: Boolean, reason: String, completion: () -> Unit = {}) {
         if (!shuttingDown.compareAndSet(false, true)) { completion(); return }
+        cancelSlowRetry()
         callPopupSessionReady = false
         updateCallPopupGuard()
         resetSidePanel()
@@ -6868,6 +6948,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         // "Getting CarPlay ready…" or "Retrying…" in their place said DiPlay was still connecting (#809).
         message == getString(R.string.hotspot_network_not_ready) || message == getString(R.string.first_tcp_timeout) ||
             message == getString(R.string.wifi_direct_refused_beside_hotspot) ||
+            message.endsWith(getString(R.string.wireless_startup_slow_retry)) ||
             message.endsWith(getString(R.string.wireless_startup_retries_exhausted)) -> message
         ConnectionFailureCause.entries.any { message == getString(ConnectionFailureGuidance.stage(it)) } -> message
         message == getString(R.string.car_sees_no_usb_device) || message == getString(R.string.car_sees_usb_device_not_iphone) -> message

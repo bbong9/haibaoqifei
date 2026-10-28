@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
@@ -19,6 +20,15 @@ class SettingsTranslationsTest {
             for ((name, text) in base) {
                 assertEquals("${locale.name}/$name", placeholders(text), placeholders(translated.getValue(name)))
             }
+        }
+    }
+
+    @Test fun slowRetryMessageIsPresentInEveryLocale() {
+        val locales = res.listFiles { file -> file.name.matches(Regex("values(-[a-z]{2}(-r[A-Z]{2})?)?")) }!!
+        assertEquals(setOf("values", "values-ar", "values-es", "values-it", "values-ja", "values-ru",
+            "values-uk", "values-zh-rCN", "values-zh-rTW"), locales.map { it.name }.toSet())
+        for (locale in locales) {
+            assertTrue(locale.name, !strings(locale)["wireless_startup_slow_retry"].isNullOrBlank())
         }
     }
 

@@ -346,6 +346,24 @@ class StartupTimelineTest {
         }
     }
 
+    @Test fun slowRetrySchemasSurviveRedactionForEveryTrigger() {
+        val cases = listOf(
+            "HOST_SLOW_RETRY_SCHEDULED" to listOf("delayMs" to 30000),
+            "HOST_SLOW_RETRY" to listOf("trigger" to "timer"),
+            "HOST_SLOW_RETRY" to listOf("trigger" to "bluetooth"),
+            "HOST_SLOW_RETRY" to listOf("trigger" to "resume"),
+        )
+        for ((event, fields) in cases) {
+            for ((key) in fields) {
+                val lower = key.lowercase()
+                assertFalse("unsafe field: $key", lower.endsWith("name") ||
+                    listOf("ssid", "pass", "token", "host").any { it in lower })
+            }
+            val line = StartupTimeline.formatLine(12345, 42, event, fields)
+            assertEquals(line, DiagnosticRedactor.redact(line))
+        }
+    }
+
     private fun completeEvents(offset: Long = 0): List<String> = listOf(
         sample(5000 + offset, "PROCESS_START", "boot" to 9),
         sample(9800 + offset, "BOOT_RECEIVED"),
