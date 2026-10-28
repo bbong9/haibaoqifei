@@ -3,7 +3,9 @@ package com.shilapi.xcertplay
 import android.content.Context
 import android.graphics.RectF
 import com.shilapi.xcertplay.airplay.SafeAreaRect
+import com.shilapi.xcertplay.airplay.AirPlayInfoPlist
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 enum class ClusterMirrorSize { SAFE_AREA, FULL_HEIGHT }
 
@@ -15,6 +17,20 @@ internal object ClusterMirrorPolicy {
 
     fun resolutionPercent(saved: Int, enabled: Boolean): Int =
         if (enabled) min(saved, MAX_SCALE_PERCENT) else saved
+}
+
+internal object ClusterMirrorCrop {
+    fun keep(width: Int, height: Int, dockEdge: Int?, rightHandDrive: Boolean, percent: Int): RectF {
+        val w = width.coerceAtLeast(0)
+        val h = height.coerceAtLeast(0)
+        val fraction = percent.coerceIn(0, 20) / 100f
+        if (dockEdge == AirPlayInfoPlist.DOCK_EDGE_BOTTOM) {
+            return RectF(0f, 0f, w.toFloat(), (h - (h * fraction).roundToInt()).toFloat())
+        }
+        val cropped = (w * fraction).roundToInt().toFloat()
+        return if (rightHandDrive) RectF(0f, 0f, w - cropped, h.toFloat())
+        else RectF(cropped, 0f, w.toFloat(), h.toFloat())
+    }
 }
 
 internal object ClusterMirrorLayout {

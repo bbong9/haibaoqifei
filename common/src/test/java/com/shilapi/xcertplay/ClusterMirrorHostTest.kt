@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.Surface
 import com.shilapi.xcertplay.airplay.AirPlaySession
 import com.shilapi.xcertplay.hud.BydNavigationOutputs
+import com.shilapi.xcertplay.hud.ClusterTurnGuidance
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
@@ -44,6 +45,7 @@ class ClusterMirrorHostTest {
         AirPlayPersistence.saveAdbClusterEnabled(host, true)
         AirPlayPersistence.saveLegacyClusterEnabled(host, false)
         AirPlayPersistence.saveClusterMirrorMain(host, false)
+        AirPlayPersistence.saveClusterMirrorNavOnly(host, false)
         val session = mock(AirPlaySession::class.java)
         `when`(session.hasRenderedMainFrame).thenReturn(true)
         set("activeAirPlaySession", session)
@@ -114,7 +116,54 @@ class ClusterMirrorHostTest {
         ClusterActivityOutput.detach(window, surface)
         assertNull(get("clusterMirrorAttached"))
         assertNull(mirror)
-        assertFalse(BydNavigationOutputs.clusterMainMirrorShown())
+        assertTrue(BydNavigationOutputs.clusterMainMirrorShown())
+    }
+
+    @Test fun navigationStartsImmediatelyAndEndsOnlyAfterFifteenSeconds() {
+        AirPlayPersistence.saveClusterMirrorNavOnly(host, true)
+        AirPlayPersistence.saveClusterMirrorMain(host, true)
+        invoke()
+        waitUntil { get("clusterMirrorPreparedSurface") === surface }
+        assertNull(mirror)
+        assertNull(alt)
+        assertTrue(BydNavigationOutputs.clusterMainMirrorShown())
+        val altStarts = events.count { it == "alt+" }
+
+        guidance(ClusterTurnGuidance(1, 0, 100, ""))
+        waitUntil { mirror === surface }
+        guidance(null)
+        shadowOf(Looper.getMainLooper()).idleFor(14, TimeUnit.SECONDS)
+        assertSame(surface, mirror)
+        shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
+        waitUntil { mirror == null }
+        assertTrue(BydNavigationOutputs.clusterMainMirrorShown())
+        assertNull(alt)
+        assertEquals(altStarts, events.count { it == "alt+" })
+    }
+
+    @Test fun navigationReturningDuringTheHoldDoesNotDetachTheMirror() {
+        AirPlayPersistence.saveClusterMirrorNavOnly(host, true)
+        AirPlayPersistence.saveClusterMirrorMain(host, true)
+        guidance(ClusterTurnGuidance(1, 0, 100, ""))
+        waitUntil { mirror === surface }
+        guidance(null)
+        shadowOf(Looper.getMainLooper()).idleFor(14, TimeUnit.SECONDS)
+        guidance(ClusterTurnGuidance(2, 0, 50, ""))
+        shadowOf(Looper.getMainLooper()).idleFor(2, TimeUnit.SECONDS)
+        assertSame(surface, mirror)
+        assertFalse(events.contains("mirror-"))
+    }
+
+    @Test fun disablingNavigationOnlyAttachesWithoutGuidance() {
+        AirPlayPersistence.saveClusterMirrorNavOnly(host, true)
+        AirPlayPersistence.saveClusterMirrorMain(host, true)
+        invoke()
+        waitUntil { get("clusterMirrorPreparedSurface") === surface }
+        assertNull(mirror)
+        AirPlayPersistence.saveClusterMirrorNavOnly(host, false)
+        invoke()
+        waitUntil { mirror === surface }
+        assertTrue(BydNavigationOutputs.clusterMainMirrorShown())
     }
 
     @Test fun cancelledTransitionDoesNotAttachBeforeTheAltDecoderReleases() {
@@ -211,6 +260,11 @@ class ClusterMirrorHostTest {
     private fun invokeSurface(value: Surface?) = host.javaClass.getDeclaredMethod("onClusterSurface", Surface::class.java)
         .apply { isAccessible = true }.invoke(host, value)
     private fun get(name: String): Any? = host.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(host)
+    @Suppress("UNCHECKED_CAST")
+    private fun guidance(value: ClusterTurnGuidance?) {
+        (get("clusterTurnOverlayListener") as (ClusterTurnGuidance?) -> Unit).invoke(value)
+        shadowOf(Looper.getMainLooper()).idle()
+    }
     private fun set(name: String, value: Any?) = host.javaClass.getDeclaredField(name)
         .apply { isAccessible = true }.set(host, value)
 }

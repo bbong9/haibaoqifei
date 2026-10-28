@@ -43,9 +43,11 @@ internal class ClusterVideoTexture(context: Context, private val onPresented: ()
     private fun applyTransform() {
         val rect = contentRect
         val matrix = Matrix()
-        if (rect != null && width > 0 && height > 0) {
-            matrix.setScale(rect.width() / width, rect.height() / height)
-            matrix.postTranslate(rect.left, rect.top)
+        if (rect != null && width > 0 && height > 0 && rect.width() > 0f && rect.height() > 0f) {
+            val scaleX = 1f / rect.width()
+            val scaleY = 1f / rect.height()
+            matrix.setScale(scaleX, scaleY)
+            matrix.postTranslate(-rect.left * width * scaleX, -rect.top * height * scaleY)
         }
         setTransform(matrix)
     }

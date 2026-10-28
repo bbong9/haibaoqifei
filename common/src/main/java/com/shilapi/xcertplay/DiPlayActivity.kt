@@ -2375,6 +2375,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                     AirPlayPersistence.saveClusterMirrorSize(this, sizes[it])
                                     render()
                                 }
+                                toggle(card, getString(R.string.settings_cluster_mirror_nav_only),
+                                    getString(R.string.settings_cluster_mirror_nav_only_summary),
+                                    AirPlayPersistence.loadClusterMirrorNavOnly(this)) {
+                                    AirPlayPersistence.saveClusterMirrorNavOnly(this, it)
+                                }
+                                card.addView(overlaySliderRow(getString(R.string.settings_cluster_mirror_dock_crop),
+                                    (0..20).toList(), AirPlayPersistence.loadClusterMirrorDockCrop(this)) { "$it%" }.also {
+                                    it.onSave = { value -> AirPlayPersistence.saveClusterMirrorDockCrop(this, value) }
+                                    val head = it.getChildAt(0) as LinearLayout
+                                    val value = head.getChildAt(head.childCount - 1)
+                                    value.layoutParams = (value.layoutParams as LinearLayout.LayoutParams).apply {
+                                        marginStart = dp(SETTINGS_BLOCK_GAP_DP)
+                                    }
+                                })
+                                card.addView(label(getString(R.string.settings_cluster_mirror_dock_crop_summary), 14, MUTED))
                             }
                         }
                         if (!mirrorMain) {

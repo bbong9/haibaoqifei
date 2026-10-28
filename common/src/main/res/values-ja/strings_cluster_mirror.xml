@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">安全領域に収める</string>
     <string name="settings_cluster_mirror_size_full">メーターの高さに合わせる</string>
     <string name="settings_resolution_capped_by_cluster_mirror">メーター同期が有効です。60 fps を維持するため、実際の解像度は最大 75% です。</string>
+    <string name="settings_cluster_mirror_nav_only">ナビゲーション中のみ表示</string>
+    <string name="settings_cluster_mirror_nav_only_summary">ナビを使用していないときは車両本来の表示に戻し、デコードを停止して負荷を減らします。</string>
+    <string name="settings_cluster_mirror_dock_crop">Dock を切り取る</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">中央画面の端にある CarPlay のアイコンバーを取り除きます。</string>
 </resources>

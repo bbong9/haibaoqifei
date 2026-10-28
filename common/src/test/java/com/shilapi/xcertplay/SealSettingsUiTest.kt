@@ -13,6 +13,7 @@ import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
@@ -283,6 +284,37 @@ class SealSettingsUiTest {
         assertEquals(0, disconnects)
     }
 
+    @Test fun mirrorNavigationAndDockControlsAreVisibleOnlyWhenMirroringAndApplyLive() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        assertMissing(screen, R.string.settings_cluster_mirror_nav_only)
+        assertMissing(screen, R.string.settings_cluster_mirror_dock_crop)
+        mirrorSwitch(screen).isChecked = true
+        assertHas(screen, R.string.settings_cluster_mirror_nav_only)
+        assertHas(screen, R.string.settings_cluster_mirror_dock_crop)
+        var changes = 0
+        AirPlayPersistence.overlaySettingsListener = { changes++ }
+        val navSwitch = descendants(categoryContent(screen)).filterIsInstance<Switch>()
+            .single { it.contentDescription == screen.getString(R.string.settings_cluster_mirror_nav_only) }
+        assertTrue(navSwitch.isChecked)
+        navSwitch.isChecked = false
+        assertFalse(AirPlayPersistence.loadClusterMirrorNavOnly(context))
+        val slider = descendants(categoryContent(screen)).filterIsInstance<SeekBar>().single { it.max == 20 }
+        val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
+            .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
+        listener.onProgressChanged(slider, 11, true)
+        assertEquals(11, AirPlayPersistence.loadClusterMirrorDockCrop(context))
+        assertEquals(2, changes)
+        assertFalse(PendingReconnect.isPending(null))
+        mirrorSwitch(screen).isChecked = false
+        assertMissing(screen, R.string.settings_cluster_mirror_nav_only)
+        assertMissing(screen, R.string.settings_cluster_mirror_dock_crop)
+        AirPlayPersistence.overlaySettingsListener = null
+    }
+
     @Test fun revertingMirrorToggleClearsOnlyItsReconnectRequirement() {
         AirPlayPersistence.saveClusterMapEnabled(context, true)
         AirPlayPersistence.saveAdbClusterEnabled(context, true)
@@ -392,7 +424,7 @@ class SealSettingsUiTest {
         layoutRoot(screen)
         val scroll = categoryContent(screen)
         val target = descendants(scroll).filterIsInstance<TextView>()
-            .first { it.text.toString() == screen.getString(R.string.settings_cluster_mirror_main) }
+            .first { it.text.toString() == screen.getString(R.string.settings_cluster_mirror_nav_only) }
         val rect = Rect()
         target.getDrawingRect(rect)
         scroll.offsetDescendantRectToMyCoords(target, rect)

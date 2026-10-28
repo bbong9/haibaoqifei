@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">Вместить в безопасную область</string>
     <string name="settings_cluster_mirror_size_full">Заполнить высоту панели</string>
     <string name="settings_resolution_capped_by_cluster_mirror">Синхронизация панели включена: для 60 кадров/с фактическое разрешение ограничено 75%.</string>
+    <string name="settings_cluster_mirror_nav_only">Показывать только при навигации</string>
+    <string name="settings_cluster_mirror_nav_only_summary">Без навигации отображается штатная панель, а декодирование останавливается для экономии ресурсов.</string>
+    <string name="settings_cluster_mirror_dock_crop">Обрезать Dock</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">Убирает панель значков CarPlay с края центрального экрана.</string>
 </resources>

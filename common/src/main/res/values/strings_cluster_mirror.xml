@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">Fit inside the safe area</string>
     <string name="settings_cluster_mirror_size_full">Fill the cluster height</string>
     <string name="settings_resolution_capped_by_cluster_mirror">Cluster mirroring is on: the actual resolution is capped at 75% to maintain 60 fps.</string>
+    <string name="settings_cluster_mirror_nav_only">Show only during navigation</string>
+    <string name="settings_cluster_mirror_nav_only_summary">When navigation is inactive, restore the car\'s instrument display and stop decoding to save performance.</string>
+    <string name="settings_cluster_mirror_dock_crop">Crop Dock</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">Remove the CarPlay icon bar at the edge of the centre screen.</string>
 </resources>

@@ -783,6 +783,7 @@ class AndroidMediaSink(
         // Only the main screen goes to the host's SurfaceView; mirrors and the cluster keep their path.
         pacingDelayNanos = if (type == MAIN_SCREEN_TYPE && statsLabel == null) videoPacingDelayMillis * 1_000_000L else 0L,
         operatingRate = videoOperatingRate(type, statsLabel, mainVideoFrameRate),
+        realtimePriority = videoDecoderPriority(type, statsLabel) == 0,
         vendorLowLatency = vendorLowLatencyDecoder,
         dedicatedOutputThread = vendorLowLatencyDecoder,
         framesAtOnce = type == MAIN_SCREEN_TYPE && statsLabel == null && videoPacingDelayMillis > 0,
@@ -891,6 +892,9 @@ internal class ParkingOutput(width: Int, height: Int) {
 internal fun videoOperatingRate(type: Int, statsLabel: String?, frameRate: Int): Int =
     if (type == MAIN_SCREEN_TYPE && statsLabel == null && frameRate > 0) frameRate else 0
 
+internal fun videoDecoderPriority(type: Int, statsLabel: String?): Int =
+    if (type == MAIN_SCREEN_TYPE && statsLabel == null) 0 else 1
+
 internal data class DecoderAttempt(
     val codecName: String?,
     val tuned: Boolean,
@@ -982,6 +986,7 @@ private class VideoDecoder(
     /** Called on the worker as its last step, after it has released its codec. */
     private val onExit: (VideoDecoder) -> Unit = {},
     operatingRate: Int = 0,
+    private val realtimePriority: Boolean = false,
     /** Set [vendorLowLatencyKeys] on the tuned configure attempts. */
     private val vendorLowLatency: Boolean = false,
     /**
@@ -1353,7 +1358,8 @@ private class VideoDecoder(
                     " mtkTuning=${configuredMtkMode.diagnosticName}"
                 else -> ""
             }
-            report("decoder=${configured.codecName} mime=$mime size=${width}x$height" +
+            val priority = if (used?.tuned == true) if (realtimePriority) "0" else "1" else "-"
+            report("decoder=${configured.codecName} mime=$mime size=${width}x$height priority=$priority" +
                 "$rate$lowLatency$output$atOnceReport$mtk")
             if (Build.VERSION.SDK_INT >= 29) {
                 runCatching {
@@ -1398,7 +1404,7 @@ private class VideoDecoder(
         MediaFormat.createVideoFormat(mime, width, height).apply {
             if (attempt.tuned) {
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_SIZE)
-                setInteger(MediaFormat.KEY_PRIORITY, 0)
+                setInteger(MediaFormat.KEY_PRIORITY, if (realtimePriority) 0 else 1)
                 if (attempt.operatingRate > 0) setInteger(MediaFormat.KEY_OPERATING_RATE, attempt.operatingRate)
             }
             mtkMode.formatKeys().forEach { setInteger(it, 1) }

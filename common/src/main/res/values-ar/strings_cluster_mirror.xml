@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">احتواء داخل المنطقة الآمنة</string>
     <string name="settings_cluster_mirror_size_full">ملء ارتفاع العدادات</string>
     <string name="settings_resolution_capped_by_cluster_mirror">مزامنة العدادات مفعلة: للحفاظ على 60 إطارًا، الدقة الفعلية بحد أقصى 75٪.</string>
+    <string name="settings_cluster_mirror_nav_only">العرض أثناء الملاحة فقط</string>
+    <string name="settings_cluster_mirror_nav_only_summary">عند توقف الملاحة، تظهر لوحة السيارة الأصلية ويتوقف فك الترميز لتوفير الأداء.</string>
+    <string name="settings_cluster_mirror_dock_crop">اقتصاص شريط Dock</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">إزالة شريط أيقونات CarPlay من حافة الشاشة الوسطى.</string>
 </resources>

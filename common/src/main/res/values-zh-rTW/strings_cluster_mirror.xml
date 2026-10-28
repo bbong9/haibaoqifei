@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">放在安全區內</string>
     <string name="settings_cluster_mirror_size_full">填滿儀表高度</string>
     <string name="settings_resolution_capped_by_cluster_mirror">儀表同步已開啟：為維持 60 幀，實際解析度最高為 75%。</string>
+    <string name="settings_cluster_mirror_nav_only">只在導航時顯示</string>
+    <string name="settings_cluster_mirror_nav_only_summary">未導航時恢復原車儀表顯示，並停止解碼以節省效能。</string>
+    <string name="settings_cluster_mirror_dock_crop">裁掉 Dock</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">移除中控螢幕畫面邊緣的 CarPlay 圖示列。</string>
 </resources>

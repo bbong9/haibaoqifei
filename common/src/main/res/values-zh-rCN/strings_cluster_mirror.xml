@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">放在安全区内</string>
     <string name="settings_cluster_mirror_size_full">铺满仪表高度</string>
     <string name="settings_resolution_capped_by_cluster_mirror">仪表同步已打开：为保证 60 帧，实际使用 75%。</string>
+    <string name="settings_cluster_mirror_nav_only">只在导航时显示</string>
+    <string name="settings_cluster_mirror_nav_only_summary">不导航时仪表恢复原车显示，并停止解码以节省性能。</string>
+    <string name="settings_cluster_mirror_dock_crop">裁掉 Dock</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">去掉中控屏画面边上的 CarPlay 图标栏。</string>
 </resources>

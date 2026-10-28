@@ -472,8 +472,15 @@ open class CarPlayHostActivity : ComponentActivity() {
     private var clusterSurface: Surface? = null
     private var clusterMirrorAttached: Surface? = null
     private var clusterMirrorSink: AndroidMediaSink? = null
+    private var clusterMirrorPreparedSurface: Surface? = null
+    private var clusterMirrorPreparedSink: AndroidMediaSink? = null
     private var clusterMirrorTransitionPending = false
     private var clusterMirrorLogState: String? = null
+    private var clusterMirrorNavigationHeld = false
+    private val clusterMirrorNavigationExpiry = Runnable {
+        clusterMirrorNavigationHeld = false
+        if (!isDestroyed) applyClusterVideo()
+    }
     private var clusterMonitor: DiLink51ClusterMonitor? = null
     private var detectedCluster = ClusterActivityState.Snapshot(null, false)
     // Keep one surface per layer alive, including while its map card is hidden.
@@ -490,8 +497,20 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
     private val clusterTurnOverlayListener: (com.shilapi.xcertplay.hud.ClusterTurnGuidance?) -> Unit = { guidance ->
         runOnUiThread {
+            val wasNavigating = clusterTurnGuidance != null
             clusterTurnGuidance = guidance
+            if (guidance != null) {
+                mainHandler.removeCallbacks(clusterMirrorNavigationExpiry)
+                clusterMirrorNavigationHeld = false
+            } else if (wasNavigating && ClusterMirrorPolicy.enabled(this) &&
+                AirPlayPersistence.loadClusterMirrorNavOnly(this)) {
+                clusterMirrorNavigationHeld = true
+                mainHandler.removeCallbacks(clusterMirrorNavigationExpiry)
+                mainHandler.postDelayed(clusterMirrorNavigationExpiry, CLUSTER_MIRROR_NAVIGATION_HOLD_MILLIS)
+                appendLog("Cluster mirror: navigation hold ${CLUSTER_MIRROR_NAVIGATION_HOLD_MILLIS}ms")
+            }
             applyClusterTurnOverlay()
+            if (wasNavigating != (guidance != null)) applyClusterVideo()
         }
     }
     // Copies of stream 111 outside the dashboard (centre card, launcher maps) each get their own decoder.
@@ -1662,19 +1681,31 @@ open class CarPlayHostActivity : ComponentActivity() {
         val enabled = ClusterMirrorPolicy.enabled(this)
         val ready = clusterOutputReady()
         val route = ClusterActivityOutput.hasConfirmedRoute()
+        val navOnly = AirPlayPersistence.loadClusterMirrorNavOnly(this)
+        if (!enabled || !navOnly) {
+            mainHandler.removeCallbacks(clusterMirrorNavigationExpiry)
+            clusterMirrorNavigationHeld = false
+        }
+        val navigating = clusterTurnGuidance != null
+        val navigationAllowed = !navOnly || navigating || clusterMirrorNavigationHeld
         val shouldMirror = enabled && ready && route && surface?.isValid == true &&
-            !clusterReleasedWhileIdle && currentSink != null
+            !clusterReleasedWhileIdle && currentSink != null && navigationAllowed
         val source = sessionDisplay
+        val dockEdge = source?.viewAreas?.let { areas -> areas.areas.getOrNull(areas.current)?.dockEdge }
+        com.shilapi.xcertplay.hud.BydNavigationOutputs.setClusterMainMirrorShown(enabled && route)
+        if (!enabled || !route || surface !== clusterMirrorPreparedSurface || currentSink !== clusterMirrorPreparedSink) {
+            clusterMirrorPreparedSurface = null
+            clusterMirrorPreparedSink = null
+        }
         fun publish() {
             ClusterActivityOutput.setMirrorState(enabled, clusterMirrorAttached != null,
-                source?.width ?: 16, source?.height ?: 9)
+                source?.width ?: 16, source?.height ?: 9, dockEdge, navigating)
         }
         val attached = clusterMirrorAttached
         if (attached != null && (!shouldMirror || attached !== surface || clusterMirrorSink !== currentSink)) {
             val owner = clusterMirrorSink
             clusterMirrorAttached = null
             clusterMirrorSink = null
-            com.shilapi.xcertplay.hud.BydNavigationOutputs.setClusterMainMirrorShown(false)
             publish()
             if (owner != null) {
                 owner.setMirrorSurface(SCREEN_TYPE_MAIN, CLUSTER_MIRROR_KEY, null)
@@ -1698,6 +1729,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             !enabled -> "setting"
             !ready || currentSink == null -> "session"
             !route || clusterReleasedWhileIdle -> "route"
+            !navigationAllowed -> "not-navigating"
             else -> "surface"
         }}"
         if (status != clusterMirrorLogState) {
@@ -1705,10 +1737,21 @@ open class CarPlayHostActivity : ComponentActivity() {
             appendLog("Cluster mirror: $status")
         }
         if (clusterMirrorTransitionPending) return
-        if (shouldMirror) {
+        if (enabled) {
+            if (!ready || !route || surface?.isValid != true || currentSink == null || clusterReleasedWhileIdle) return
             if (clusterMirrorAttached === surface && clusterMirrorSink === currentSink) return
-            val nextSurface = checkNotNull(surface)
-            val nextSink = checkNotNull(currentSink)
+            val nextSurface = surface
+            val nextSink = currentSink
+            if (clusterMirrorPreparedSurface === nextSurface && clusterMirrorPreparedSink === nextSink) {
+                if (shouldMirror) {
+                    nextSink.setMirrorSurface(SCREEN_TYPE_MAIN, CLUSTER_MIRROR_KEY, nextSurface)
+                    clusterMirrorAttached = nextSurface
+                    clusterMirrorSink = nextSink
+                    mainHandler.removeCallbacks(releaseIdleCluster)
+                    applyClusterVideo()
+                }
+                return
+            }
             nextSink.clearSurface(SCREEN_TYPE_ALT, nextSurface)
             val detach = nextSink.beginSurfaceDetachForStream(SCREEN_TYPE_ALT, nextSurface)
             clusterMirrorTransitionPending = true
@@ -1720,15 +1763,10 @@ open class CarPlayHostActivity : ComponentActivity() {
                     if (sink === nextSink && clusterSurface === nextSurface &&
                         ClusterMirrorPolicy.enabled(this) && clusterOutputReady() &&
                         ClusterActivityOutput.hasConfirmedRoute() && nextSurface.isValid && !clusterReleasedWhileIdle) {
-                        nextSink.setMirrorSurface(SCREEN_TYPE_MAIN, CLUSTER_MIRROR_KEY, nextSurface)
-                        clusterMirrorAttached = nextSurface
-                        clusterMirrorSink = nextSink
-                        com.shilapi.xcertplay.hud.BydNavigationOutputs.setClusterMainMirrorShown(true)
-                        mainHandler.removeCallbacks(releaseIdleCluster)
-                        applyClusterVideo()
-                    } else {
-                        applyClusterVideo()
+                        clusterMirrorPreparedSurface = nextSurface
+                        clusterMirrorPreparedSink = nextSink
                     }
+                    applyClusterVideo()
                 }
             }, "cluster-mirror-handoff").apply { isDaemon = true }.start()
         } else if (ready) {
@@ -2174,6 +2212,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         removeVideoSurfaceProbe()
         fallbackVideoView?.holder?.removeCallback(fallbackSurfaceCallback)
         mainHandler.removeCallbacks(refreshTurnOverlay)
+        mainHandler.removeCallbacks(clusterMirrorNavigationExpiry)
         mainHandler.removeCallbacks(clusterLaunchTick)
         mainHandler.removeCallbacks(requestDelayedAssignedSiri)
         doubleSiriFirstPressWasInCall = false
@@ -2929,6 +2968,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         appendLog("Side panel ${if (show) "shown" else "hidden"}: view area $target sent=$sent")
         if (!sent || target == null) return
         areas.use(target)
+        if (ClusterMirrorPolicy.enabled(this)) applyClusterVideo()
         sidePanelShown = show
         sidePanel?.visibility = if (show) View.VISIBLE else View.GONE
         mainHandler.removeCallbacks(sidePanelTick)
@@ -4319,6 +4359,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 controller?.showViewArea(target) == true
             ) {
                 areas.use(target)
+                if (ClusterMirrorPolicy.enabled(this)) applyClusterVideo()
                 CarPlayDock.save(this, next)
             }
         }
@@ -6126,7 +6167,10 @@ open class CarPlayHostActivity : ComponentActivity() {
         activeDisplaySize = size
         sessionDisplay = display.copy(rotation = displayRotation())
         val sent = if (target == areas.current) true else controller?.showViewArea(target) == true
-        if (sent) areas.use(target)
+        if (sent) {
+            areas.use(target)
+            if (ClusterMirrorPolicy.enabled(this)) applyClusterVideo()
+        }
         videoView?.let { updateVideoLayout(it.width, it.height) }
         val message = "Window ${previous?.width}x${previous?.height} -> ${size.width}x${size.height} " +
             "split=$split portrait=$portrait turned=$turned: view area $target sent=$sent"
@@ -7248,6 +7292,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         const val SINK_RELEASE_WAIT_MILLIS = 2_000L
         private const val CENTER_MAP_IDLE_MILLIS = 3_000L // a reconnect is quicker; a session end is not
         private const val CLUSTER_IDLE_RELEASE_MILLIS = 15_000L
+        private const val CLUSTER_MIRROR_NAVIGATION_HOLD_MILLIS = 15_000L
         // The first frame normally comes within a second of the screen stream opening.
         private const val NO_PICTURE_MILLIS = 10_000L
         private const val NO_PICTURE_RECHECK_MILLIS = 250L

@@ -5,4 +5,8 @@
     <string name="settings_cluster_mirror_size_safe">Ajustar al área segura</string>
     <string name="settings_cluster_mirror_size_full">Llenar la altura del cuadro</string>
     <string name="settings_resolution_capped_by_cluster_mirror">Sincronización del cuadro activada: la resolución real se limita al 75 % para mantener 60 fps.</string>
+    <string name="settings_cluster_mirror_nav_only">Mostrar solo durante la navegación</string>
+    <string name="settings_cluster_mirror_nav_only_summary">Sin navegación, se muestra el cuadro original y se detiene la decodificación para ahorrar recursos.</string>
+    <string name="settings_cluster_mirror_dock_crop">Recortar el Dock</string>
+    <string name="settings_cluster_mirror_dock_crop_summary">Elimina la barra de iconos de CarPlay del borde de la pantalla central.</string>
 </resources>

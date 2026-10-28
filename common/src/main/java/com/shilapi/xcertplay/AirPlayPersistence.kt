@@ -107,6 +107,8 @@ object AirPlayPersistence {
     private const val KEY_CLUSTER_LANE_STRIP = "cluster_lane_strip"
     private const val KEY_CLUSTER_MIRROR_MAIN = "cluster_mirror_main"
     private const val KEY_CLUSTER_MIRROR_SIZE = "cluster_mirror_size"
+    private const val KEY_CLUSTER_MIRROR_NAV_ONLY = "cluster_mirror_nav_only"
+    private const val KEY_CLUSTER_MIRROR_DOCK_CROP = "cluster_mirror_dock_crop"
     private const val KEY_CLUSTER_MARKER_X = "cluster_marker_horizontal_step"
     private const val KEY_CLUSTER_MARKER_Y = "cluster_marker_vertical_step"
     private const val KEY_CLUSTER_SMALL_WINDOW_MODE = "cluster_small_window_mode"
@@ -1076,6 +1078,24 @@ object AirPlayPersistence {
     fun saveClusterMirrorSize(context: Context, size: ClusterMirrorSize) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_CLUSTER_MIRROR_SIZE, size.name).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorNavOnly(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CLUSTER_MIRROR_NAV_ONLY, true)
+
+    fun saveClusterMirrorNavOnly(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_CLUSTER_MIRROR_NAV_ONLY, enabled).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorDockCrop(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_CLUSTER_MIRROR_DOCK_CROP, 7).coerceIn(0, 20)
+
+    fun saveClusterMirrorDockCrop(context: Context, percent: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_CLUSTER_MIRROR_DOCK_CROP, percent.coerceIn(0, 20)).apply()
         overlaySettingsListener?.invoke()
     }
 

@@ -35,4 +35,18 @@ class ClusterMirrorLayoutTest {
         assertEquals(RectF(0f, 0f, 0f, 720f),
             ClusterMirrorLayout.plan(0, 720, 1940, 1092, safe, ClusterMirrorSize.FULL_HEIGHT))
     }
+
+    @Test fun croppedAspectFitsTheSafeAreaAndTheFullHeight() {
+        val keep = ClusterMirrorCrop.keep(1940, 1092, null, false, 7)
+        val inside = ClusterMirrorLayout.plan(1920, 720, keep.width().toInt(), keep.height().toInt(), safe,
+            ClusterMirrorSize.SAFE_AREA)
+        assertEquals(703.7f, inside.width(), 0.2f)
+        assertEquals(426f, inside.height(), 0.01f)
+        assertEquals(920f, inside.centerX(), 0.01f)
+        val full = ClusterMirrorLayout.plan(1920, 720, keep.width().toInt(), keep.height().toInt(), safe,
+            ClusterMirrorSize.FULL_HEIGHT)
+        assertEquals(1189.45f, full.width(), 0.2f)
+        assertEquals(720f, full.height(), 0.01f)
+        assertEquals(920f, full.centerX(), 0.01f)
+    }
 }
