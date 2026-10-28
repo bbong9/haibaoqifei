@@ -170,8 +170,10 @@ class AdbClusterActivity : Activity() {
                 }
             }
         }
-        val displayed = if (size == ClusterMirrorSize.CUSTOM && width > 0 && height > 0)
-            ClusterMirrorCrop.cover(keep, width.toFloat() / height) else keep
+        val displayed = if (size == ClusterMirrorSize.CUSTOM && width > 0 && height > 0) {
+            val view = AirPlayPersistence.loadClusterMirrorView(this)
+            ClusterMirrorCrop.frame(keep, width.toFloat() / height, view.zoom, view.focusX, view.focusY)
+        } else keep
         video.setContentRect(RectF(displayed.left / sourceWidth, displayed.top / sourceHeight,
             displayed.right / sourceWidth, displayed.bottom / sourceHeight))
         ClusterActivityOutput.mirrorRect = RectF(rect)
@@ -182,9 +184,12 @@ class AdbClusterActivity : Activity() {
         turnCard?.setLayout(ClusterActivityOutput.cardX, ClusterActivityOutput.cardY, ClusterActivityOutput.cardSize)
         turnCard?.setOpacity(ClusterActivityOutput.cardOpacity)
         turnCard?.setNightMode(ClusterActivityOutput.cardNight)
-        turnCard?.setGuidance(if (ClusterActivityOutput.streamActive && !ClusterActivityOutput.mirrorEnabled)
-            ClusterActivityOutput.guidance else null)
-        turnCard?.setLanes(if (AirPlayPersistence.loadClusterLaneStrip(this)) ClusterActivityOutput.lanes else emptyList())
+        val show = (ClusterActivityOutput.streamActive && !ClusterActivityOutput.mirrorEnabled) ||
+            (ClusterActivityOutput.mirrorEnabled && ClusterActivityOutput.mirrorAttached &&
+                AirPlayPersistence.loadClusterMirrorTurnCard(this))
+        turnCard?.setGuidance(if (show) ClusterActivityOutput.guidance else null)
+        turnCard?.setLanes(if (show && AirPlayPersistence.loadClusterLaneStrip(this))
+            ClusterActivityOutput.lanes else emptyList())
         updateSafeAreaPreview()
     }
 

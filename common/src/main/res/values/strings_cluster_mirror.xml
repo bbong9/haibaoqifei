@@ -14,6 +14,13 @@
     <string name="settings_cluster_mirror_custom_y">Vertical position</string>
     <string name="settings_cluster_mirror_custom_w">Width</string>
     <string name="settings_cluster_mirror_custom_h">Height</string>
+    <string name="settings_cluster_mirror_view_zoom">Zoom</string>
+    <string name="settings_cluster_mirror_view_focus_x">Frame left/right</string>
+    <string name="settings_cluster_mirror_view_focus_x_summary">0 = left edge of the centre screen picture, 100 = right edge.</string>
+    <string name="settings_cluster_mirror_view_focus_y">Frame up/down</string>
+    <string name="settings_cluster_mirror_view_focus_y_summary">0 = top edge, 100 = bottom edge.</string>
+    <string name="settings_cluster_mirror_turn_card">Show turn card while mirroring</string>
+    <string name="settings_cluster_mirror_turn_card_summary">Overlay turn arrows and distance on the mirrored centre screen map. Use framing to crop the Amap turn instructions.</string>
     <string name="settings_cluster_music_seconds">Display duration</string>
     <string name="settings_cluster_music_seconds_summary">How long the card appears after a song change; in permanent mode, how long the song title stays visible.</string>
     <string name="settings_cluster_music_seconds_value">%1$d s</string>

@@ -98,4 +98,39 @@ class ClusterMirrorPersistenceTest {
         AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.SAFE_AREA)
         assertFalse(ClusterMirrorDiagnostics.report(context).contains("mirrorCustom="))
     }
+
+    @Test fun frameAndTurnCardDefaultsSaveAndClampOnReadAndWrite() {
+        assertEquals(ClusterMirrorView(), AirPlayPersistence.loadClusterMirrorView(context))
+        assertFalse(AirPlayPersistence.loadClusterMirrorTurnCard(context))
+        var changes = 0
+        AirPlayPersistence.overlaySettingsListener = { changes++ }
+        AirPlayPersistence.saveClusterMirrorView(context, ClusterMirrorView(300, -1, 101))
+        AirPlayPersistence.saveClusterMirrorTurnCard(context, true)
+        assertEquals(ClusterMirrorView(250, 0, 100), AirPlayPersistence.loadClusterMirrorView(context))
+        assertTrue(AirPlayPersistence.loadClusterMirrorTurnCard(context))
+        val prefs = context.getSharedPreferences("xcertplay_airplay", 0)
+        assertEquals(250, prefs.getInt("cluster_mirror_view_zoom", -1))
+        assertEquals(0, prefs.getInt("cluster_mirror_view_focus_x", -1))
+        assertEquals(100, prefs.getInt("cluster_mirror_view_focus_y", -1))
+        prefs.edit().putInt("cluster_mirror_view_zoom", 1).putInt("cluster_mirror_view_focus_x", 200)
+            .putInt("cluster_mirror_view_focus_y", -5).commit()
+        assertEquals(ClusterMirrorView(100, 100, 0), AirPlayPersistence.loadClusterMirrorView(context))
+        assertEquals(2, changes)
+    }
+
+    @Test fun frameAndTurnCardDiagnosticsSurviveRedaction() {
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
+        AirPlayPersistence.saveClusterMirrorView(context, ClusterMirrorView(175, 10, 90))
+        AirPlayPersistence.saveClusterMirrorTurnCard(context, true)
+        val line = ClusterMirrorDiagnostics.report(context)
+        assertTrue(line, line.contains("mirrorView=175,10,90"))
+        assertTrue(line, line.contains("mirrorTurnCard=on"))
+        assertEquals(line, DiagnosticRedactor.redact(line))
+        AirPlayPersistence.saveClusterMirrorTurnCard(context, false)
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.FULL_HEIGHT)
+        val legacy = ClusterMirrorDiagnostics.report(context)
+        assertTrue(legacy, legacy.contains("mirrorTurnCard=off"))
+        assertFalse(legacy, legacy.contains("mirrorView="))
+        assertEquals(legacy, DiagnosticRedactor.redact(legacy))
+    }
 }

@@ -14,6 +14,11 @@ data class ClusterMirrorCustomRect(val x: Int = 50, val y: Int = 50, val w: Int 
         w.coerceIn(20, 100), h.coerceIn(20, 100))
 }
 
+data class ClusterMirrorView(val zoom: Int = 100, val focusX: Int = 50, val focusY: Int = 50) {
+    internal fun clamped() = ClusterMirrorView(zoom.coerceIn(100, 250),
+        focusX.coerceIn(0, 100), focusY.coerceIn(0, 100))
+}
+
 internal object ClusterMirrorPolicy {
     const val MAX_SCALE_PERCENT = 75
 
@@ -52,6 +57,19 @@ internal object ClusterMirrorCrop {
             }
             else -> RectF(keep)
         }
+    }
+
+    fun frame(keep: RectF, targetAspect: Float, zoomPercent: Int, focusX: Int, focusY: Int): RectF {
+        val covered = cover(keep, targetAspect)
+        val view = ClusterMirrorView(zoomPercent, focusX, focusY).clamped()
+        if (view == ClusterMirrorView() || keep.width() <= 0f || keep.height() <= 0f) return covered
+        val zoom = view.zoom / 100f
+        val width = covered.width() / zoom
+        val height = covered.height() / zoom
+        val left = keep.left + (keep.width() - width) * view.focusX / 100f
+        val top = keep.top + (keep.height() - height) * view.focusY / 100f
+        return RectF(left, top, (left + width).coerceAtMost(keep.right),
+            (top + height).coerceAtMost(keep.bottom))
     }
 }
 

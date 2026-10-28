@@ -17,4 +17,11 @@
     <string name="settings_cluster_music_seconds">مدة العرض</string>
     <string name="settings_cluster_music_seconds_summary">مدة ظهور البطاقة بعد تغيير الأغنية؛ وفي الوضع الدائم، مدة ظهور عنوان الأغنية.</string>
     <string name="settings_cluster_music_seconds_value">%1$d ث</string>
+    <string name="settings_cluster_mirror_view_zoom">تكبير</string>
+    <string name="settings_cluster_mirror_view_focus_x">تأطير يسار/يمين</string>
+    <string name="settings_cluster_mirror_view_focus_x_summary">0 = أقصى يسار صورة الشاشة الوسطى، 100 = أقصى اليمين.</string>
+    <string name="settings_cluster_mirror_view_focus_y">تأطير أعلى/أسفل</string>
+    <string name="settings_cluster_mirror_view_focus_y_summary">0 = أعلى الصورة، 100 = أسفلها.</string>
+    <string name="settings_cluster_mirror_turn_card">إظهار بطاقة الانعطاف أثناء المزامنة</string>
+    <string name="settings_cluster_mirror_turn_card_summary">أظهر سهم الانعطاف والمسافة فوق خريطة الشاشة الوسطى على لوحة العدادات. يمكن قص تعليمات Amap باستخدام التأطير.</string>
 </resources>

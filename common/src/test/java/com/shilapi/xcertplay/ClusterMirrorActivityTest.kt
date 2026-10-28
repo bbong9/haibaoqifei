@@ -10,6 +10,8 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
+import com.shilapi.xcertplay.hud.ClusterTurnGuidance
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import java.lang.ref.WeakReference
 import kotlin.math.roundToInt
 import org.junit.After
@@ -166,5 +168,60 @@ class ClusterMirrorActivityTest {
             AirPlayPersistence.overlaySettingsListener = null
             settingsController.pause().stop().destroy()
         }
+    }
+
+    @Test fun customFrameUpdatesContentRectImmediatelyWithoutReconnect() {
+        AirPlayPersistence.saveClusterMirrorSize(activity, ClusterMirrorSize.CUSTOM)
+        AirPlayPersistence.saveClusterMirrorCustom(activity, ClusterMirrorCustomRect(50, 50, 50, 50))
+        ClusterActivityOutput.setMirrorState(true, true, 1940, 1092)
+        AirPlayPersistence.overlaySettingsListener = { ClusterActivityOutput.refreshMirrorLayout() }
+        AirPlayPersistence.saveClusterMirrorView(activity, ClusterMirrorView(200, 20, 100))
+        val video = ReflectionHelpers.getField<ClusterVideoTexture>(activity, "videoTexture")
+        val params = video.layoutParams as FrameLayout.LayoutParams
+        val keep = ClusterMirrorCrop.keep(1940, 1092, null, false, 7)
+        val frame = ClusterMirrorCrop.frame(keep, params.width.toFloat() / params.height, 200, 20, 100)
+        val actual = ReflectionHelpers.getField<android.graphics.RectF>(video, "contentRect")
+        assertEquals(frame.left / 1940f, actual.left, .0001f)
+        assertEquals(frame.top / 1092f, actual.top, .0001f)
+        assertEquals(frame.right / 1940f, actual.right, .0001f)
+        assertEquals(frame.bottom / 1092f, actual.bottom, .0001f)
+        assertTrue(ClusterActivityOutput.mirrorAttached)
+        assertFalse(PendingReconnect.isPending(null))
+    }
+
+    @Test fun mirrorTurnCardAndLanesFollowAttachmentAndSettingsAboveVideo() {
+        val guidance = ClusterTurnGuidance(2, 0, 120, "")
+        ClusterActivityOutput.setTurnCard(guidance, 50, 40, 100, 85, false)
+        ClusterActivityOutput.setLanes(listOf(LaneGuidanceLane(0, 2, 0, null)))
+        shadowOf(Looper.getMainLooper()).idle()
+        AirPlayPersistence.saveClusterLaneStrip(activity, true)
+        ClusterActivityOutput.setMirrorState(true, true, 1940, 1092)
+        val card = ReflectionHelpers.getField<ClusterTurnCardView>(activity, "turnCard")
+        val video = ReflectionHelpers.getField<ClusterVideoTexture>(activity, "videoTexture")
+        val overlays = ReflectionHelpers.getField<FrameLayout>(activity, "overlayRegion")
+        val root = overlays.parent as FrameLayout
+        assertSame(overlays, card.parent)
+        assertTrue(root.indexOfChild(overlays) > root.indexOfChild(video.parent as View))
+        assertEquals(View.GONE, card.visibility)
+        assertEquals(0, card.displayedLaneCount())
+
+        AirPlayPersistence.overlaySettingsListener = { activity.updateTurnCard() }
+        AirPlayPersistence.saveClusterMirrorTurnCard(activity, true)
+        assertEquals(View.VISIBLE, card.visibility)
+        assertEquals(guidance, ReflectionHelpers.getField<ClusterTurnGuidance>(card, "guidance"))
+        assertEquals(1, card.displayedLaneCount())
+        AirPlayPersistence.saveClusterLaneStrip(activity, false)
+        assertEquals(0, card.displayedLaneCount())
+        AirPlayPersistence.saveClusterLaneStrip(activity, true)
+        assertEquals(1, card.displayedLaneCount())
+        AirPlayPersistence.saveClusterMirrorTurnCard(activity, false)
+        assertEquals(View.GONE, card.visibility)
+        assertEquals(0, card.displayedLaneCount())
+        AirPlayPersistence.saveClusterMirrorTurnCard(activity, true)
+        assertEquals(1, card.displayedLaneCount())
+        ClusterActivityOutput.setMirrorState(true, false, 1940, 1092)
+        assertEquals(View.GONE, card.visibility)
+        assertEquals(0, card.displayedLaneCount())
+        assertFalse(PendingReconnect.isPending(null))
     }
 }

@@ -17,4 +17,11 @@
     <string name="settings_cluster_music_seconds">Durata della visualizzazione</string>
     <string name="settings_cluster_music_seconds_summary">Quanto resta visibile la scheda al cambio brano; in modalità permanente, quanto resta il titolo.</string>
     <string name="settings_cluster_music_seconds_value">%1$d s</string>
+    <string name="settings_cluster_mirror_view_zoom">Ingrandimento</string>
+    <string name="settings_cluster_mirror_view_focus_x">Inquadratura sinistra/destra</string>
+    <string name="settings_cluster_mirror_view_focus_x_summary">0 = bordo sinistro dello schermo centrale, 100 = bordo destro.</string>
+    <string name="settings_cluster_mirror_view_focus_y">Inquadratura alto/basso</string>
+    <string name="settings_cluster_mirror_view_focus_y_summary">0 = bordo superiore, 100 = bordo inferiore.</string>
+    <string name="settings_cluster_mirror_turn_card">Mostra la scheda svolta durante la duplicazione</string>
+    <string name="settings_cluster_mirror_turn_card_summary">Sovrappone freccia e distanza alla mappa dello schermo centrale sul quadro strumenti. Usa l\'inquadratura per ritagliare le indicazioni di Amap.</string>
 </resources>

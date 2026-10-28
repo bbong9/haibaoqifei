@@ -111,6 +111,10 @@ object AirPlayPersistence {
     private const val KEY_CLUSTER_MIRROR_CUSTOM_Y = "cluster_mirror_custom_y"
     private const val KEY_CLUSTER_MIRROR_CUSTOM_W = "cluster_mirror_custom_w"
     private const val KEY_CLUSTER_MIRROR_CUSTOM_H = "cluster_mirror_custom_h"
+    private const val KEY_CLUSTER_MIRROR_VIEW_ZOOM = "cluster_mirror_view_zoom"
+    private const val KEY_CLUSTER_MIRROR_VIEW_FOCUS_X = "cluster_mirror_view_focus_x"
+    private const val KEY_CLUSTER_MIRROR_VIEW_FOCUS_Y = "cluster_mirror_view_focus_y"
+    private const val KEY_CLUSTER_MIRROR_TURN_CARD = "cluster_mirror_turn_card"
     private const val KEY_CLUSTER_MIRROR_NAV_ONLY = "cluster_mirror_nav_only"
     private const val KEY_CLUSTER_MIRROR_DOCK_CROP = "cluster_mirror_dock_crop"
     private const val KEY_CLUSTER_MARKER_X = "cluster_marker_horizontal_step"
@@ -1097,6 +1101,31 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt(KEY_CLUSTER_MIRROR_CUSTOM_X, next.x).putInt(KEY_CLUSTER_MIRROR_CUSTOM_Y, next.y)
             .putInt(KEY_CLUSTER_MIRROR_CUSTOM_W, next.w).putInt(KEY_CLUSTER_MIRROR_CUSTOM_H, next.h).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorView(context: Context): ClusterMirrorView {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return ClusterMirrorView(prefs.getInt(KEY_CLUSTER_MIRROR_VIEW_ZOOM, 100),
+            prefs.getInt(KEY_CLUSTER_MIRROR_VIEW_FOCUS_X, 50),
+            prefs.getInt(KEY_CLUSTER_MIRROR_VIEW_FOCUS_Y, 50)).clamped()
+    }
+
+    fun saveClusterMirrorView(context: Context, view: ClusterMirrorView) {
+        val next = view.clamped()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_CLUSTER_MIRROR_VIEW_ZOOM, next.zoom)
+            .putInt(KEY_CLUSTER_MIRROR_VIEW_FOCUS_X, next.focusX)
+            .putInt(KEY_CLUSTER_MIRROR_VIEW_FOCUS_Y, next.focusY).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorTurnCard(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CLUSTER_MIRROR_TURN_CARD, false)
+
+    fun saveClusterMirrorTurnCard(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_CLUSTER_MIRROR_TURN_CARD, enabled).apply()
         overlaySettingsListener?.invoke()
     }
 

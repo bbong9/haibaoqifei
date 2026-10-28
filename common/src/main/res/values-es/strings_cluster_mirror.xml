@@ -17,4 +17,11 @@
     <string name="settings_cluster_music_seconds">Duración de visualización</string>
     <string name="settings_cluster_music_seconds_summary">Cuánto tiempo aparece la tarjeta al cambiar de canción; en modo permanente, cuánto permanece el título.</string>
     <string name="settings_cluster_music_seconds_value">%1$d s</string>
+    <string name="settings_cluster_mirror_view_zoom">Ampliación</string>
+    <string name="settings_cluster_mirror_view_focus_x">Encuadre izquierda/derecha</string>
+    <string name="settings_cluster_mirror_view_focus_x_summary">0 = extremo izquierdo de la pantalla central, 100 = extremo derecho.</string>
+    <string name="settings_cluster_mirror_view_focus_y">Encuadre arriba/abajo</string>
+    <string name="settings_cluster_mirror_view_focus_y_summary">0 = borde superior, 100 = borde inferior.</string>
+    <string name="settings_cluster_mirror_turn_card">Mostrar tarjeta de giro al duplicar</string>
+    <string name="settings_cluster_mirror_turn_card_summary">Superpone la flecha de giro y la distancia al mapa de la pantalla central en el cuadro. El encuadre permite recortar las indicaciones de Amap.</string>
 </resources>

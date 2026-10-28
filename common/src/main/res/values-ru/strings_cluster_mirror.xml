@@ -17,4 +17,11 @@
     <string name="settings_cluster_music_seconds">Длительность показа</string>
     <string name="settings_cluster_music_seconds_summary">Время показа карточки после смены трека; в постоянном режиме — время показа названия.</string>
     <string name="settings_cluster_music_seconds_value">%1$d с</string>
+    <string name="settings_cluster_mirror_view_zoom">Масштаб</string>
+    <string name="settings_cluster_mirror_view_focus_x">Область слева/справа</string>
+    <string name="settings_cluster_mirror_view_focus_x_summary">0 = левый край изображения центрального экрана, 100 = правый.</string>
+    <string name="settings_cluster_mirror_view_focus_y">Область сверху/снизу</string>
+    <string name="settings_cluster_mirror_view_focus_y_summary">0 = верхний край, 100 = нижний.</string>
+    <string name="settings_cluster_mirror_turn_card">Показывать карточку поворота при дублировании</string>
+    <string name="settings_cluster_mirror_turn_card_summary">Показывает стрелку поворота и расстояние поверх карты центрального экрана на приборной панели. Область просмотра позволяет обрезать указания Amap.</string>
 </resources>

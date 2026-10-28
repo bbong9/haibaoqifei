@@ -2378,6 +2378,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 }
                                 if (AirPlayPersistence.loadClusterMirrorSize(this) == ClusterMirrorSize.CUSTOM)
                                     clusterMirrorCustomControls(card)
+                                toggle(card, getString(R.string.settings_cluster_mirror_turn_card),
+                                    getString(R.string.settings_cluster_mirror_turn_card_summary),
+                                    AirPlayPersistence.loadClusterMirrorTurnCard(this)) {
+                                    AirPlayPersistence.saveClusterMirrorTurnCard(this, it)
+                                    render()
+                                }
                                 toggle(card, getString(R.string.settings_cluster_mirror_nav_only),
                                     getString(R.string.settings_cluster_mirror_nav_only_summary),
                                     AirPlayPersistence.loadClusterMirrorNavOnly(this)) {
@@ -2425,8 +2431,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 }
                             }
                         }
-                        if (customCard) {
-                            card.addView(overlaySliderRow(
+                        }
+                        if ((!mirrorMain && customCard) ||
+                            (mirrorMain && AirPlayPersistence.loadClusterMirrorTurnCard(this))) {
+                            fun addTurnCardSlider(row: OverlaySliderRow) {
+                                if (mirrorMain) {
+                                    val head = row.getChildAt(0) as LinearLayout
+                                    val value = head.getChildAt(head.childCount - 1)
+                                    value.layoutParams = (value.layoutParams as LinearLayout.LayoutParams).apply {
+                                        marginStart = dp(SETTINGS_BLOCK_GAP_DP)
+                                    }
+                                }
+                                card.addView(row)
+                            }
+                            addTurnCardSlider(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_size),
                                 ClusterTurnCardOverlay.sizePercents,
                                 AirPlayPersistence.loadClusterTurnCardOverlaySizePercent(this),
@@ -2437,19 +2455,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 AirPlayPersistence.loadClusterLaneStrip(this)) {
                                 AirPlayPersistence.saveClusterLaneStrip(this, it)
                             }
-                            card.addView(overlaySliderRow(
+                            addTurnCardSlider(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_opacity),
                                 ClusterTurnCardOverlay.opacityPercents,
                                 AirPlayPersistence.loadClusterTurnCardOpacityPercent(this),
                             ) { it -> getString(R.string.turn_card_overlay_opacity_option, it) }
                                 .also { it.onSave = { v -> AirPlayPersistence.saveClusterTurnCardOpacityPercent(this, v) } })
-                            card.addView(overlaySliderRow(
+                            addTurnCardSlider(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_horizontal),
                                 ClusterTurnCardOverlay.xPercents,
                                 AirPlayPersistence.loadClusterTurnCardOverlayXPercent(this),
                             ) { it -> overlayOffsetLabel(it, getString(R.string.marker_left), getString(R.string.marker_right), 50) }
                                 .also { it.onSave = { v -> AirPlayPersistence.saveClusterTurnCardOverlayXPercent(this, v) } })
-                            card.addView(overlaySliderRow(
+                            addTurnCardSlider(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_vertical),
                                 ClusterTurnCardOverlay.yPercents,
                                 AirPlayPersistence.loadClusterTurnCardOverlayYPercent(this),
@@ -2461,7 +2479,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 render()
                             }, matchButton(10, 56))
                             card.addView(label(getString(R.string.turn_card_overlay_note), 14, MUTED))
-                        }
                         }
                         val turnCard = !mirrorMain && officialCardOnly
                         if (!fullPanelCluster) {
@@ -4045,6 +4062,36 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     marginStart = dp(SETTINGS_BLOCK_GAP_DP)
                 }
             })
+        }
+        val view = AirPlayPersistence.loadClusterMirrorView(this)
+        listOf(
+            Triple("zoom", R.string.settings_cluster_mirror_view_zoom, view.zoom),
+            Triple("focusX", R.string.settings_cluster_mirror_view_focus_x, view.focusX),
+            Triple("focusY", R.string.settings_cluster_mirror_view_focus_y, view.focusY),
+        ).forEach { (key, title, value) ->
+            card.addView(overlaySliderRow(getString(title),
+                (if (key == "zoom") 100..250 else 0..100).toList(), value) { "$it%" }.also { row ->
+                row.onSave = { percent ->
+                    val current = AirPlayPersistence.loadClusterMirrorView(this)
+                    val next = when (key) {
+                        "zoom" -> current.copy(zoom = percent)
+                        "focusX" -> current.copy(focusX = percent)
+                        else -> current.copy(focusY = percent)
+                    }
+                    AirPlayPersistence.saveClusterMirrorView(this, next)
+                }
+                val head = row.getChildAt(0) as LinearLayout
+                val displayedValue = head.getChildAt(head.childCount - 1)
+                displayedValue.layoutParams = (displayedValue.layoutParams as LinearLayout.LayoutParams).apply {
+                    marginStart = dp(SETTINGS_BLOCK_GAP_DP)
+                }
+            })
+            val summary = when (key) {
+                "focusX" -> R.string.settings_cluster_mirror_view_focus_x_summary
+                "focusY" -> R.string.settings_cluster_mirror_view_focus_y_summary
+                else -> null
+            }
+            if (summary != null) card.addView(label(getString(summary), 14, MUTED))
         }
     }
 

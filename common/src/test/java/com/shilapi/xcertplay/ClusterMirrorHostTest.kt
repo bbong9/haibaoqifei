@@ -6,6 +6,8 @@ import android.view.Surface
 import com.shilapi.xcertplay.airplay.AirPlaySession
 import com.shilapi.xcertplay.hud.BydNavigationOutputs
 import com.shilapi.xcertplay.hud.ClusterTurnGuidance
+import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
+import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
@@ -164,6 +166,30 @@ class ClusterMirrorHostTest {
         invoke()
         waitUntil { mirror === surface }
         assertTrue(BydNavigationOutputs.clusterMainMirrorShown())
+    }
+
+    @Test fun mirrorForwardsHostGuidanceAndPreservesLanesWhenTurnCardIsToggled() {
+        AirPlayPersistence.saveClusterContent(host, CarPlayClusterDisplay.Content.MAP)
+        AirPlayPersistence.saveClusterMirrorMain(host, true)
+        invoke()
+        waitUntil { get("clusterMirrorAttached") === surface }
+        val guidance = ClusterTurnGuidance(2, 0, 50, "")
+        guidance(guidance)
+        ClusterActivityOutput.setLanes(listOf(LaneGuidanceLane(0, 2, 0, null)))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(guidance, ClusterActivityOutput.guidance)
+        assertEquals(1, ClusterActivityOutput.lanes.size)
+        val previousEvents = events.toList()
+        for (enabled in listOf(true, false, true)) {
+            AirPlayPersistence.saveClusterMirrorTurnCard(host, enabled)
+            host.javaClass.getDeclaredMethod("applyClusterTurnOverlay").apply { isAccessible = true }.invoke(host)
+            assertEquals(guidance, ClusterActivityOutput.guidance)
+            assertEquals(1, ClusterActivityOutput.lanes.size)
+        }
+        assertEquals(previousEvents, events)
+        guidance(null)
+        assertNull(ClusterActivityOutput.guidance)
+        assertTrue(ClusterActivityOutput.lanes.isEmpty())
     }
 
     @Test fun cancelledTransitionDoesNotAttachBeforeTheAltDecoderReleases() {

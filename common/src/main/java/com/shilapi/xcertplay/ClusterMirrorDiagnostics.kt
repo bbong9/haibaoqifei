@@ -23,9 +23,11 @@ internal object ClusterMirrorDiagnostics {
         val size = AirPlayPersistence.loadClusterMirrorSize(context)
         val custom = if (size == ClusterMirrorSize.CUSTOM) {
             val rect = AirPlayPersistence.loadClusterMirrorCustom(context)
-            " mirrorCustom=${rect.x},${rect.y},${rect.w},${rect.h}"
+            val view = AirPlayPersistence.loadClusterMirrorView(context)
+            " mirrorCustom=${rect.x},${rect.y},${rect.w},${rect.h} mirrorView=${view.zoom},${view.focusX},${view.focusY}"
         } else ""
-        return "mirrorMain=$mode mirrorSize=${size.name}$custom " +
+        val turnCard = if (AirPlayPersistence.loadClusterMirrorTurnCard(context)) "on" else "off"
+        return "mirrorMain=$mode mirrorSize=${size.name}$custom mirrorTurnCard=$turnCard " +
             "mirrorAttached=${ClusterActivityOutput.mirrorAttached} mirrorRect=$rect mirrorCrop=$crop dockEdge=$dock " +
             "clusterUiPaused=${BydNavigationOutputs.clusterMainMirrorShown()} navOnly=$navOnly " +
             "navigating=${ClusterActivityOutput.mirrorNavigating} dockCrop=${AirPlayPersistence.loadClusterMirrorDockCrop(context)}"

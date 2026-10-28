@@ -17,4 +17,11 @@
     <string name="settings_cluster_music_seconds">顯示時間</string>
     <string name="settings_cluster_music_seconds_summary">換歌後卡片顯示多久；選擇常駐時為歌名停留的時間。</string>
     <string name="settings_cluster_music_seconds_value">%1$d秒</string>
+    <string name="settings_cluster_mirror_view_zoom">放大</string>
+    <string name="settings_cluster_mirror_view_focus_x">取景左右</string>
+    <string name="settings_cluster_mirror_view_focus_x_summary">0 = 擷取中控螢幕畫面最左邊，100 = 最右邊。</string>
+    <string name="settings_cluster_mirror_view_focus_y">取景上下</string>
+    <string name="settings_cluster_mirror_view_focus_y_summary">0 = 擷取最上方，100 = 最下方。</string>
+    <string name="settings_cluster_mirror_turn_card">同步時顯示轉向卡</string>
+    <string name="settings_cluster_mirror_turn_card_summary">儀表顯示中控螢幕地圖時，疊加轉向箭頭與距離，可搭配取景裁掉高德的轉向資訊。</string>
 </resources>

@@ -413,6 +413,74 @@ class SealSettingsUiTest {
         titles.forEach { assertMissing(screen, it) }
     }
 
+    @Test fun mirrorFrameSlidersAreCustomOnlyAndSaveImmediately() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        AirPlayPersistence.saveClusterMirrorMain(context, true)
+        val screen = openSettings()
+        val titles = listOf(R.string.settings_cluster_mirror_view_zoom,
+            R.string.settings_cluster_mirror_view_focus_x, R.string.settings_cluster_mirror_view_focus_y)
+        for (size in listOf(ClusterMirrorSize.SAFE_AREA, ClusterMirrorSize.FULL_HEIGHT)) {
+            AirPlayPersistence.saveClusterMirrorSize(context, size)
+            openCategory(screen, SettingsCategory.NAVIGATION)
+            titles.forEach { assertMissing(screen, it) }
+        }
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        titles.forEach { assertHas(screen, it) }
+        var refreshes = 0
+        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
+        try {
+            for ((title, progress) in titles.zip(listOf(80, 20, 90))) {
+                val text = descendants(categoryContent(screen)).filterIsInstance<TextView>()
+                    .single { it.text.toString() == screen.getString(title) }
+                val slider = descendants(text.parent.parent as ViewGroup).filterIsInstance<SeekBar>().single()
+                val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
+                    .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
+                listener.onProgressChanged(slider, progress, true)
+            }
+            assertEquals(ClusterMirrorView(180, 20, 90), AirPlayPersistence.loadClusterMirrorView(context))
+            assertEquals(3, refreshes)
+            assertFalse(PendingReconnect.isPending(null))
+        } finally { AirPlayPersistence.overlaySettingsListener = null }
+        AirPlayPersistence.saveClusterMirrorMain(context, false)
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        titles.forEach { assertMissing(screen, it) }
+    }
+
+    @Test fun mirrorTurnCardToggleRevealsExistingControlsAndSavesImmediately() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        assertMissing(screen, R.string.settings_cluster_mirror_turn_card)
+        mirrorSwitch(screen).isChecked = true
+        assertHas(screen, R.string.settings_cluster_mirror_turn_card)
+        val controls = listOf(R.string.turn_card_overlay_size, R.string.turn_card_overlay_horizontal,
+            R.string.turn_card_overlay_vertical, R.string.turn_card_overlay_opacity, R.string.settings_cluster_lane_strip)
+        controls.forEach { assertMissing(screen, it) }
+        var refreshes = 0
+        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
+        try {
+            fun turnSwitch() = descendants(categoryContent(screen)).filterIsInstance<Switch>()
+                .single { it.contentDescription == screen.getString(R.string.settings_cluster_mirror_turn_card) }
+            assertFalse(turnSwitch().isChecked)
+            turnSwitch().isChecked = true
+            assertTrue(AirPlayPersistence.loadClusterMirrorTurnCard(context))
+            controls.forEach { assertHas(screen, it) }
+            turnSwitch().isChecked = false
+            assertFalse(AirPlayPersistence.loadClusterMirrorTurnCard(context))
+            controls.forEach { assertMissing(screen, it) }
+            assertEquals(2, refreshes)
+            assertFalse(PendingReconnect.isPending(null))
+        } finally { AirPlayPersistence.overlaySettingsListener = null }
+        mirrorSwitch(screen).isChecked = false
+        assertMissing(screen, R.string.settings_cluster_mirror_turn_card)
+    }
+
     @Test fun musicDurationChoiceIsVisibleOnlyWhenEnabledAndSavesWithoutReconnect() {
         AirPlayPersistence.saveClusterMapEnabled(context, true)
         AirPlayPersistence.saveAdbClusterEnabled(context, true)
@@ -493,6 +561,58 @@ class SealSettingsUiTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
     fun customArabicLargeFontScreenshots() = captureCustomSettings("compact-ar")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
+    fun frameCompactLargeFontScreenshots() = captureFrameSettings("compact-zh")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
+    fun frameExpandedLargeFontScreenshots() = captureFrameSettings("expanded-zh")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
+    fun frameArabicLargeFontScreenshots() = captureFrameSettings("compact-ar")
+
+    private fun captureFrameSettings(name: String) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        AirPlayPersistence.saveClusterMirrorMain(context, true)
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
+        AirPlayPersistence.saveClusterMirrorTurnCard(context, true)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        layoutRoot(screen)
+        val scroll = categoryContent(screen)
+        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val base = File(requireNotNull(System.getProperty("user.dir")))
+        val project = if (base.name == "common") base.parentFile else base
+        val directory = File(project, "build/cluster-frame-screenshots").apply { mkdirs() }
+        for ((suffix, id) in listOf("frame" to R.string.settings_cluster_mirror_view_zoom,
+            "turn" to R.string.settings_cluster_mirror_turn_card)) {
+            val target = descendants(scroll).filterIsInstance<TextView>()
+                .first { it.text.toString() == screen.getString(id) }
+            val rect = Rect()
+            target.getDrawingRect(rect)
+            scroll.offsetDescendantRectToMyCoords(target, rect)
+            scroll.scrollTo(0, (rect.top - (24 * screen.resources.displayMetrics.density).toInt()).coerceAtLeast(0))
+            assertTrue(rect.top - scroll.scrollY in 0 until scroll.height)
+            val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            try {
+                val canvas = Canvas(bitmap)
+                if (root === scroll) {
+                    canvas.drawColor(ReflectionHelpers.getField<DiPlayPalette>(screen, "palette").background)
+                    canvas.translate(0f, -scroll.scrollY.toFloat())
+                }
+                root.draw(canvas)
+                File(directory, "$name-$suffix.png").outputStream().use {
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            } finally { bitmap.recycle() }
+        }
+    }
 
     private fun captureCustomSettings(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)

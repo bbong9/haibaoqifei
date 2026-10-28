@@ -1629,7 +1629,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         val effectiveNight = if (smallWindow) smallCardNight else cardNight
         val effectiveOpacity = if (smallWindow) AirPlayPersistence.loadClusterSmallWindowCardOpacityPercent(this)
         else AirPlayPersistence.loadClusterTurnCardOpacityPercent(this)
-        ClusterActivityOutput.setTurnCard(if (overlay) clusterTurnGuidance else null,
+        ClusterActivityOutput.setTurnCard(if (overlay || ClusterMirrorPolicy.enabled(this)) clusterTurnGuidance else null,
             xPercent, yPercent, sizePercent, effectiveOpacity, effectiveNight)
         val presentations = (clusterLayers.values + listOfNotNull(clusterPresentation)).distinct()
         for (presentation in presentations) {
