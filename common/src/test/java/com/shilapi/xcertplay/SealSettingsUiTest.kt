@@ -13,7 +13,6 @@ import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
@@ -216,271 +215,6 @@ class SealSettingsUiTest {
         AirPlayPersistence.overlaySettingsListener = null
     }
 
-    @Test fun clusterMirrorSettingsAreLimitedToTheAdbRouteAndHideTurnCardControls() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        assertHas(screen, R.string.settings_cluster_mirror_main)
-        assertHas(screen, R.string.dashboard_shows)
-        assertMissing(screen, R.string.settings_cluster_mirror_size)
-        assertSearchCategory(screen, R.string.settings_cluster_mirror_main, SettingsCategory.NAVIGATION)
-        var refreshes = 0
-        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
-        mirrorSwitch(screen).isChecked = true
-        assertTrue(AirPlayPersistence.loadClusterMirrorMain(context))
-        assertEquals(1, refreshes)
-        assertHas(screen, R.string.settings_cluster_mirror_size)
-        listOf(R.string.dashboard_shows, R.string.turn_card_overlay_size,
-            R.string.turn_card_overlay_horizontal, R.string.turn_card_overlay_vertical,
-            R.string.turn_card_overlay_opacity, R.string.settings_cluster_lane_strip).forEach { assertMissing(screen, it) }
-        assertTrue(descendants(categoryContent(screen)).filterIsInstance<TextView>().any {
-            it.text.toString().contains(screen.getString(R.string.settings_cluster_mirror_size_safe))
-        })
-        openCategory(screen, SettingsCategory.DISPLAY)
-        assertHas(screen, R.string.settings_resolution_capped_by_cluster_mirror)
-        AirPlayPersistence.saveDisplayScalePercent(context, 60)
-        openCategory(screen, SettingsCategory.DISPLAY)
-        assertFalse(descendants(categoryContent(screen)).filterIsInstance<TextView>().any {
-            it.text.toString() == screen.getString(R.string.settings_resolution_capped_by_cluster_mirror) && it.visibility == View.VISIBLE
-        })
-        AirPlayPersistence.saveLegacyClusterEnabled(context, true)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        assertMissing(screen, R.string.settings_cluster_mirror_main)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveAdbClusterEnabled(context, false)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        assertMissing(screen, R.string.settings_cluster_mirror_main)
-    }
-
-    @Test fun mirrorToggleOnlyRequestsReconnectWhenTheLiveResolutionWillChange() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveDisplayScalePercent(context, 100)
-        val screen = openSettings()
-        val controller = mock(CarPlayController::class.java)
-        val sink = mock(AndroidMediaSink::class.java)
-        var disconnects = 0
-        fun live(percent: Int) {
-            CarPlayBackgroundSession.store(controller, sink, 800, 480, Any(),
-                CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480,
-                    resolutionPercent = percent)) { disconnects++ }
-        }
-        live(100)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        mirrorSwitch(screen).isChecked = true
-        assertTrue(PendingReconnect.isPending(controller))
-        assertEquals(0, disconnects)
-        PendingReconnect.clear()
-        AirPlayPersistence.saveClusterMirrorMain(context, false)
-        AirPlayPersistence.saveDisplayScalePercent(context, 60)
-        live(60)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        mirrorSwitch(screen).isChecked = true
-        assertFalse(PendingReconnect.isPending(controller))
-        assertEquals(0, disconnects)
-    }
-
-    @Test fun mirrorNavigationAndDockControlsAreVisibleOnlyWhenMirroringAndApplyLive() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        assertMissing(screen, R.string.settings_cluster_mirror_nav_only)
-        assertMissing(screen, R.string.settings_cluster_mirror_dock_crop)
-        mirrorSwitch(screen).isChecked = true
-        assertHas(screen, R.string.settings_cluster_mirror_nav_only)
-        assertHas(screen, R.string.settings_cluster_mirror_dock_crop)
-        var changes = 0
-        AirPlayPersistence.overlaySettingsListener = { changes++ }
-        val navSwitch = descendants(categoryContent(screen)).filterIsInstance<Switch>()
-            .single { it.contentDescription == screen.getString(R.string.settings_cluster_mirror_nav_only) }
-        assertTrue(navSwitch.isChecked)
-        navSwitch.isChecked = false
-        assertFalse(AirPlayPersistence.loadClusterMirrorNavOnly(context))
-        val slider = descendants(categoryContent(screen)).filterIsInstance<SeekBar>().single { it.max == 20 }
-        val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
-            .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
-        listener.onProgressChanged(slider, 11, true)
-        assertEquals(11, AirPlayPersistence.loadClusterMirrorDockCrop(context))
-        assertEquals(2, changes)
-        assertFalse(PendingReconnect.isPending(null))
-        mirrorSwitch(screen).isChecked = false
-        assertMissing(screen, R.string.settings_cluster_mirror_nav_only)
-        assertMissing(screen, R.string.settings_cluster_mirror_dock_crop)
-        AirPlayPersistence.overlaySettingsListener = null
-    }
-
-    @Test fun revertingMirrorToggleClearsOnlyItsReconnectRequirement() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveDisplayScalePercent(context, 100)
-        val screen = openSettings()
-        val controller = mock(CarPlayController::class.java)
-        val sink = mock(AndroidMediaSink::class.java)
-        CarPlayBackgroundSession.store(controller, sink, 800, 480, Any(),
-            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480,
-                resolutionPercent = 100)) {}
-        openCategory(screen, SettingsCategory.NAVIGATION)
-
-        mirrorSwitch(screen).isChecked = true
-        assertTrue(PendingReconnect.isPending(controller))
-        mirrorSwitch(screen).isChecked = false
-        assertFalse(PendingReconnect.isPending(controller))
-
-        PendingReconnect.mark(controller)
-        mirrorSwitch(screen).isChecked = true
-        mirrorSwitch(screen).isChecked = false
-        assertTrue(PendingReconnect.isPending(controller))
-    }
-
-    @Test fun mirrorSizeChoicesApplyImmediatelyWithoutReconnect() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterMirrorMain(context, true)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        var refreshes = 0
-        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
-        try {
-            fun select(index: Int) {
-                val title = screen.getString(R.string.settings_cluster_mirror_size)
-                descendants(categoryContent(screen)).filterIsInstance<TextView>()
-                    .first { it.text.toString().startsWith("$title · ") }.performClick()
-                val dialog = ShadowAlertDialog.getLatestAlertDialog()
-                assertEquals(3, dialog.listView.adapter.count)
-                dialog.listView.performItemClick(null, index, index.toLong())
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-                shadowOf(Looper.getMainLooper()).idle()
-            }
-            select(1)
-            assertEquals(ClusterMirrorSize.FULL_HEIGHT, AirPlayPersistence.loadClusterMirrorSize(context))
-            select(0)
-            assertEquals(ClusterMirrorSize.SAFE_AREA, AirPlayPersistence.loadClusterMirrorSize(context))
-            assertEquals(2, refreshes)
-            assertFalse(PendingReconnect.isPending(null))
-        } finally {
-            AirPlayPersistence.overlaySettingsListener = null
-        }
-    }
-
-    @Test fun customMirrorSlidersAppearOnlyInCustomModeAndSaveWithoutReconnect() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterMirrorMain(context, true)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        val titles = listOf(R.string.settings_cluster_mirror_custom_x, R.string.settings_cluster_mirror_custom_y,
-            R.string.settings_cluster_mirror_custom_w, R.string.settings_cluster_mirror_custom_h)
-        titles.forEach { assertMissing(screen, it) }
-        val sizeTitle = screen.getString(R.string.settings_cluster_mirror_size)
-        descendants(categoryContent(screen)).filterIsInstance<TextView>()
-            .first { it.text.toString().startsWith("$sizeTitle · ") }.performClick()
-        val dialog = ShadowAlertDialog.getLatestAlertDialog()
-        assertEquals(3, dialog.listView.adapter.count)
-        dialog.listView.performItemClick(null, 2, 2L)
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(ClusterMirrorSize.CUSTOM, AirPlayPersistence.loadClusterMirrorSize(context))
-        titles.forEach { assertHas(screen, it) }
-        var refreshes = 0
-        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
-        try {
-            for ((title, progress) in titles.zip(listOf(75, 25, 40, 60))) {
-                val label = descendants(categoryContent(screen)).filterIsInstance<TextView>()
-                    .single { it.text.toString() == screen.getString(title) }
-                val row = label.parent.parent as ViewGroup
-                val slider = descendants(row).filterIsInstance<SeekBar>().single()
-                val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
-                    .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
-                listener.onProgressChanged(slider, progress, true)
-            }
-            assertEquals(ClusterMirrorCustomRect(75, 25, 60, 80), AirPlayPersistence.loadClusterMirrorCustom(context))
-            assertEquals(4, refreshes)
-            assertFalse(PendingReconnect.isPending(null))
-        } finally {
-            AirPlayPersistence.overlaySettingsListener = null
-        }
-        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.FULL_HEIGHT)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        titles.forEach { assertMissing(screen, it) }
-    }
-
-    @Test fun mirrorFrameSlidersAreCustomOnlyAndSaveImmediately() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterMirrorMain(context, true)
-        val screen = openSettings()
-        val titles = listOf(R.string.settings_cluster_mirror_view_zoom,
-            R.string.settings_cluster_mirror_view_focus_x, R.string.settings_cluster_mirror_view_focus_y)
-        for (size in listOf(ClusterMirrorSize.SAFE_AREA, ClusterMirrorSize.FULL_HEIGHT)) {
-            AirPlayPersistence.saveClusterMirrorSize(context, size)
-            openCategory(screen, SettingsCategory.NAVIGATION)
-            titles.forEach { assertMissing(screen, it) }
-        }
-        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        titles.forEach { assertHas(screen, it) }
-        var refreshes = 0
-        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
-        try {
-            for ((title, progress) in titles.zip(listOf(80, 20, 90))) {
-                val text = descendants(categoryContent(screen)).filterIsInstance<TextView>()
-                    .single { it.text.toString() == screen.getString(title) }
-                val slider = descendants(text.parent.parent as ViewGroup).filterIsInstance<SeekBar>().single()
-                val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
-                    .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
-                listener.onProgressChanged(slider, progress, true)
-            }
-            assertEquals(ClusterMirrorView(180, 20, 90), AirPlayPersistence.loadClusterMirrorView(context))
-            assertEquals(3, refreshes)
-            assertFalse(PendingReconnect.isPending(null))
-        } finally { AirPlayPersistence.overlaySettingsListener = null }
-        AirPlayPersistence.saveClusterMirrorMain(context, false)
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        titles.forEach { assertMissing(screen, it) }
-    }
-
-    @Test fun mirrorTurnCardToggleRevealsExistingControlsAndSavesImmediately() {
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        assertMissing(screen, R.string.settings_cluster_mirror_turn_card)
-        mirrorSwitch(screen).isChecked = true
-        assertHas(screen, R.string.settings_cluster_mirror_turn_card)
-        val controls = listOf(R.string.turn_card_overlay_size, R.string.turn_card_overlay_horizontal,
-            R.string.turn_card_overlay_vertical, R.string.turn_card_overlay_opacity, R.string.settings_cluster_lane_strip)
-        controls.forEach { assertMissing(screen, it) }
-        var refreshes = 0
-        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
-        try {
-            fun turnSwitch() = descendants(categoryContent(screen)).filterIsInstance<Switch>()
-                .single { it.contentDescription == screen.getString(R.string.settings_cluster_mirror_turn_card) }
-            assertFalse(turnSwitch().isChecked)
-            turnSwitch().isChecked = true
-            assertTrue(AirPlayPersistence.loadClusterMirrorTurnCard(context))
-            controls.forEach { assertHas(screen, it) }
-            turnSwitch().isChecked = false
-            assertFalse(AirPlayPersistence.loadClusterMirrorTurnCard(context))
-            controls.forEach { assertMissing(screen, it) }
-            assertEquals(2, refreshes)
-            assertFalse(PendingReconnect.isPending(null))
-        } finally { AirPlayPersistence.overlaySettingsListener = null }
-        mirrorSwitch(screen).isChecked = false
-        assertMissing(screen, R.string.settings_cluster_mirror_turn_card)
-    }
-
     @Test fun musicDurationChoiceIsVisibleOnlyWhenEnabledAndSavesWithoutReconnect() {
         AirPlayPersistence.saveClusterMapEnabled(context, true)
         AirPlayPersistence.saveAdbClusterEnabled(context, true)
@@ -506,10 +240,6 @@ class SealSettingsUiTest {
         musicSwitch().isChecked = false
         assertMissing(screen, R.string.settings_cluster_music_seconds)
     }
-
-    private fun mirrorSwitch(screen: DiPlayActivity): Switch =
-        descendants(categoryContent(screen)).filterIsInstance<Switch>()
-            .single { it.contentDescription == screen.getString(R.string.settings_cluster_mirror_main) }
 
     @Test fun otherEditionsKeepAdvancedAndItsOriginalControls() {
         val screen = openSettings(seal = false)
@@ -540,143 +270,58 @@ class SealSettingsUiTest {
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
-    fun mirrorCompactLargeFontScreenshot() = captureMirrorSettings("compact-zh")
+    fun clusterCompactLargeFontScreenshot() = captureClusterSettings("compact-zh")
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
-    fun mirrorExpandedLargeFontScreenshot() = captureMirrorSettings("expanded-zh")
+    fun clusterExpandedLargeFontScreenshot() = captureClusterSettings("expanded-zh")
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
-    fun mirrorArabicLargeFontScreenshot() = captureMirrorSettings("compact-ar")
+    fun clusterArabicLargeFontScreenshot() = captureClusterSettings("compact-ar")
 
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
-    fun customCompactLargeFontScreenshots() = captureCustomSettings("compact-zh")
-
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
-    fun customExpandedLargeFontScreenshots() = captureCustomSettings("expanded-zh")
-
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
-    fun customArabicLargeFontScreenshots() = captureCustomSettings("compact-ar")
-
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
-    fun frameCompactLargeFontScreenshots() = captureFrameSettings("compact-zh")
-
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
-    fun frameExpandedLargeFontScreenshots() = captureFrameSettings("expanded-zh")
-
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
-    fun frameArabicLargeFontScreenshots() = captureFrameSettings("compact-ar")
-
-    private fun captureFrameSettings(name: String) {
+    private fun captureClusterSettings(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)
         AirPlayPersistence.saveClusterMapEnabled(context, true)
         AirPlayPersistence.saveAdbClusterEnabled(context, true)
         AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterMirrorMain(context, true)
-        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
-        AirPlayPersistence.saveClusterMirrorTurnCard(context, true)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        layoutRoot(screen)
-        val scroll = categoryContent(screen)
-        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
-        val base = File(requireNotNull(System.getProperty("user.dir")))
-        val project = if (base.name == "common") base.parentFile else base
-        val directory = File(project, "build/cluster-frame-screenshots").apply { mkdirs() }
-        for ((suffix, id) in listOf("frame" to R.string.settings_cluster_mirror_view_zoom,
-            "turn" to R.string.settings_cluster_mirror_turn_card)) {
-            val target = descendants(scroll).filterIsInstance<TextView>()
-                .first { it.text.toString() == screen.getString(id) }
-            val rect = Rect()
-            target.getDrawingRect(rect)
-            scroll.offsetDescendantRectToMyCoords(target, rect)
-            scroll.scrollTo(0, (rect.top - (24 * screen.resources.displayMetrics.density).toInt()).coerceAtLeast(0))
-            assertTrue(rect.top - scroll.scrollY in 0 until scroll.height)
-            val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
-            try {
-                val canvas = Canvas(bitmap)
-                if (root === scroll) {
-                    canvas.drawColor(ReflectionHelpers.getField<DiPlayPalette>(screen, "palette").background)
-                    canvas.translate(0f, -scroll.scrollY.toFloat())
-                }
-                root.draw(canvas)
-                File(directory, "$name-$suffix.png").outputStream().use {
-                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-                }
-            } finally { bitmap.recycle() }
-        }
-    }
-
-    private fun captureCustomSettings(name: String) {
-        RuntimeEnvironment.setFontScale(1.3f)
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterMirrorMain(context, true)
-        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
         ClusterMusicSettings.saveEnabled(context, true)
         val screen = openSettings()
         openCategory(screen, SettingsCategory.NAVIGATION)
+        listOf(R.string.settings_cluster_speedometer, R.string.settings_cluster_music,
+            R.string.settings_cluster_music_mode, R.string.settings_cluster_music_seconds,
+            R.string.dashboard_shows, R.string.turn_card_overlay_size,
+            R.string.settings_cluster_lane_strip).forEach { assertHas(screen, it) }
         layoutRoot(screen)
         val scroll = categoryContent(screen)
-        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val title = screen.getString(R.string.settings_cluster_music_seconds)
+        val target = descendants(scroll).filterIsInstance<TextView>()
+            .first { it.text.toString().startsWith("$title · ") }
+        val dashboardTitle = screen.getString(R.string.dashboard_shows)
+        val dashboard = descendants(scroll).filterIsInstance<TextView>()
+            .first { it.text.toString().startsWith("$dashboardTitle · ") }
+        var card: View = target
+        while (descendants(card).none { it === dashboard }) {
+            card = card.parent as View
+        }
+        assertTrue(card.width > 0 && card.height > 0)
         val base = File(requireNotNull(System.getProperty("user.dir")))
         val project = if (base.name == "common") base.parentFile else base
-        val directory = File(project, "build/cluster-custom-screenshots").apply { mkdirs() }
-        for ((suffix, id) in listOf("mirror" to R.string.settings_cluster_mirror_custom_x,
-            "music" to R.string.settings_cluster_music_seconds)) {
-            val text = screen.getString(id)
-            val target = descendants(scroll).filterIsInstance<TextView>()
-                .first { it.text.toString() == text || it.text.toString().startsWith("$text · ") }
-            val rect = Rect()
-            target.getDrawingRect(rect)
-            scroll.offsetDescendantRectToMyCoords(target, rect)
-            scroll.scrollTo(0, (rect.top - (24 * screen.resources.displayMetrics.density).toInt()).coerceAtLeast(0))
-            assertTrue(rect.top - scroll.scrollY in 0 until scroll.height)
-            val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
-            try {
-                val canvas = Canvas(bitmap)
-                if (root === scroll) {
-                    canvas.drawColor(ReflectionHelpers.getField<DiPlayPalette>(screen, "palette").background)
-                    canvas.translate(0f, -scroll.scrollY.toFloat())
-                }
-                root.draw(canvas)
-                File(directory, "$name-$suffix.png").outputStream().use {
-                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-                }
-            } finally { bitmap.recycle() }
-        }
-    }
-
-    private fun captureMirrorSettings(name: String) {
-        RuntimeEnvironment.setFontScale(1.3f)
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
-        AirPlayPersistence.saveAdbClusterEnabled(context, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
-        AirPlayPersistence.saveClusterMirrorMain(context, true)
-        val screen = openSettings()
-        openCategory(screen, SettingsCategory.NAVIGATION)
-        layoutRoot(screen)
-        val scroll = categoryContent(screen)
-        val target = descendants(scroll).filterIsInstance<TextView>()
-            .first { it.text.toString() == screen.getString(R.string.settings_cluster_mirror_nav_only) }
+        val directory = File(project, "build/cluster-settings-card16").apply { mkdirs() }
+        val cardBitmap = Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888)
+        try {
+            card.draw(Canvas(cardBitmap))
+            File(directory, "$name-card.png").outputStream().use {
+                assertTrue(cardBitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { cardBitmap.recycle() }
         val rect = Rect()
         target.getDrawingRect(rect)
         scroll.offsetDescendantRectToMyCoords(target, rect)
         scroll.scrollTo(0, (rect.top - (24 * screen.resources.displayMetrics.density).toInt()).coerceAtLeast(0))
         assertTrue(rect.top - scroll.scrollY in 0 until scroll.height)
         val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
-        assertTrue(root.width > 0 && root.height > 0)
-        val base = File(requireNotNull(System.getProperty("user.dir")))
-        val project = if (base.name == "common") base.parentFile else base
-        val directory = File(project, "build/cluster-mirror-screenshots").apply { mkdirs() }
         val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
         try {
             val canvas = Canvas(bitmap)

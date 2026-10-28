@@ -56,24 +56,20 @@ class VideoDecoderPriorityTest {
 
     @Test fun onlyTheMainScreenGetsRealtimePriority() {
         assertEquals(0, videoDecoderPriority(110, null))
-        assertEquals(1, videoDecoderPriority(110, " stream=110 mirror=cluster"))
         assertEquals(1, videoDecoderPriority(111, null))
     }
 
     @Test fun tunedFormatsAndDecoderLogsCarryTheirActualPriority() {
         val main = newSurface()
-        val mirror = newSurface()
         val cluster = newSurface()
         sink.setVideoDiagnosticHandler(110) { reports += it }
         sink.setVideoDiagnosticHandler(111) { reports += it }
         sink.setSurface(110, main)
-        sink.setMirrorSurface(110, "cluster", mirror)
         sink.setSurface(111, cluster)
         sink.onVideoConfig(110, avcC)
         sink.onVideoConfig(111, avcC)
-        waitUntil { formats.size == 3 && reports.count { it.startsWith("decoder=") } >= 3 }
+        waitUntil { formats.size == 2 && reports.count { it.startsWith("decoder=") } >= 2 }
         assertEquals(0, formats.getValue(main).getInteger(MediaFormat.KEY_PRIORITY))
-        assertEquals(1, formats.getValue(mirror).getInteger(MediaFormat.KEY_PRIORITY))
         assertEquals(1, formats.getValue(cluster).getInteger(MediaFormat.KEY_PRIORITY))
         assertTrue(reports.toString(), reports.any { it.startsWith("decoder=") && it.contains(" priority=0") })
         assertTrue(reports.toString(), reports.any { it.startsWith("decoder=") && it.contains(" priority=1") })

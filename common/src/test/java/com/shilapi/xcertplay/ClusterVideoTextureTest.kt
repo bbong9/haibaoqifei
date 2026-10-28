@@ -2,8 +2,6 @@ package com.shilapi.xcertplay
 
 import android.graphics.SurfaceTexture
 import android.graphics.Paint
-import android.graphics.Matrix
-import android.graphics.RectF
 import android.os.Looper
 import android.view.Surface
 import org.junit.Assert.*
@@ -18,21 +16,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class ClusterVideoTextureTest {
-    @Test fun contentRectMapsAllFourKeptCornersToTheViewAndNullRestoresIdentity() {
-        val view = ClusterVideoTexture(RuntimeEnvironment.getApplication()) {}
-        try {
-            view.layout(0, 0, 1920, 720)
-            val keep = RectF(.07f, .05f, .95f, .90f)
-            view.setContentRect(keep)
-            val points = floatArrayOf(keep.left * 1920, keep.top * 720,
-                keep.right * 1920, keep.top * 720, keep.left * 1920, keep.bottom * 720,
-                keep.right * 1920, keep.bottom * 720)
-            view.getTransform(Matrix()).mapPoints(points)
-            assertArrayEquals(floatArrayOf(0f, 0f, 1920f, 0f, 0f, 720f, 1920f, 720f), points, .001f)
-            view.setContentRect(null)
-            assertTrue(view.getTransform(Matrix()).isIdentity)
-        } finally { view.close() }
-    }
     @Test fun actualClusterTextureFollowsLivePictureControlsAndStopsListeningOnClose() {
         val context = RuntimeEnvironment.getApplication()
         val prefs = CarPlayPicture.preferences(context)

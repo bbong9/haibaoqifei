@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">Тривалість показу</string>
+    <string name="settings_cluster_music_seconds_summary">Час показу картки після зміни пісні; у постійному режимі — час показу назви.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d с</string>
+</resources>

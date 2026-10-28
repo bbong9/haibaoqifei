@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">مدة العرض</string>
+    <string name="settings_cluster_music_seconds_summary">مدة ظهور البطاقة بعد تغيير الأغنية؛ وفي الوضع الدائم، مدة ظهور عنوان الأغنية.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d ث</string>
+</resources>

@@ -9,38 +9,10 @@ import java.lang.ref.WeakReference
  */
 internal object PendingReconnect {
     private var session = WeakReference<Any>(null)
-    private var otherPending = false
-    private var clusterMirrorPending = false
 
-    private fun select(session: Any) {
-        if (this.session.get() === session) return
-        this.session = WeakReference(session)
-        otherPending = false
-        clusterMirrorPending = false
-    }
+    fun mark(session: Any) { this.session = WeakReference(session) }
 
-    fun mark(session: Any) {
-        select(session)
-        otherPending = true
-    }
+    fun isPending(current: Any?): Boolean = current != null && current === session.get()
 
-    fun markClusterMirror(session: Any) {
-        select(session)
-        clusterMirrorPending = true
-    }
-
-    fun clearClusterMirror(session: Any) {
-        if (this.session.get() !== session) return
-        clusterMirrorPending = false
-        if (!otherPending) clear()
-    }
-
-    fun isPending(current: Any?): Boolean = current != null && current === session.get() &&
-        (otherPending || clusterMirrorPending)
-
-    fun clear() {
-        session = WeakReference(null)
-        otherPending = false
-        clusterMirrorPending = false
-    }
+    fun clear() { session = WeakReference(null) }
 }

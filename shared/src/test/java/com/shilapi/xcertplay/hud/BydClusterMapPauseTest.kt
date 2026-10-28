@@ -22,28 +22,7 @@ class BydClusterMapPauseTest {
         release.countDown()
         BydClusterMapPause.streamControl = null
         BydClusterMapPause.clusterMapShown = false
-        BydClusterMapPause.mainMirrorShown = false
         BydClusterMapPause.onNaviMode = null
-    }
-
-    @Test
-    fun mainMirrorStopsAndResumesEvenWithoutPauseSettingOrReadableMode() {
-        BydClusterMapPause::class.java.getDeclaredField("context")
-            .apply { isAccessible = true }.set(null, context)
-        BydOutputSettings.setClusterStreamPause(context, false)
-        BydClusterMapPause.clusterMapShown = false
-        BydClusterMapPause.onNaviMode = null
-        var reads = 0
-        BydClusterMapPause.readMode = { reads++; null }
-        val calls = mutableListOf<Boolean>()
-        BydClusterMapPause.streamControl = { calls += it }
-        val tick = BydClusterMapPause::class.java.getDeclaredMethod("tick").apply { isAccessible = true }
-        BydClusterMapPause.mainMirrorShown = true
-        tick.invoke(BydClusterMapPause)
-        BydClusterMapPause.mainMirrorShown = false
-        tick.invoke(BydClusterMapPause)
-        org.junit.Assert.assertEquals(listOf(false, true), calls)
-        org.junit.Assert.assertEquals(0, reads)
     }
 
     @Test

@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">Длительность показа</string>
+    <string name="settings_cluster_music_seconds_summary">Время показа карточки после смены трека; в постоянном режиме — время показа названия.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d с</string>
+</resources>

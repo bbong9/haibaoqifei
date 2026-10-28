@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">Durata della visualizzazione</string>
+    <string name="settings_cluster_music_seconds_summary">Quanto resta visibile la scheda al cambio brano; in modalità permanente, quanto resta il titolo.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d s</string>
+</resources>

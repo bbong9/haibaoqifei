@@ -2004,21 +2004,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     .putExtra("picture_controls", true).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }, matchButton(0, 56).apply { bottomMargin = dp(24) })
             carPlaySizeControl(card)
-            val mirrorCapHint = label(getString(R.string.settings_resolution_capped_by_cluster_mirror), 14, MUTED)
-            fun updateMirrorCapHint() {
-                mirrorCapHint.visibility = if (ClusterMirrorPolicy.enabled(this) &&
-                    AirPlayPersistence.loadDisplayScalePercent(this) > ClusterMirrorPolicy.MAX_SCALE_PERCENT)
-                    View.VISIBLE else View.GONE
-            }
-            updateMirrorCapHint()
             resolutionSettingControl(
                 card, R.string.resolution, R.string.custom_resolution_hint,
                 CarPlayDisplayScale.MIN_PERCENT..CarPlayDisplayScale.MAX_PERCENT, 100,
                 R.string.custom_resolution_summary,
                 { AirPlayPersistence.loadDisplayScalePercent(this) }, reconnects = true,
-                save = { AirPlayPersistence.saveDisplayScalePercent(this, it); updateMirrorCapHint() },
+                save = { AirPlayPersistence.saveDisplayScalePercent(this, it) },
             )
-            card.addView(mirrorCapHint)
             frameRateControl(card)
             if (sealEditionCheck(this)) videoOutputControls(card)
             carPlayDockControl(card)
@@ -2348,60 +2340,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                         val content = AirPlayPersistence.loadClusterContent(this)
                         val customCard = CarPlayClusterDisplay.usesCustomTurnCard(content)
                         val officialCardOnly = content == CarPlayClusterDisplay.Content.TURN_CARD
-                        val mirrorAvailable = adbCluster && !AirPlayPersistence.loadLegacyClusterEnabled(this)
-                        val mirrorMain = mirrorAvailable && AirPlayPersistence.loadClusterMirrorMain(this)
-                        if (mirrorAvailable) {
-                            toggle(card, getString(R.string.settings_cluster_mirror_main),
-                                getString(R.string.settings_cluster_mirror_main_summary), mirrorMain) { enabled ->
-                                AirPlayPersistence.saveClusterMirrorMain(this, enabled)
-                                val snapshot = CarPlayBackgroundSession.snapshot()
-                                val actual = snapshot?.display?.resolutionPercent
-                                val next = ClusterMirrorPolicy.resolutionPercent(
-                                    AirPlayPersistence.loadDisplayScalePercent(this), ClusterMirrorPolicy.enabled(this))
-                                if (actual != null && actual != next) {
-                                    markReconnectNeeded(clusterMirror = true)
-                                } else if (actual != null) {
-                                    snapshot?.controller?.let(PendingReconnect::clearClusterMirror)
-                                    refreshReconnectBar()
-                                }
-                                render()
-                            }
-                            if (mirrorMain) {
-                                val sizes = ClusterMirrorSize.entries
-                                choice(card, getString(R.string.settings_cluster_mirror_size),
-                                    listOf(getString(R.string.settings_cluster_mirror_size_safe),
-                                        getString(R.string.settings_cluster_mirror_size_full),
-                                        getString(R.string.settings_cluster_mirror_size_custom)),
-                                    sizes.indexOf(AirPlayPersistence.loadClusterMirrorSize(this)), reconnects = false) {
-                                    AirPlayPersistence.saveClusterMirrorSize(this, sizes[it])
-                                    render()
-                                }
-                                if (AirPlayPersistence.loadClusterMirrorSize(this) == ClusterMirrorSize.CUSTOM)
-                                    clusterMirrorCustomControls(card)
-                                toggle(card, getString(R.string.settings_cluster_mirror_turn_card),
-                                    getString(R.string.settings_cluster_mirror_turn_card_summary),
-                                    AirPlayPersistence.loadClusterMirrorTurnCard(this)) {
-                                    AirPlayPersistence.saveClusterMirrorTurnCard(this, it)
-                                    render()
-                                }
-                                toggle(card, getString(R.string.settings_cluster_mirror_nav_only),
-                                    getString(R.string.settings_cluster_mirror_nav_only_summary),
-                                    AirPlayPersistence.loadClusterMirrorNavOnly(this)) {
-                                    AirPlayPersistence.saveClusterMirrorNavOnly(this, it)
-                                }
-                                card.addView(overlaySliderRow(getString(R.string.settings_cluster_mirror_dock_crop),
-                                    (0..20).toList(), AirPlayPersistence.loadClusterMirrorDockCrop(this)) { "$it%" }.also {
-                                    it.onSave = { value -> AirPlayPersistence.saveClusterMirrorDockCrop(this, value) }
-                                    val head = it.getChildAt(0) as LinearLayout
-                                    val value = head.getChildAt(head.childCount - 1)
-                                    value.layoutParams = (value.layoutParams as LinearLayout.LayoutParams).apply {
-                                        marginStart = dp(SETTINGS_BLOCK_GAP_DP)
-                                    }
-                                })
-                                card.addView(label(getString(R.string.settings_cluster_mirror_dock_crop_summary), 14, MUTED))
-                            }
-                        }
-                        if (!mirrorMain) {
                         choice(card, getString(R.string.dashboard_shows), listOf(
                             getString(R.string.dashboard_content_map),
                             getString(R.string.dashboard_content_turn_card),
@@ -2431,20 +2369,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 }
                             }
                         }
-                        }
-                        if ((!mirrorMain && customCard) ||
-                            (mirrorMain && AirPlayPersistence.loadClusterMirrorTurnCard(this))) {
-                            fun addTurnCardSlider(row: OverlaySliderRow) {
-                                if (mirrorMain) {
-                                    val head = row.getChildAt(0) as LinearLayout
-                                    val value = head.getChildAt(head.childCount - 1)
-                                    value.layoutParams = (value.layoutParams as LinearLayout.LayoutParams).apply {
-                                        marginStart = dp(SETTINGS_BLOCK_GAP_DP)
-                                    }
-                                }
-                                card.addView(row)
-                            }
-                            addTurnCardSlider(overlaySliderRow(
+                        if (customCard) {
+                            card.addView(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_size),
                                 ClusterTurnCardOverlay.sizePercents,
                                 AirPlayPersistence.loadClusterTurnCardOverlaySizePercent(this),
@@ -2455,19 +2381,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 AirPlayPersistence.loadClusterLaneStrip(this)) {
                                 AirPlayPersistence.saveClusterLaneStrip(this, it)
                             }
-                            addTurnCardSlider(overlaySliderRow(
+                            card.addView(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_opacity),
                                 ClusterTurnCardOverlay.opacityPercents,
                                 AirPlayPersistence.loadClusterTurnCardOpacityPercent(this),
                             ) { it -> getString(R.string.turn_card_overlay_opacity_option, it) }
                                 .also { it.onSave = { v -> AirPlayPersistence.saveClusterTurnCardOpacityPercent(this, v) } })
-                            addTurnCardSlider(overlaySliderRow(
+                            card.addView(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_horizontal),
                                 ClusterTurnCardOverlay.xPercents,
                                 AirPlayPersistence.loadClusterTurnCardOverlayXPercent(this),
                             ) { it -> overlayOffsetLabel(it, getString(R.string.marker_left), getString(R.string.marker_right), 50) }
                                 .also { it.onSave = { v -> AirPlayPersistence.saveClusterTurnCardOverlayXPercent(this, v) } })
-                            addTurnCardSlider(overlaySliderRow(
+                            card.addView(overlaySliderRow(
                                 getString(R.string.turn_card_overlay_vertical),
                                 ClusterTurnCardOverlay.yPercents,
                                 AirPlayPersistence.loadClusterTurnCardOverlayYPercent(this),
@@ -2480,7 +2406,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             }, matchButton(10, 56))
                             card.addView(label(getString(R.string.turn_card_overlay_note), 14, MUTED))
                         }
-                        val turnCard = !mirrorMain && officialCardOnly
+                        val turnCard = officialCardOnly
                         if (!fullPanelCluster) {
                             choice(card, getString(if (turnCard) R.string.turn_card_size else R.string.cluster_map_size),
                                 listOf(getString(R.string.cluster_size_standard), getString(R.string.cluster_size_larger), getString(R.string.cluster_size_largest), getString(R.string.cluster_size_smallest)),
@@ -4036,65 +3962,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else -> "$positive ${step * CarPlayClusterDisplay.MARKER_STEP_PERCENT} %"
     }
 
-    private fun clusterMirrorCustomControls(card: LinearLayout) {
-        val rect = AirPlayPersistence.loadClusterMirrorCustom(this)
-        listOf(
-            Triple("x", R.string.settings_cluster_mirror_custom_x, rect.x),
-            Triple("y", R.string.settings_cluster_mirror_custom_y, rect.y),
-            Triple("w", R.string.settings_cluster_mirror_custom_w, rect.w),
-            Triple("h", R.string.settings_cluster_mirror_custom_h, rect.h),
-        ).forEach { (key, title, value) ->
-            card.addView(overlaySliderRow(getString(title),
-                (if (key == "x" || key == "y") 0..100 else 20..100).toList(), value) { "$it%" }.also { row ->
-                row.onSave = { percent ->
-                    val current = AirPlayPersistence.loadClusterMirrorCustom(this)
-                    val next = when (key) {
-                        "x" -> current.copy(x = percent)
-                        "y" -> current.copy(y = percent)
-                        "w" -> current.copy(w = percent)
-                        else -> current.copy(h = percent)
-                    }
-                    AirPlayPersistence.saveClusterMirrorCustom(this, next)
-                }
-                val head = row.getChildAt(0) as LinearLayout
-                val displayedValue = head.getChildAt(head.childCount - 1)
-                displayedValue.layoutParams = (displayedValue.layoutParams as LinearLayout.LayoutParams).apply {
-                    marginStart = dp(SETTINGS_BLOCK_GAP_DP)
-                }
-            })
-        }
-        val view = AirPlayPersistence.loadClusterMirrorView(this)
-        listOf(
-            Triple("zoom", R.string.settings_cluster_mirror_view_zoom, view.zoom),
-            Triple("focusX", R.string.settings_cluster_mirror_view_focus_x, view.focusX),
-            Triple("focusY", R.string.settings_cluster_mirror_view_focus_y, view.focusY),
-        ).forEach { (key, title, value) ->
-            card.addView(overlaySliderRow(getString(title),
-                (if (key == "zoom") 100..250 else 0..100).toList(), value) { "$it%" }.also { row ->
-                row.onSave = { percent ->
-                    val current = AirPlayPersistence.loadClusterMirrorView(this)
-                    val next = when (key) {
-                        "zoom" -> current.copy(zoom = percent)
-                        "focusX" -> current.copy(focusX = percent)
-                        else -> current.copy(focusY = percent)
-                    }
-                    AirPlayPersistence.saveClusterMirrorView(this, next)
-                }
-                val head = row.getChildAt(0) as LinearLayout
-                val displayedValue = head.getChildAt(head.childCount - 1)
-                displayedValue.layoutParams = (displayedValue.layoutParams as LinearLayout.LayoutParams).apply {
-                    marginStart = dp(SETTINGS_BLOCK_GAP_DP)
-                }
-            })
-            val summary = when (key) {
-                "focusX" -> R.string.settings_cluster_mirror_view_focus_x_summary
-                "focusY" -> R.string.settings_cluster_mirror_view_focus_y_summary
-                else -> null
-            }
-            if (summary != null) card.addView(label(getString(summary), 14, MUTED))
-        }
-    }
-
     private fun clusterMusicControls(card: LinearLayout) {
         toggle(card, getString(R.string.settings_cluster_music), getString(R.string.settings_cluster_music_description),
             ClusterMusicSettings.enabled(this)) {
@@ -5491,10 +5358,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     // Saved without dropping CarPlay; the reconnect bar lets the driver choose when.
-    private fun markReconnectNeeded(clusterMirror: Boolean = false) {
-        CarPlayBackgroundSession.snapshot()?.controller?.let {
-            if (clusterMirror) PendingReconnect.markClusterMirror(it) else PendingReconnect.mark(it)
-        }
+    private fun markReconnectNeeded() {
+        CarPlayBackgroundSession.snapshot()?.controller?.let(PendingReconnect::mark)
         refreshReconnectBar()
     }
 
@@ -6235,8 +6100,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         DiagnosticRedactor.redact(LaneStripDiagnostics.report(appContext))?.let { appendLine(it) }
         DiagnosticRedactor.redact(LaneStripDiagnostics.guidanceReport())?.let { appendLine(it) }
-        DiagnosticRedactor.redact(ClusterMirrorDiagnostics.decoderPerformance())?.let { appendLine(it) }
-        DiagnosticRedactor.redact(ClusterMirrorDiagnostics.report(appContext))?.let { appendLine(it) }
         appendLine()
         appendLine("--- Cluster snapshot ---")
         ClusterSnapshot.report(appContext).lineSequence().forEach { line ->

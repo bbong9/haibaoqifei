@@ -124,58 +124,6 @@ class AndroidMediaSinkCodecDetachTest {
         assertEquals(listOf<Surface?>(a), codec.configuredSurfaces.toList())
     }
 
-    @Test fun mainMirrorRemovalWaitsUntilItsCodecActuallyReleasesTheSurface() {
-        val mirrorSurface = newSurface()
-        val sink = AndroidMediaSink(surface = null)
-        sinks += sink
-        sink.onVideoConfig(110, avcC)
-        sink.setMirrorSurface(110, "cluster", mirrorSurface)
-        codec.blockNext()
-        sink.onVideoFrame(110, idr)
-        assertTrue("mirror worker entered the codec", codec.entered.await(5, TimeUnit.SECONDS))
-        sink.setMirrorSurface(110, "cluster", null)
-        val released = CountDownLatch(1)
-        sink.whenMirrorReleased(110, "cluster") { released.countDown() }
-        assertFalse("the old mirror still owns the surface", released.await(300, TimeUnit.MILLISECONDS))
-        codec.release()
-        assertTrue("release is reported only after the worker exits", released.await(5, TimeUnit.SECONDS))
-        assertTrue(codec.configuredSurfaces.contains(mirrorSurface))
-    }
-
-    @Test fun restartedMainStreamWaitsForThePreviousMirrorCodecToRelease() {
-        val mirrorSurface = newSurface()
-        val sink = AndroidMediaSink(surface = null)
-        sinks += sink
-        sink.onVideoConfig(110, avcC)
-        sink.setMirrorSurface(110, "cluster", mirrorSurface)
-        codec.blockNext()
-        sink.onVideoFrame(110, idr)
-        assertTrue("a decoder entered the codec", codec.entered.await(5, TimeUnit.SECONDS))
-        val initialDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (!codec.configuredSurfaces.contains(mirrorSurface) && System.nanoTime() < initialDeadline) {
-            Thread.sleep(5)
-        }
-        assertTrue("the original mirror was configured", codec.configuredSurfaces.contains(mirrorSurface))
-        sink.onScreenStreamActive(110, false)
-        sink.onVideoConfig(110, avcC)
-        sink.onVideoFrame(110, idr)
-        val mirrors = sink.field<Map<Pair<Int, String>, Any>>("mirrorDecoders")
-        assertFalse("the old mirror may still hold its surface", mirrors.containsKey(110 to "cluster"))
-
-        val released = CountDownLatch(1)
-        sink.whenMirrorReleased(110, "cluster") { released.countDown() }
-        codec.release()
-        assertTrue(released.await(5, TimeUnit.SECONDS))
-        sink.onVideoFrame(110, idr)
-        assertTrue("the next frame recreates the mirror", mirrors.containsKey(110 to "cluster"))
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (codec.configuredSurfaces.count { it === mirrorSurface } < 2 && System.nanoTime() < deadline) {
-            Thread.sleep(5)
-        }
-        assertEquals("the recreated mirror receives the cached configuration", 2,
-            codec.configuredSurfaces.count { it === mirrorSurface })
-    }
-
     @Test fun theParkingConsumerDrainsWhileTheMainThreadIsBlocked() {
         val a = newSurface()
         val sink = configuredSink(a)
@@ -301,37 +249,6 @@ class AndroidMediaSinkCodecDetachTest {
         assertTrue(barrier(sink))
         assertEquals(listOf<Surface?>(a, c), codec.configuredSurfaces.toList())
         assertTrue(uncaught.toString(), uncaught.isEmpty())
-    }
-
-    @Test fun lateSurfaceReleaseWaitContinuesAfterTheNormalDetachDeadline() {
-        val surface = newSurface()
-        val sink = configuredSink(surface)
-        sink.detachTimeoutNanos = 100_000_000L
-        sink.detachGraceNanos = 100_000_000L
-        holdWorkerInCodec(sink)
-        val detach = sink.beginSurfaceDetach(surface, parkMain = false)
-        assertFalse(detach.await())
-        val released = CountDownLatch(1)
-        val waiter = thread(isDaemon = true) { detach.awaitUntilReleased(); released.countDown() }
-        assertFalse("the codec still owns the surface", released.await(300, TimeUnit.MILLISECONDS))
-        codec.release()
-        assertTrue("the wait ends after the codec releases", released.await(5, TimeUnit.SECONDS))
-        waiter.join(5_000)
-    }
-
-    @Test fun clusterOnlyDetachDoesNotTouchABlockedMainDecoder() {
-        val mainSurface = newSurface()
-        val clusterSurface = newSurface()
-        val sink = configuredSink(mainSurface)
-        sink.setSurface(111, clusterSurface)
-        holdWorkerInCodec(sink)
-        val main = mainDecoder(sink)
-        val detach = sink.beginSurfaceDetachForStream(111, clusterSurface)
-        assertTrue("the unrelated main decoder is not awaited", detach.await())
-        assertTrue(detach.requests.isEmpty())
-        assertSame(main, mainDecoder(sink))
-        assertSame(mainSurface, main.field<Surface?>("outputSurface"))
-        codec.release()
     }
 
     @Test fun aDetachWaitsForADecoderClosedAtStreamEndUntilItsWorkerExits() {

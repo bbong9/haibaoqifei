@@ -111,41 +111,6 @@ class CarPlayHostResolutionTest {
         assertTrue(DisplayDiagnosticSnapshot.report(activity).contains("software_decoder"))
     }
 
-    @Test fun mirrorCapsHandshakeWithoutChangingSavedResolutionOrFps() {
-        AirPlayPersistence.saveClusterMapEnabled(activity, true)
-        AirPlayPersistence.saveAdbClusterEnabled(activity, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(activity, false)
-        AirPlayPersistence.saveClusterMirrorMain(activity, true)
-        set("fps", 60)
-        val capped = config(100).main
-        assertEquals(1440, capped.widthPixels)
-        assertEquals(744, capped.heightPixels)
-        assertEquals(60, capped.fps)
-        assertEquals(100, AirPlayPersistence.loadDisplayScalePercent(activity))
-        assertEquals(100, get("displayScalePercent"))
-        assertEquals(75, get("sessionResolutionPercent"))
-
-        val belowCap = config(60).main
-        assertEquals(1152, belowCap.widthPixels)
-        assertEquals(60, belowCap.fps)
-        assertEquals(60, AirPlayPersistence.loadDisplayScalePercent(activity))
-        AirPlayPersistence.saveClusterMirrorMain(activity, false)
-        val normal = config(100).main
-        assertEquals(1920, normal.widthPixels)
-        assertEquals(60, normal.fps)
-    }
-
-    @Test fun mirrorCapNeverSavesAnUnsupportedOriginalEnlargement() {
-        AirPlayPersistence.saveClusterMapEnabled(activity, true)
-        AirPlayPersistence.saveAdbClusterEnabled(activity, true)
-        AirPlayPersistence.saveLegacyClusterEnabled(activity, false)
-        AirPlayPersistence.saveClusterMirrorMain(activity, true)
-        config(160, uiPercent = 75)
-        assertEquals(160, AirPlayPersistence.loadDisplayScalePercent(activity))
-        assertEquals(160, get("displayScalePercent"))
-        assertEquals(75, get("sessionResolutionPercent"))
-    }
-
     private fun config(percent: Int, uiPercent: Int = 100, width: Int = 1920, height: Int = 990): AirPlayConfig {
         set("displayScalePercent", percent)
         set("uiScalePercent", uiPercent)

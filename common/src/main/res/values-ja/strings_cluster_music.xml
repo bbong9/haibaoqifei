@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">表示時間</string>
+    <string name="settings_cluster_music_seconds_summary">曲が変わった後のカードの表示時間。常時表示では曲名の表示時間になります。</string>
+    <string name="settings_cluster_music_seconds_value">%1$d秒</string>
+</resources>

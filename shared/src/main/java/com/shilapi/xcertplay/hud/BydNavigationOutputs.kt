@@ -38,9 +38,6 @@ object BydNavigationOutputs {
         BydClusterBridge.setMapShown(shown)
     }
 
-    fun setClusterMainMirrorShown(shown: Boolean) { BydClusterMapPause.mainMirrorShown = shown }
-    fun clusterMainMirrorShown(): Boolean = BydClusterMapPause.mainMirrorShown
-
     /** The running CarPlay session: told every second whether the cluster currently shows the map. */
     fun setClusterStreamControl(control: (Boolean) -> Unit) { BydClusterMapPause.streamControl = control }
 

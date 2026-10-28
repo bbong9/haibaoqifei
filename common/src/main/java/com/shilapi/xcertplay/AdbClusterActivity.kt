@@ -6,7 +6,6 @@ import android.os.Looper
 import android.graphics.drawable.ColorDrawable
 import java.util.UUID
 import android.graphics.Color
-import android.graphics.RectF
 import android.os.Bundle
 import android.view.Gravity
 import android.view.Surface
@@ -17,14 +16,12 @@ import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import java.lang.ref.WeakReference
-import kotlin.math.roundToInt
 
 /** A separate task for stream 111. Routing is control traffic; video stays in the app process. */
 class AdbClusterActivity : Activity() {
     private var waiting: TextView? = null
     private var surface: Surface? = null
     private var videoTexture: ClusterVideoTexture? = null
-    private var overlayRegion: FrameLayout? = null
     private var turnCard: ClusterTurnCardView? = null
     private var safeAreaPreview: SafeAreaEditorView? = null
     internal var snapshotExecutor: (android.content.Context, String, () -> Unit) -> Unit = ClusterSnapshot::captureAsync
@@ -58,7 +55,6 @@ class AdbClusterActivity : Activity() {
         }.also { videoTexture = it }
         val legacy = AirPlayPersistence.loadLegacyClusterEnabled(this)
         val videoRegion = FrameLayout(this)
-        videoRegion.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateMirrorLayout() }
         videoRegion.addView(video, FrameLayout.LayoutParams(-1, -1))
         root.addView(videoRegion, FrameLayout.LayoutParams(-1, -1))
         if (legacy) root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -80,12 +76,10 @@ class AdbClusterActivity : Activity() {
             setPadding(24, 24, 24, 24)
         }
         videoRegion.addView(waiting, FrameLayout.LayoutParams(-1, -1))
-        val overlays = FrameLayout(this).also { overlayRegion = it }
         turnCard = ClusterTurnCardView(this).apply { visibility = View.GONE }
-        overlays.addView(turnCard, FrameLayout.LayoutParams(-1, -1))
-        overlays.addView(ClusterMusicView(this), FrameLayout.LayoutParams(-1, -1))
-        overlays.addView(ClusterSpeedometerView(this), FrameLayout.LayoutParams(-1, -1))
-        root.addView(overlays, FrameLayout.LayoutParams(-1, -1))
+        root.addView(turnCard, FrameLayout.LayoutParams(-1, -1))
+        root.addView(ClusterMusicView(this), FrameLayout.LayoutParams(-1, -1))
+        root.addView(ClusterSpeedometerView(this), FrameLayout.LayoutParams(-1, -1))
         safeAreaPreview = SafeAreaEditorView(this).apply {
             visibility = View.GONE
             interactive = false
@@ -105,91 +99,17 @@ class AdbClusterActivity : Activity() {
     }
 
     internal fun updateStream() {
-        val hasPicture = if (ClusterActivityOutput.mirrorEnabled) {
-            ClusterActivityOutput.mirrorAttached && ClusterActivityOutput.mirrorPresented
-        } else ClusterActivityOutput.streamActive
-        waiting?.visibility = if (hasPicture || (ClusterActivityOutput.mirrorEnabled && !ClusterActivityOutput.mirrorAttached))
-            View.GONE else View.VISIBLE
+        waiting?.visibility = if (ClusterActivityOutput.streamActive) View.GONE else View.VISIBLE
         waiting?.text = ""
-        videoTexture?.alpha = if (ClusterActivityOutput.mirrorEnabled && !hasPicture) 0f else 1f
-        updateMirrorLayout()
         updateTurnCard()
-    }
-
-    internal fun updateMirrorLayout() {
-        val video = videoTexture ?: return
-        if (!ClusterActivityOutput.mirrorEnabled) {
-            val current = video.layoutParams as FrameLayout.LayoutParams
-            if (current.width != -1 || current.height != -1 || current.leftMargin != 0 || current.topMargin != 0) {
-                video.layoutParams = FrameLayout.LayoutParams(-1, -1)
-            }
-            waiting?.let { view ->
-                val params = view.layoutParams as FrameLayout.LayoutParams
-                if (params.width != -1 || params.height != -1 || params.leftMargin != 0 || params.topMargin != 0)
-                    view.layoutParams = FrameLayout.LayoutParams(-1, -1)
-            }
-            video.setContentRect(null)
-            ClusterActivityOutput.mirrorRect = null
-            ClusterActivityOutput.mirrorCrop = null
-            return
-        }
-        val region = video.parent as? View ?: return
-        val viewWidth = region.width
-        val viewHeight = region.height
-        if (viewWidth <= 0 || viewHeight <= 0) return
-        val sourceWidth = ClusterActivityOutput.mirrorSourceWidth
-        val sourceHeight = ClusterActivityOutput.mirrorSourceHeight
-        val keep = ClusterMirrorCrop.keep(sourceWidth, sourceHeight, ClusterActivityOutput.mirrorDockEdge,
-            AirPlayPersistence.loadRightHandDrive(this), AirPlayPersistence.loadClusterMirrorDockCrop(this))
-        val safe = AirPlayPersistence.loadClusterSafeAreaRect(this)
-            ?: DiLink4ClusterDisplay.defaultSafeAreaRect(
-                markerXPercent = AirPlayPersistence.loadClusterMarkerXPercent(this),
-                markerYPercent = AirPlayPersistence.loadClusterMarkerYPercent(this))
-        val scaledSafe = com.shilapi.xcertplay.airplay.AirPlaySafeArea.scaleRect(safe,
-            DiLink4ClusterDisplay.STREAM_WIDTH, DiLink4ClusterDisplay.STREAM_HEIGHT, viewWidth, viewHeight)
-        val size = AirPlayPersistence.loadClusterMirrorSize(this)
-        val rect = ClusterMirrorLayout.plan(viewWidth, viewHeight,
-            keep.width().roundToInt(), keep.height().roundToInt(),
-            scaledSafe, size, AirPlayPersistence.loadClusterMirrorCustom(this))
-        val left = rect.left.roundToInt()
-        val top = rect.top.roundToInt()
-        val width = rect.right.roundToInt() - left
-        val height = rect.bottom.roundToInt() - top
-        val current = video.layoutParams as FrameLayout.LayoutParams
-        if (current.width != width || current.height != height || current.leftMargin != left || current.topMargin != top) {
-            video.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT).apply {
-                leftMargin = left; topMargin = top
-            }
-        }
-        waiting?.let { view ->
-            val waitingParams = view.layoutParams as FrameLayout.LayoutParams
-            if (waitingParams.width != width || waitingParams.height != height ||
-                waitingParams.leftMargin != left || waitingParams.topMargin != top) {
-                view.layoutParams = FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT).apply {
-                    leftMargin = left; topMargin = top
-                }
-            }
-        }
-        val displayed = if (size == ClusterMirrorSize.CUSTOM && width > 0 && height > 0) {
-            val view = AirPlayPersistence.loadClusterMirrorView(this)
-            ClusterMirrorCrop.frame(keep, width.toFloat() / height, view.zoom, view.focusX, view.focusY)
-        } else keep
-        video.setContentRect(RectF(displayed.left / sourceWidth, displayed.top / sourceHeight,
-            displayed.right / sourceWidth, displayed.bottom / sourceHeight))
-        ClusterActivityOutput.mirrorRect = RectF(rect)
-        ClusterActivityOutput.mirrorCrop = RectF(keep)
     }
 
     internal fun updateTurnCard() {
         turnCard?.setLayout(ClusterActivityOutput.cardX, ClusterActivityOutput.cardY, ClusterActivityOutput.cardSize)
         turnCard?.setOpacity(ClusterActivityOutput.cardOpacity)
         turnCard?.setNightMode(ClusterActivityOutput.cardNight)
-        val show = (ClusterActivityOutput.streamActive && !ClusterActivityOutput.mirrorEnabled) ||
-            (ClusterActivityOutput.mirrorEnabled && ClusterActivityOutput.mirrorAttached &&
-                AirPlayPersistence.loadClusterMirrorTurnCard(this))
-        turnCard?.setGuidance(if (show) ClusterActivityOutput.guidance else null)
-        turnCard?.setLanes(if (show && AirPlayPersistence.loadClusterLaneStrip(this))
-            ClusterActivityOutput.lanes else emptyList())
+        turnCard?.setGuidance(if (ClusterActivityOutput.streamActive) ClusterActivityOutput.guidance else null)
+        turnCard?.setLanes(if (AirPlayPersistence.loadClusterLaneStrip(this)) ClusterActivityOutput.lanes else emptyList())
         updateSafeAreaPreview()
     }
 
@@ -251,22 +171,6 @@ internal object ClusterActivityOutput {
     @Volatile private var expectedDisplay = -1
     @Volatile var framesPresented: Long = 0
         private set
-    var mirrorEnabled = false
-        private set
-    var mirrorAttached = false
-        private set
-    var mirrorPresented = false
-        private set
-    var mirrorSourceWidth = 16
-        private set
-    var mirrorSourceHeight = 9
-        private set
-    var mirrorDockEdge: Int? = null
-        private set
-    var mirrorNavigating = false
-        private set
-    var mirrorRect: RectF? = null
-    var mirrorCrop: RectF? = null
     private var launchHost = WeakReference<Activity>(null)
     private var legacyPresented = false
     private val retryTick = Runnable {
@@ -286,34 +190,8 @@ internal object ClusterActivityOutput {
 
     fun acceptsToken(token: String?): Boolean = token != null && token == launchToken && (hostOwner != null || previewHost.get() != null)
     fun countPresented(token: String?) {
-        if (acceptsToken(token)) {
-            framesPresented++
-            if (mirrorAttached && !mirrorPresented) {
-                mirrorPresented = true
-                activity.get()?.updateStream()
-            }
-        }
+        if (acceptsToken(token)) framesPresented++
     }
-
-    fun setMirrorState(enabled: Boolean, attached: Boolean, sourceWidth: Int, sourceHeight: Int,
-        dockEdge: Int? = null, navigating: Boolean = false) {
-        val width = sourceWidth.takeIf { it > 0 } ?: 16
-        val height = sourceHeight.takeIf { it > 0 } ?: 9
-        if (mirrorEnabled == enabled && mirrorAttached == attached &&
-            mirrorSourceWidth == width && mirrorSourceHeight == height &&
-            mirrorDockEdge == dockEdge && mirrorNavigating == navigating) return
-        val newAttachment = attached && (!mirrorAttached || !mirrorEnabled)
-        mirrorEnabled = enabled
-        mirrorAttached = attached
-        if (!attached || newAttachment) mirrorPresented = false
-        mirrorSourceWidth = width
-        mirrorSourceHeight = height
-        mirrorDockEdge = dockEdge
-        mirrorNavigating = navigating
-        activity.get()?.updateStream()
-    }
-
-    fun refreshMirrorLayout() { activity.get()?.updateMirrorLayout() }
     fun hasConfirmedRoute(): Boolean = activity.get()?.let { !it.isFinishing && !it.isDestroyed } == true &&
         expectedDisplay > 0
     fun diagnosticDisplay(): Int? = expectedDisplay.takeIf { hasConfirmedRoute() }
@@ -524,9 +402,6 @@ internal object ClusterActivityOutput {
         previewOwner = null
         previewHost.clear()
         previewRect = null
-        setMirrorState(false, false, 16, 9)
-        mirrorRect = null
-        mirrorCrop = null
         setStreamActive(false)
         val oldActivity = activity.get()
         activity.clear()

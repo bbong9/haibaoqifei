@@ -1,0 +1,5 @@
+<resources>
+    <string name="settings_cluster_music_seconds">显示时长</string>
+    <string name="settings_cluster_music_seconds_summary">换歌后卡片显示多久；选常驻时为歌名停留的时间。</string>
+    <string name="settings_cluster_music_seconds_value">%1$d秒</string>
+</resources>
