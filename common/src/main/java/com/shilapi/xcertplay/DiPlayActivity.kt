@@ -2370,11 +2370,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 val sizes = ClusterMirrorSize.entries
                                 choice(card, getString(R.string.settings_cluster_mirror_size),
                                     listOf(getString(R.string.settings_cluster_mirror_size_safe),
-                                        getString(R.string.settings_cluster_mirror_size_full)),
+                                        getString(R.string.settings_cluster_mirror_size_full),
+                                        getString(R.string.settings_cluster_mirror_size_custom)),
                                     sizes.indexOf(AirPlayPersistence.loadClusterMirrorSize(this)), reconnects = false) {
                                     AirPlayPersistence.saveClusterMirrorSize(this, sizes[it])
                                     render()
                                 }
+                                if (AirPlayPersistence.loadClusterMirrorSize(this) == ClusterMirrorSize.CUSTOM)
+                                    clusterMirrorCustomControls(card)
                                 toggle(card, getString(R.string.settings_cluster_mirror_nav_only),
                                     getString(R.string.settings_cluster_mirror_nav_only_summary),
                                     AirPlayPersistence.loadClusterMirrorNavOnly(this)) {
@@ -4016,6 +4019,35 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else -> "$positive ${step * CarPlayClusterDisplay.MARKER_STEP_PERCENT} %"
     }
 
+    private fun clusterMirrorCustomControls(card: LinearLayout) {
+        val rect = AirPlayPersistence.loadClusterMirrorCustom(this)
+        listOf(
+            Triple("x", R.string.settings_cluster_mirror_custom_x, rect.x),
+            Triple("y", R.string.settings_cluster_mirror_custom_y, rect.y),
+            Triple("w", R.string.settings_cluster_mirror_custom_w, rect.w),
+            Triple("h", R.string.settings_cluster_mirror_custom_h, rect.h),
+        ).forEach { (key, title, value) ->
+            card.addView(overlaySliderRow(getString(title),
+                (if (key == "x" || key == "y") 0..100 else 20..100).toList(), value) { "$it%" }.also { row ->
+                row.onSave = { percent ->
+                    val current = AirPlayPersistence.loadClusterMirrorCustom(this)
+                    val next = when (key) {
+                        "x" -> current.copy(x = percent)
+                        "y" -> current.copy(y = percent)
+                        "w" -> current.copy(w = percent)
+                        else -> current.copy(h = percent)
+                    }
+                    AirPlayPersistence.saveClusterMirrorCustom(this, next)
+                }
+                val head = row.getChildAt(0) as LinearLayout
+                val displayedValue = head.getChildAt(head.childCount - 1)
+                displayedValue.layoutParams = (displayedValue.layoutParams as LinearLayout.LayoutParams).apply {
+                    marginStart = dp(SETTINGS_BLOCK_GAP_DP)
+                }
+            })
+        }
+    }
+
     private fun clusterMusicControls(card: LinearLayout) {
         toggle(card, getString(R.string.settings_cluster_music), getString(R.string.settings_cluster_music_description),
             ClusterMusicSettings.enabled(this)) {
@@ -4028,6 +4060,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if (ClusterMusicSettings.permanent(this)) 1 else 0, reconnects = false) {
             ClusterMusicSettings.savePermanent(this, it == 1)
         }
+        val durations = listOf(3, 5, 8)
+        choice(card, getString(R.string.settings_cluster_music_seconds),
+            durations.map { getString(R.string.settings_cluster_music_seconds_value, it) },
+            durations.indexOf(ClusterMusicSettings.temporarySeconds(this)), reconnects = false) {
+            ClusterMusicSettings.saveTemporarySeconds(this, durations[it])
+        }
+        card.addView(label(getString(R.string.settings_cluster_music_seconds_summary), 14, MUTED))
         listOf(
             Triple("x", R.string.settings_cluster_music_horizontal, ClusterMusicSettings.x(this)),
             Triple("y", R.string.settings_cluster_music_vertical, ClusterMusicSettings.y(this)),

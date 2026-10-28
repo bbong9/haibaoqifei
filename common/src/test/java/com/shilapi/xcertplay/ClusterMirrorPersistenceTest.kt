@@ -69,4 +69,33 @@ class ClusterMirrorPersistenceTest {
         assertEquals(20, AirPlayPersistence.loadClusterMirrorDockCrop(context))
         assertEquals(3, changes)
     }
+
+    @Test fun customBoundsClampOnReadAndWriteAndOldSizesStillRoundTrip() {
+        assertEquals(ClusterMirrorCustomRect(), AirPlayPersistence.loadClusterMirrorCustom(context))
+        for (size in listOf(ClusterMirrorSize.SAFE_AREA, ClusterMirrorSize.FULL_HEIGHT, ClusterMirrorSize.CUSTOM)) {
+            AirPlayPersistence.saveClusterMirrorSize(context, size)
+            assertEquals(size, AirPlayPersistence.loadClusterMirrorSize(context))
+        }
+        var changes = 0
+        AirPlayPersistence.overlaySettingsListener = { changes++ }
+        AirPlayPersistence.saveClusterMirrorCustom(context, ClusterMirrorCustomRect(-1, 101, 5, 130))
+        assertEquals(ClusterMirrorCustomRect(0, 100, 20, 100), AirPlayPersistence.loadClusterMirrorCustom(context))
+        val prefs = context.getSharedPreferences("xcertplay_airplay", 0)
+        assertEquals(0, prefs.getInt("cluster_mirror_custom_x", -1))
+        assertEquals(20, prefs.getInt("cluster_mirror_custom_w", -1))
+        prefs.edit().putInt("cluster_mirror_custom_x", 300).putInt("cluster_mirror_custom_y", -2)
+            .putInt("cluster_mirror_custom_w", 200).putInt("cluster_mirror_custom_h", 1).commit()
+        assertEquals(ClusterMirrorCustomRect(100, 0, 100, 20), AirPlayPersistence.loadClusterMirrorCustom(context))
+        assertEquals(1, changes)
+    }
+
+    @Test fun customDiagnosticsSurviveRedaction() {
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
+        AirPlayPersistence.saveClusterMirrorCustom(context, ClusterMirrorCustomRect(25, 60, 70, 80))
+        val line = ClusterMirrorDiagnostics.report(context)
+        assertTrue(line, line.contains("mirrorSize=CUSTOM mirrorCustom=25,60,70,80"))
+        assertEquals(line, DiagnosticRedactor.redact(line))
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.SAFE_AREA)
+        assertFalse(ClusterMirrorDiagnostics.report(context).contains("mirrorCustom="))
+    }
 }

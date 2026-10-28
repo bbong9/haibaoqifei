@@ -112,7 +112,6 @@ class AdbClusterActivity : Activity() {
             View.GONE else View.VISIBLE
         waiting?.text = ""
         videoTexture?.alpha = if (ClusterActivityOutput.mirrorEnabled && !hasPicture) 0f else 1f
-        overlayRegion?.alpha = if (ClusterActivityOutput.mirrorEnabled && !ClusterActivityOutput.mirrorAttached) 0f else 1f
         updateMirrorLayout()
         updateTurnCard()
     }
@@ -148,9 +147,10 @@ class AdbClusterActivity : Activity() {
                 markerYPercent = AirPlayPersistence.loadClusterMarkerYPercent(this))
         val scaledSafe = com.shilapi.xcertplay.airplay.AirPlaySafeArea.scaleRect(safe,
             DiLink4ClusterDisplay.STREAM_WIDTH, DiLink4ClusterDisplay.STREAM_HEIGHT, viewWidth, viewHeight)
+        val size = AirPlayPersistence.loadClusterMirrorSize(this)
         val rect = ClusterMirrorLayout.plan(viewWidth, viewHeight,
             keep.width().roundToInt(), keep.height().roundToInt(),
-            scaledSafe, AirPlayPersistence.loadClusterMirrorSize(this))
+            scaledSafe, size, AirPlayPersistence.loadClusterMirrorCustom(this))
         val left = rect.left.roundToInt()
         val top = rect.top.roundToInt()
         val width = rect.right.roundToInt() - left
@@ -170,8 +170,10 @@ class AdbClusterActivity : Activity() {
                 }
             }
         }
-        video.setContentRect(RectF(keep.left / sourceWidth, keep.top / sourceHeight,
-            keep.right / sourceWidth, keep.bottom / sourceHeight))
+        val displayed = if (size == ClusterMirrorSize.CUSTOM && width > 0 && height > 0)
+            ClusterMirrorCrop.cover(keep, width.toFloat() / height) else keep
+        video.setContentRect(RectF(displayed.left / sourceWidth, displayed.top / sourceHeight,
+            displayed.right / sourceWidth, displayed.bottom / sourceHeight))
         ClusterActivityOutput.mirrorRect = RectF(rect)
         ClusterActivityOutput.mirrorCrop = RectF(keep)
     }

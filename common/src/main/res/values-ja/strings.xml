@@ -977,9 +977,9 @@
     <string name="settings_fce_cluster_guidance">FCEメーターへの案内表示（実験的機能）</string>
     <string name="settings_fce_cluster_guidance_description">FCE車載端末の車両サービスに情報を書き込み、CarPlayの案内矢印と次の曲がり角までの距離をメーターのナビ画面に表示します。実車検証は1台のみです。メーターに異常が起きたらオフにしてください。</string>
     <string name="settings_cluster_music">メーターに音楽を表示（実験的機能）</string>
-    <string name="settings_cluster_music_description">メーターの地図上に正方形のアルバムアートを表示します。一時表示（8秒）または常時表示を選択できます。曲が変わると、タイトルとアーティストはどちらのモードでもアルバムアート上に8秒間表示されます。位置とサイズの変更はすぐに反映されます。メーターへの投影とiPhoneからの曲情報が必要です。</string>
+    <string name="settings_cluster_music_description">メーターの地図上に正方形のアルバムアートを表示します。一時表示または常時表示を選択できます。曲が変わると、タイトルとアーティストが指定した時間表示されます。位置とサイズの変更はすぐに反映されます。メーターへの投影とiPhoneからの曲情報が必要です。</string>
     <string name="settings_cluster_music_mode">アルバムアートの表示</string>
-    <string name="settings_cluster_music_temporary">一時表示 · 8秒</string>
+    <string name="settings_cluster_music_temporary">一時表示</string>
     <string name="settings_cluster_music_permanent">常時表示</string>
     <string name="settings_cluster_music_horizontal">音楽カード · 左右位置</string>
     <string name="settings_cluster_music_vertical">音楽カード · 上下位置</string>

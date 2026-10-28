@@ -952,9 +952,9 @@
     <string name="settings_fce_cluster_guidance">Guida nel quadro strumenti FCE (sperimentale)</string>
     <string name="settings_fce_cluster_guidance_description">Mostra le frecce di CarPlay e la distanza dalla prossima svolta nella vista di navigazione del quadro strumenti su head unit FCE, scrivendo nel servizio veicolo della head unit. Testato su una sola auto; disattivalo se il quadro strumenti si comporta in modo imprevisto.</string>
     <string name="settings_cluster_music">Musica sul quadro strumenti (sperimentale)</string>
-    <string name="settings_cluster_music_description">Mostra una copertina album quadrata sopra la mappa del quadro strumenti. Scegli copertina temporanea (8 secondi) o permanente; titolo e artista compaiono sempre sopra la copertina per 8 secondi quando il brano cambia. Posizione e dimensione si applicano subito. Richiede la proiezione sul quadro strumenti e i metadati dell’iPhone.</string>
+    <string name="settings_cluster_music_description">Mostra una copertina album quadrata sopra la mappa del quadro strumenti. Scegli una copertina temporanea o permanente; titolo e artista compaiono per la durata scelta al cambio brano. Posizione e dimensione si applicano subito. Richiede la proiezione sul quadro strumenti e i metadati dell’iPhone.</string>
     <string name="settings_cluster_music_mode">Visibilità della copertina dell’album</string>
-    <string name="settings_cluster_music_temporary">Temporanea · 8 secondi</string>
+    <string name="settings_cluster_music_temporary">Temporanea</string>
     <string name="settings_cluster_music_permanent">Permanente</string>
     <string name="settings_cluster_music_horizontal">Scheda musicale · posizione orizzontale</string>
     <string name="settings_cluster_music_vertical">Scheda musicale · posizione verticale</string>

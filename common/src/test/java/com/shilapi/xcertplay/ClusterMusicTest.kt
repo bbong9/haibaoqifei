@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.os.Looper
+import android.os.SystemClock
 import android.view.View
 import android.widget.LinearLayout
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
@@ -55,6 +56,79 @@ class ClusterMusicTest {
         ClusterMusicState.publish(track.copy(title = "Next song"), null); idle()
         assertEquals(View.VISIBLE, view.visibility)
         ClusterMusicState.publish(CarPlayNowPlaying(), null); idle()
+        assertEquals(View.GONE, view.visibility)
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun durationDefaultsToEightAndRejectsUnsupportedValues() {
+        assertEquals(8, ClusterMusicSettings.temporarySeconds(context))
+        assertEquals(8_000L, ClusterMusicSettings.temporaryMillis(context))
+        ClusterMusicSettings.saveTemporarySeconds(context, 4)
+        assertEquals(8, ClusterMusicSettings.temporarySeconds(context))
+        assertEquals(8, context.getSharedPreferences("xcertplay_airplay", 0).getInt("cluster_music_seconds", -1))
+        context.getSharedPreferences("xcertplay_airplay", 0).edit().putInt("cluster_music_seconds", 4).commit()
+        assertEquals(8, ClusterMusicSettings.temporarySeconds(context))
+        ClusterMusicSettings.saveTemporarySeconds(context, 5)
+        assertEquals(5_000L, ClusterMusicSettings.temporaryMillis(context))
+    }
+
+    @Test fun temporaryTrackIsVisibleUntilTheSelectedThreeSecondDeadline() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
+        val view = ClusterMusicView(controller.get())
+        controller.get().setContentView(view)
+        ClusterMusicSettings.saveEnabled(context, true)
+        ClusterMusicSettings.saveTemporarySeconds(context, 3)
+        ClusterMusicState.publish(CarPlayNowPlaying(title = "Three seconds"), null); idle()
+        assertEquals(View.VISIBLE, view.visibility)
+        assertEquals(400L, ClusterMusicView.FADE_MILLIS)
+        val snapshot = ReflectionHelpers.getField<ClusterMusicState.Snapshot>(view, "snapshot")
+        val deadline = ReflectionHelpers.getField<Long>(view, "visibleUntil")
+        assertEquals(snapshot.changedAt + 3_000L, deadline)
+        val remaining = deadline - SystemClock.elapsedRealtime()
+        assertTrue("remaining=$remaining", remaining in 1L..3_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(remaining - 1))
+        assertEquals("deadline=$deadline now=${SystemClock.elapsedRealtime()}", View.VISIBLE, view.visibility)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
+        assertEquals(View.GONE, view.visibility)
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun permanentArtworkStaysAfterTheSelectedCaptionDeadline() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
+        val view = ClusterMusicView(controller.get())
+        controller.get().setContentView(view)
+        ClusterMusicSettings.saveEnabled(context, true)
+        ClusterMusicSettings.savePermanent(context, true)
+        ClusterMusicSettings.saveTemporarySeconds(context, 3)
+        val artwork = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+        ClusterMusicState.publish(CarPlayNowPlaying(title = "Permanent"), artwork); idle()
+        assertTrue(ReflectionHelpers.getField<Boolean>(view, "captionVisible"))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(3))
+        assertEquals(View.VISIBLE, view.visibility)
+        assertFalse(ReflectionHelpers.getField<Boolean>(view, "captionVisible"))
+        val snapshot = ReflectionHelpers.getField<ClusterMusicState.Snapshot>(view, "snapshot")
+        assertSame(artwork, snapshot.artwork)
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun changingDurationAppliesImmediatelyToTheCurrentTrack() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
+        val view = ClusterMusicView(controller.get())
+        controller.get().setContentView(view)
+        ClusterMusicSettings.saveEnabled(context, true)
+        ClusterMusicState.publish(CarPlayNowPlaying(title = "Current"), null); idle()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        val beforeChange = SystemClock.elapsedRealtime()
+        ClusterMusicSettings.saveTemporarySeconds(context, 3); idle()
+        val afterChange = SystemClock.elapsedRealtime()
+        val deadline = ReflectionHelpers.getField<Long>(view, "visibleUntil")
+        assertTrue("before=$beforeChange after=$afterChange deadline=$deadline",
+            deadline in (beforeChange + 3_000L)..(afterChange + 3_000L))
+        val remaining = deadline - afterChange
+        assertTrue("remaining=$remaining", remaining in 1L..3_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(remaining - 1))
+        assertEquals("deadline=$deadline now=${SystemClock.elapsedRealtime()}", View.VISIBLE, view.visibility)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1))
         assertEquals(View.GONE, view.visibility)
         controller.pause().stop().destroy()
     }

@@ -354,7 +354,7 @@ class SealSettingsUiTest {
                 descendants(categoryContent(screen)).filterIsInstance<TextView>()
                     .first { it.text.toString().startsWith("$title · ") }.performClick()
                 val dialog = ShadowAlertDialog.getLatestAlertDialog()
-                assertEquals(2, dialog.listView.adapter.count)
+                assertEquals(3, dialog.listView.adapter.count)
                 dialog.listView.performItemClick(null, index, index.toLong())
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
                 shadowOf(Looper.getMainLooper()).idle()
@@ -368,6 +368,75 @@ class SealSettingsUiTest {
         } finally {
             AirPlayPersistence.overlaySettingsListener = null
         }
+    }
+
+    @Test fun customMirrorSlidersAppearOnlyInCustomModeAndSaveWithoutReconnect() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        AirPlayPersistence.saveClusterMirrorMain(context, true)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        val titles = listOf(R.string.settings_cluster_mirror_custom_x, R.string.settings_cluster_mirror_custom_y,
+            R.string.settings_cluster_mirror_custom_w, R.string.settings_cluster_mirror_custom_h)
+        titles.forEach { assertMissing(screen, it) }
+        val sizeTitle = screen.getString(R.string.settings_cluster_mirror_size)
+        descendants(categoryContent(screen)).filterIsInstance<TextView>()
+            .first { it.text.toString().startsWith("$sizeTitle · ") }.performClick()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertEquals(3, dialog.listView.adapter.count)
+        dialog.listView.performItemClick(null, 2, 2L)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(ClusterMirrorSize.CUSTOM, AirPlayPersistence.loadClusterMirrorSize(context))
+        titles.forEach { assertHas(screen, it) }
+        var refreshes = 0
+        AirPlayPersistence.overlaySettingsListener = { refreshes++ }
+        try {
+            for ((title, progress) in titles.zip(listOf(75, 25, 40, 60))) {
+                val label = descendants(categoryContent(screen)).filterIsInstance<TextView>()
+                    .single { it.text.toString() == screen.getString(title) }
+                val row = label.parent.parent as ViewGroup
+                val slider = descendants(row).filterIsInstance<SeekBar>().single()
+                val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
+                    .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
+                listener.onProgressChanged(slider, progress, true)
+            }
+            assertEquals(ClusterMirrorCustomRect(75, 25, 60, 80), AirPlayPersistence.loadClusterMirrorCustom(context))
+            assertEquals(4, refreshes)
+            assertFalse(PendingReconnect.isPending(null))
+        } finally {
+            AirPlayPersistence.overlaySettingsListener = null
+        }
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.FULL_HEIGHT)
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        titles.forEach { assertMissing(screen, it) }
+    }
+
+    @Test fun musicDurationChoiceIsVisibleOnlyWhenEnabledAndSavesWithoutReconnect() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        assertMissing(screen, R.string.settings_cluster_music_seconds)
+        fun musicSwitch() = descendants(categoryContent(screen)).filterIsInstance<Switch>()
+            .single { it.contentDescription == screen.getString(R.string.settings_cluster_music) }
+        musicSwitch().isChecked = true
+        assertHas(screen, R.string.settings_cluster_music_seconds)
+        val title = screen.getString(R.string.settings_cluster_music_seconds)
+        descendants(categoryContent(screen)).filterIsInstance<TextView>()
+            .first { it.text.toString().startsWith("$title · ") }.performClick()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertEquals(3, dialog.listView.adapter.count)
+        assertEquals(listOf(3, 5, 8).map { screen.getString(R.string.settings_cluster_music_seconds_value, it) },
+            (0 until dialog.listView.adapter.count).map { dialog.listView.adapter.getItem(it).toString() })
+        dialog.listView.performItemClick(null, 0, 0L)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(3, ClusterMusicSettings.temporarySeconds(context))
+        assertFalse(PendingReconnect.isPending(null))
+        musicSwitch().isChecked = false
+        assertMissing(screen, R.string.settings_cluster_music_seconds)
     }
 
     private fun mirrorSwitch(screen: DiPlayActivity): Switch =
@@ -412,6 +481,59 @@ class SealSettingsUiTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
     fun mirrorArabicLargeFontScreenshot() = captureMirrorSettings("compact-ar")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
+    fun customCompactLargeFontScreenshots() = captureCustomSettings("compact-zh")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
+    fun customExpandedLargeFontScreenshots() = captureCustomSettings("expanded-zh")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
+    fun customArabicLargeFontScreenshots() = captureCustomSettings("compact-ar")
+
+    private fun captureCustomSettings(name: String) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        AirPlayPersistence.saveClusterMirrorMain(context, true)
+        AirPlayPersistence.saveClusterMirrorSize(context, ClusterMirrorSize.CUSTOM)
+        ClusterMusicSettings.saveEnabled(context, true)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        layoutRoot(screen)
+        val scroll = categoryContent(screen)
+        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val base = File(requireNotNull(System.getProperty("user.dir")))
+        val project = if (base.name == "common") base.parentFile else base
+        val directory = File(project, "build/cluster-custom-screenshots").apply { mkdirs() }
+        for ((suffix, id) in listOf("mirror" to R.string.settings_cluster_mirror_custom_x,
+            "music" to R.string.settings_cluster_music_seconds)) {
+            val text = screen.getString(id)
+            val target = descendants(scroll).filterIsInstance<TextView>()
+                .first { it.text.toString() == text || it.text.toString().startsWith("$text · ") }
+            val rect = Rect()
+            target.getDrawingRect(rect)
+            scroll.offsetDescendantRectToMyCoords(target, rect)
+            scroll.scrollTo(0, (rect.top - (24 * screen.resources.displayMetrics.density).toInt()).coerceAtLeast(0))
+            assertTrue(rect.top - scroll.scrollY in 0 until scroll.height)
+            val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            try {
+                val canvas = Canvas(bitmap)
+                if (root === scroll) {
+                    canvas.drawColor(ReflectionHelpers.getField<DiPlayPalette>(screen, "palette").background)
+                    canvas.translate(0f, -scroll.scrollY.toFloat())
+                }
+                root.draw(canvas)
+                File(directory, "$name-$suffix.png").outputStream().use {
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            } finally { bitmap.recycle() }
+        }
+    }
 
     private fun captureMirrorSettings(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)

@@ -9,4 +9,12 @@
     <string name="settings_cluster_mirror_nav_only_summary">未導航時恢復原車儀表顯示，並停止解碼以節省效能。</string>
     <string name="settings_cluster_mirror_dock_crop">裁掉 Dock</string>
     <string name="settings_cluster_mirror_dock_crop_summary">移除中控螢幕畫面邊緣的 CarPlay 圖示列。</string>
+    <string name="settings_cluster_mirror_size_custom">自訂</string>
+    <string name="settings_cluster_mirror_custom_x">水平位置</string>
+    <string name="settings_cluster_mirror_custom_y">垂直位置</string>
+    <string name="settings_cluster_mirror_custom_w">寬度</string>
+    <string name="settings_cluster_mirror_custom_h">高度</string>
+    <string name="settings_cluster_music_seconds">顯示時間</string>
+    <string name="settings_cluster_music_seconds_summary">換歌後卡片顯示多久；選擇常駐時為歌名停留的時間。</string>
+    <string name="settings_cluster_music_seconds_value">%1$d秒</string>
 </resources>

@@ -9,4 +9,12 @@
     <string name="settings_cluster_mirror_nav_only_summary">ナビを使用していないときは車両本来の表示に戻し、デコードを停止して負荷を減らします。</string>
     <string name="settings_cluster_mirror_dock_crop">Dock を切り取る</string>
     <string name="settings_cluster_mirror_dock_crop_summary">中央画面の端にある CarPlay のアイコンバーを取り除きます。</string>
+    <string name="settings_cluster_mirror_size_custom">カスタム</string>
+    <string name="settings_cluster_mirror_custom_x">横位置</string>
+    <string name="settings_cluster_mirror_custom_y">縦位置</string>
+    <string name="settings_cluster_mirror_custom_w">幅</string>
+    <string name="settings_cluster_mirror_custom_h">高さ</string>
+    <string name="settings_cluster_music_seconds">表示時間</string>
+    <string name="settings_cluster_music_seconds_summary">曲が変わった後のカードの表示時間。常時表示では曲名の表示時間になります。</string>
+    <string name="settings_cluster_music_seconds_value">%1$d秒</string>
 </resources>

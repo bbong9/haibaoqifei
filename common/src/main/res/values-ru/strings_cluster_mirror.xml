@@ -9,4 +9,12 @@
     <string name="settings_cluster_mirror_nav_only_summary">Без навигации отображается штатная панель, а декодирование останавливается для экономии ресурсов.</string>
     <string name="settings_cluster_mirror_dock_crop">Обрезать Dock</string>
     <string name="settings_cluster_mirror_dock_crop_summary">Убирает панель значков CarPlay с края центрального экрана.</string>
+    <string name="settings_cluster_mirror_size_custom">Свои настройки</string>
+    <string name="settings_cluster_mirror_custom_x">Положение по горизонтали</string>
+    <string name="settings_cluster_mirror_custom_y">Положение по вертикали</string>
+    <string name="settings_cluster_mirror_custom_w">Ширина</string>
+    <string name="settings_cluster_mirror_custom_h">Высота</string>
+    <string name="settings_cluster_music_seconds">Длительность показа</string>
+    <string name="settings_cluster_music_seconds_summary">Время показа карточки после смены трека; в постоянном режиме — время показа названия.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d с</string>
 </resources>

@@ -9,4 +9,12 @@
     <string name="settings_cluster_mirror_nav_only_summary">Sin navegación, se muestra el cuadro original y se detiene la decodificación para ahorrar recursos.</string>
     <string name="settings_cluster_mirror_dock_crop">Recortar el Dock</string>
     <string name="settings_cluster_mirror_dock_crop_summary">Elimina la barra de iconos de CarPlay del borde de la pantalla central.</string>
+    <string name="settings_cluster_mirror_size_custom">Personalizado</string>
+    <string name="settings_cluster_mirror_custom_x">Posición horizontal</string>
+    <string name="settings_cluster_mirror_custom_y">Posición vertical</string>
+    <string name="settings_cluster_mirror_custom_w">Anchura</string>
+    <string name="settings_cluster_mirror_custom_h">Altura</string>
+    <string name="settings_cluster_music_seconds">Duración de visualización</string>
+    <string name="settings_cluster_music_seconds_summary">Cuánto tiempo aparece la tarjeta al cambiar de canción; en modo permanente, cuánto permanece el título.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d s</string>
 </resources>

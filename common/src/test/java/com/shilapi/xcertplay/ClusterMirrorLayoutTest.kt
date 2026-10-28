@@ -49,4 +49,26 @@ class ClusterMirrorLayoutTest {
         assertEquals(720f, full.height(), 0.01f)
         assertEquals(920f, full.centerX(), 0.01f)
     }
+
+    @Test fun customDefaultCentersAtSixtySevenPercentWidthAndFullHeight() {
+        val rect = ClusterMirrorLayout.custom(1920, 720, 50, 50, 67, 100)
+        assertEquals(1286.4f, rect.width(), 0.01f)
+        assertEquals(720f, rect.height(), 0.01f)
+        assertEquals(960f, rect.centerX(), 0.01f)
+        assertEquals(360f, rect.centerY(), 0.01f)
+        assertEquals(rect, ClusterMirrorLayout.plan(1920, 720, 1804, 1092, safe, ClusterMirrorSize.CUSTOM))
+    }
+
+    @Test fun customTranslatesToEdgesWithoutShrinking() {
+        val left = ClusterMirrorLayout.custom(1920, 720, 0, 100, 67, 50)
+        assertEquals(0f, left.left, 0f)
+        assertEquals(1286.4f, left.width(), 0.01f)
+        assertEquals(720f, left.bottom, 0f)
+        assertEquals(360f, left.height(), 0f)
+        val fullWidth = ClusterMirrorLayout.custom(1920, 720, 100, 0, 100, 20)
+        assertEquals(0f, fullWidth.left, 0f)
+        assertEquals(1920f, fullWidth.right, 0f)
+        assertEquals(0f, fullWidth.top, 0f)
+        assertEquals(144f, fullWidth.height(), 0f)
+    }
 }

@@ -9,4 +9,12 @@
     <string name="settings_cluster_mirror_nav_only_summary">When navigation is inactive, restore the car\'s instrument display and stop decoding to save performance.</string>
     <string name="settings_cluster_mirror_dock_crop">Crop Dock</string>
     <string name="settings_cluster_mirror_dock_crop_summary">Remove the CarPlay icon bar at the edge of the centre screen.</string>
+    <string name="settings_cluster_mirror_size_custom">Custom</string>
+    <string name="settings_cluster_mirror_custom_x">Horizontal position</string>
+    <string name="settings_cluster_mirror_custom_y">Vertical position</string>
+    <string name="settings_cluster_mirror_custom_w">Width</string>
+    <string name="settings_cluster_mirror_custom_h">Height</string>
+    <string name="settings_cluster_music_seconds">Display duration</string>
+    <string name="settings_cluster_music_seconds_summary">How long the card appears after a song change; in permanent mode, how long the song title stays visible.</string>
+    <string name="settings_cluster_music_seconds_value">%1$d s</string>
 </resources>

@@ -107,6 +107,10 @@ object AirPlayPersistence {
     private const val KEY_CLUSTER_LANE_STRIP = "cluster_lane_strip"
     private const val KEY_CLUSTER_MIRROR_MAIN = "cluster_mirror_main"
     private const val KEY_CLUSTER_MIRROR_SIZE = "cluster_mirror_size"
+    private const val KEY_CLUSTER_MIRROR_CUSTOM_X = "cluster_mirror_custom_x"
+    private const val KEY_CLUSTER_MIRROR_CUSTOM_Y = "cluster_mirror_custom_y"
+    private const val KEY_CLUSTER_MIRROR_CUSTOM_W = "cluster_mirror_custom_w"
+    private const val KEY_CLUSTER_MIRROR_CUSTOM_H = "cluster_mirror_custom_h"
     private const val KEY_CLUSTER_MIRROR_NAV_ONLY = "cluster_mirror_nav_only"
     private const val KEY_CLUSTER_MIRROR_DOCK_CROP = "cluster_mirror_dock_crop"
     private const val KEY_CLUSTER_MARKER_X = "cluster_marker_horizontal_step"
@@ -1078,6 +1082,21 @@ object AirPlayPersistence {
     fun saveClusterMirrorSize(context: Context, size: ClusterMirrorSize) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_CLUSTER_MIRROR_SIZE, size.name).apply()
+        overlaySettingsListener?.invoke()
+    }
+
+    fun loadClusterMirrorCustom(context: Context): ClusterMirrorCustomRect {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return ClusterMirrorCustomRect(prefs.getInt(KEY_CLUSTER_MIRROR_CUSTOM_X, 50),
+            prefs.getInt(KEY_CLUSTER_MIRROR_CUSTOM_Y, 50), prefs.getInt(KEY_CLUSTER_MIRROR_CUSTOM_W, 67),
+            prefs.getInt(KEY_CLUSTER_MIRROR_CUSTOM_H, 100)).clamped()
+    }
+
+    fun saveClusterMirrorCustom(context: Context, rect: ClusterMirrorCustomRect) {
+        val next = rect.clamped()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_CLUSTER_MIRROR_CUSTOM_X, next.x).putInt(KEY_CLUSTER_MIRROR_CUSTOM_Y, next.y)
+            .putInt(KEY_CLUSTER_MIRROR_CUSTOM_W, next.w).putInt(KEY_CLUSTER_MIRROR_CUSTOM_H, next.h).apply()
         overlaySettingsListener?.invoke()
     }
 

@@ -47,7 +47,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         stopSettings = ClusterMusicSettings.observe(context) {
-            visibleUntil = SystemClock.elapsedRealtime() + TEMPORARY_MILLIS
+            visibleUntil = SystemClock.elapsedRealtime() + ClusterMusicSettings.temporaryMillis(context)
             updateVisibility()
         }
         stopState = ClusterMusicState.observe {
@@ -66,7 +66,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
             snapshot = it
             if (lastTrackRevision != it.revision) {
                 lastTrackRevision = it.revision
-                visibleUntil = it.changedAt + TEMPORARY_MILLIS
+                visibleUntil = it.changedAt + ClusterMusicSettings.temporaryMillis(context)
             }
             updateVisibility()
         }

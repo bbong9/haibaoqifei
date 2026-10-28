@@ -39,4 +39,20 @@ class ClusterMirrorCropTest {
         assertEquals(RectF(136f, 0f, 1940f, 1092f), ClusterMirrorCrop.keep(1940, 1092, null, false, 7))
         assertEquals(RectF(0f, 0f, 1804f, 1092f), ClusterMirrorCrop.keep(1940, 1092, null, true, 7))
     }
+
+    @Test fun coverCropsTopAndBottomForWiderTarget() {
+        val keep = RectF(136f, 0f, 1940f, 1092f)
+        assertEquals(RectF(136f, 95f, 1940f, 997f), ClusterMirrorCrop.cover(keep, 2f))
+        assertEquals(RectF(136f, 0f, 1940f, 1092f), keep)
+    }
+
+    @Test fun coverCropsBothSidesForSquareTarget() {
+        assertEquals(RectF(492f, 0f, 1584f, 1092f),
+            ClusterMirrorCrop.cover(RectF(136f, 0f, 1940f, 1092f), 1f))
+    }
+
+    @Test fun coverLeavesMatchingAspectUnchanged() {
+        val keep = RectF(136f, 0f, 1940f, 1092f)
+        assertEquals(keep, ClusterMirrorCrop.cover(keep, keep.width() / keep.height()))
+    }
 }
