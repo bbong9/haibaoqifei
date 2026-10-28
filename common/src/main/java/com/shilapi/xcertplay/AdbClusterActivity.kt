@@ -24,6 +24,10 @@ class AdbClusterActivity : Activity() {
     private var videoTexture: ClusterVideoTexture? = null
     private var turnCard: ClusterTurnCardView? = null
     private var safeAreaPreview: SafeAreaEditorView? = null
+    internal var snapshotExecutor: (android.content.Context, String, () -> Unit) -> Unit = ClusterSnapshot::captureAsync
+    private val snapshotHandler = Handler(Looper.getMainLooper())
+    private val snapshot5s = Runnable { captureSnapshot("auto5s") }
+    private val snapshot30s = Runnable { captureSnapshot("auto30s") }
     internal var routeStatus = ""
         private set
 
@@ -40,7 +44,10 @@ class AdbClusterActivity : Activity() {
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         val root = FrameLayout(this).apply { setBackgroundColor(Color.TRANSPARENT) }
-        val video = ClusterVideoTexture(this, onPresented = { ClusterActivityOutput.presented(this) }) { next ->
+        val video = ClusterVideoTexture(this, onPresented = {
+            ClusterActivityOutput.countPresented(token)
+            ClusterActivityOutput.presented(this)
+        }) { next ->
             surface?.let { ClusterActivityOutput.detach(this, it) }
             surface = next
             if (next != null && ClusterActivityOutput.activity.get() === this)
@@ -123,12 +130,23 @@ class AdbClusterActivity : Activity() {
         routeStatus = getString(R.string.adb_cluster_routed)
         surface?.let { ClusterActivityOutput.attach(this, it) }
         updateStream()
+        snapshotHandler.removeCallbacks(snapshot5s)
+        snapshotHandler.removeCallbacks(snapshot30s)
+        snapshotHandler.postDelayed(snapshot5s, 5_000L)
+        snapshotHandler.postDelayed(snapshot30s, 30_000L)
+    }
+
+    private fun captureSnapshot(trigger: String) {
+        if (!isFinishing && !isDestroyed && ClusterActivityOutput.activity.get() === this)
+            snapshotExecutor(applicationContext, trigger) { }
     }
 
     internal fun route() { ClusterActivityOutput.retry() }
 
     // Losing focus must not detach stream 111. The texture owns the rendering lifetime.
     override fun onDestroy() {
+        snapshotHandler.removeCallbacks(snapshot5s)
+        snapshotHandler.removeCallbacks(snapshot30s)
         videoTexture?.close()
         videoTexture = null
         if (ClusterActivityOutput.activity.get() === this) {
@@ -151,6 +169,8 @@ internal object ClusterActivityOutput {
     @Volatile private var generation = 0
     @Volatile private var launchToken: String? = null
     @Volatile private var expectedDisplay = -1
+    @Volatile var framesPresented: Long = 0
+        private set
     private var launchHost = WeakReference<Activity>(null)
     private var legacyPresented = false
     private val retryTick = Runnable {
@@ -169,8 +189,12 @@ internal object ClusterActivityOutput {
     }
 
     fun acceptsToken(token: String?): Boolean = token != null && token == launchToken && (hostOwner != null || previewHost.get() != null)
+    fun countPresented(token: String?) {
+        if (acceptsToken(token)) framesPresented++
+    }
     fun hasConfirmedRoute(): Boolean = activity.get()?.let { !it.isFinishing && !it.isDestroyed } == true &&
         expectedDisplay > 0
+    fun diagnosticDisplay(): Int? = expectedDisplay.takeIf { hasConfirmedRoute() }
     /** A launch is running, or the shell accepted it and the window has not confirmed its display yet. */
     fun routeSettling(): Boolean = !hasConfirmedRoute() && (launchPending || (launchToken != null && expectedDisplay > 0))
     fun confirm(window: AdbClusterActivity, token: String?, display: Int): Boolean {
@@ -298,6 +322,7 @@ internal object ClusterActivityOutput {
         val epoch = ++generation
         val token = UUID.randomUUID().toString()
         launchToken = token
+        framesPresented = 0
         expectedDisplay = -1
         val app = host.applicationContext
         val holdStockMap = hostOwner != null

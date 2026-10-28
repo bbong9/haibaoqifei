@@ -955,4 +955,6 @@
     <string name="settings_cluster_speedometer_album_color">Usar el color del álbum en el fondo del velocímetro</string>
     <string name="settings_cluster_speedometer_album_color_description">Iguala el color del borde del álbum con transiciones suaves. Conserva la opacidad elegida.</string>
     <string name="wireless_startup_slow_retry">Esperando al iPhone. DiPlay vuelve a intentarlo cada 30 segundos, o puedes reintentar ahora.</string>
+    <string name="settings_cluster_snapshot">Registrar estado del panel</string>
+    <string name="settings_cluster_snapshot_done">Registrado. Exporta el informe de diagnóstico para verlo.</string>
 </resources>

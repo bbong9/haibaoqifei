@@ -195,6 +195,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private val endWindowLearning = Runnable { cancelKeyLearning() }
     private var page = "home"
     internal var sealEditionCheck: (Context) -> Boolean = SealPerformanceProfile::enabled
+    internal var clusterSnapshotExecutor: (Context, String, () -> Unit) -> Unit = ClusterSnapshot::captureAsync
     internal var ambientSupportCheck: (Context) -> java.util.concurrent.CompletableFuture<Boolean> = AmbientMusicController::checkSupport
     internal var carRhythmSupportCheck: (Context) -> java.util.concurrent.CompletableFuture<Boolean> =
         com.shilapi.xcertplay.hud.BydCarMusicRhythm::checkSupport
@@ -2238,6 +2239,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             if (adbCluster) {
                 card.addView(button(getString(R.string.adb_cluster_authorize), false) { authorizeClusterRouting() }, matchButton(10, 56))
                 card.addView(button(getString(R.string.adb_cluster_open), false) { ClusterActivityOutput.retry(force = true) }, matchButton(10, 56))
+                card.addView(button(getString(R.string.settings_cluster_snapshot), false) {
+                    clusterSnapshotExecutor(applicationContext, "button") {
+                        if (!isFinishing && !isDestroyed) toast(getString(R.string.settings_cluster_snapshot_done))
+                    }
+                }, matchButton(10, 56).apply { height = LinearLayout.LayoutParams.WRAP_CONTENT })
             }
             if (adbCluster && !AirPlayPersistence.loadLegacyClusterEnabled(this) && com.shilapi.xcertplay.hud.BydOemClusterNavi.applicable(this)) {
                 val holds = com.shilapi.xcertplay.hud.BydOemClusterHold.entries
@@ -6086,6 +6092,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             DiagnosticRedactor.redact(line)?.let { appendLine(it) }
         }
         DiagnosticRedactor.redact(LaneStripDiagnostics.report(appContext))?.let { appendLine(it) }
+        DiagnosticRedactor.redact(LaneStripDiagnostics.guidanceReport())?.let { appendLine(it) }
+        appendLine()
+        appendLine("--- Cluster snapshot ---")
+        ClusterSnapshot.report(appContext).lineSequence().forEach { line ->
+            DiagnosticRedactor.redact(line)?.let { appendLine(it) }
+        }
         appendLine()
         appendLine("--- Standalone HUD compatibility ---")
         appendLine(BydOutputSettings.standaloneHudDiagnosticReport(appContext))

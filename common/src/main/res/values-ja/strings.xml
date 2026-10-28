@@ -1057,4 +1057,6 @@
     <string name="settings_cluster_speedometer_album_color">速度計の背景にアルバムの色を使用</string>
     <string name="settings_cluster_speedometer_album_color_description">アルバムの枠の色に滑らかに切り替わります。選択した不透明度は維持されます。</string>
     <string name="wireless_startup_slow_retry">iPhoneを待機中です。DiPlayは30秒ごとに再試行します。今すぐ再試行することもできます。</string>
+    <string name="settings_cluster_snapshot">メーターの状態を記録</string>
+    <string name="settings_cluster_snapshot_done">記録しました。診断レポートを出力して確認してください。</string>
 </resources>

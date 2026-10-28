@@ -98,6 +98,7 @@ import com.shilapi.xcertplay.airplay.CarPlayMediaEngine
 import com.shilapi.xcertplay.airplay.SafeAreaRect
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.glance.RouteGuidanceDiagnostics
 import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import com.shilapi.xcertplay.location.AndroidCarPlayLocationProvider
 import com.shilapi.xcertplay.media.AndroidMediaSink
@@ -475,6 +476,9 @@ open class CarPlayHostActivity : ComponentActivity() {
     private val clusterLayers = mutableMapOf<Boolean, ClusterMapPresentation>()
     private var clusterTurnGuidance: com.shilapi.xcertplay.hud.ClusterTurnGuidance? = null
     private val clusterLaneListener: (List<LaneGuidanceLane>) -> Unit = { ClusterActivityOutput.setLanes(it) }
+    private val routeGuidanceListener: (RouteGuidanceDiagnostics.Snapshot) -> Unit = {
+        AsyncDiagnosticLog.append(sessionLog, it.logLine())
+    }
     private val clusterLanesChanged: (List<LaneGuidanceLane>) -> Unit = { lanes ->
         appendLog(LaneStripDiagnostics.change(lanes))
         val displayed = if (AirPlayPersistence.loadClusterLaneStrip(this)) lanes else emptyList()
@@ -937,6 +941,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
         initializeSessionLog()
+        CarPlayGlance.routeGuidanceListener = routeGuidanceListener
         lastConfiguration = Configuration(resources.configuration)
         darkMode = savedInstanceState?.getBoolean("carplay_night_active")
             ?: nightModeOrNull(resources.configuration.uiMode) ?: false
@@ -2094,6 +2099,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (MapMirrors.onChanged === mirrorsChanged) MapMirrors.onChanged = null
         dismissClusterPresentation()
         if (CarPlayGlance.laneListener === clusterLaneListener) CarPlayGlance.laneListener = null
+        if (CarPlayGlance.routeGuidanceListener === routeGuidanceListener) CarPlayGlance.routeGuidanceListener = null
         if (ClusterActivityOutput.onLanesChanged === clusterLanesChanged) ClusterActivityOutput.onLanesChanged = null
         mainHandler.removeCallbacks(applyDisplaySize)
         mainHandler.removeCallbacks(expireOldLogLines)

@@ -31,6 +31,7 @@ object CarPlayGlance {
 
     private val route = BydHudRouteState()
     private val song = ClusterSongState()
+    private val routeDiagnostics = RouteGuidanceDiagnostics()
     private var connected = false
     private var last = Snapshot()
 
@@ -39,6 +40,9 @@ object CarPlayGlance {
 
     /** Lane guidance from 0x5204, on the iAP2 thread; empty when the lane strip goes away. */
     @Volatile var laneListener: ((List<LaneGuidanceLane>) -> Unit)? = null
+
+    /** Privacy-safe route metadata, only when the source or parameter set changes. */
+    @Volatile var routeGuidanceListener: ((RouteGuidanceDiagnostics.Snapshot) -> Unit)? = null
 
     /** The last strip written to the log: Apple Maps repeats it while the overlap lasts. */
     private var loggedLanes: List<LaneGuidanceLane>? = null
@@ -51,6 +55,10 @@ object CarPlayGlance {
     /** Changes received from 0x5204 in this process, independent of the display setting. */
     fun laneDiagnostics(): LaneDiagnostics = synchronized(this) {
         LaneDiagnostics(laneUpdates, laneMax, lastLanes.toList())
+    }
+
+    fun routeGuidanceDiagnostics(): RouteGuidanceDiagnostics.Snapshot? = synchronized(this) {
+        routeDiagnostics.snapshot()
     }
 
     /** Refresh time-dependent guidance even when no new metadata frame has arrived. */
@@ -80,16 +88,25 @@ object CarPlayGlance {
             laneListener?.invoke(lanes)
             return
         }
+        var guidanceChange: RouteGuidanceDiagnostics.Snapshot? = null
         val changed = synchronized(this) {
             when (frame.messageId) {
-                BydHudRouteState.ROUTE_GUIDANCE_UPDATE, BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE ->
+                BydHudRouteState.ROUTE_GUIDANCE_UPDATE, BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE -> {
+                    if (frame.messageId == BydHudRouteState.ROUTE_GUIDANCE_UPDATE) {
+                        guidanceChange = runCatching { routeDiagnostics.accept(frame) }.getOrNull()
+                    }
                     runCatching { route.accept(frame.messageId, frame.payload) }
+                }
                 ClusterSongState.NOW_PLAYING_UPDATE -> runCatching { song.accept(frame) }
                 else -> return
             }
             publishLocked()
         }
         changed?.let { listener?.invoke(it) }
+        guidanceChange?.let { event ->
+            runCatching { android.util.Log.i("DiPlay-RouteGuidance", event.logLine()) }
+            runCatching { routeGuidanceListener?.invoke(event) }
+        }
     }
 
     fun setConnected(next: Boolean) {

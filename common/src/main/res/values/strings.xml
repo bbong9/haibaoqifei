@@ -1058,4 +1058,6 @@
     <string name="settings_cluster_speedometer_album_color">Use album color for speedometer background</string>
     <string name="settings_cluster_speedometer_album_color_description">Match the album frame color with smooth transitions. Keeps the selected opacity.</string>
     <string name="wireless_startup_slow_retry">Waiting for the iPhone. DiPlay tries again every 30 seconds, or retry now.</string>
+    <string name="settings_cluster_snapshot">Record cluster status</string>
+    <string name="settings_cluster_snapshot_done">Recorded. Export the diagnostic report to view it.</string>
 </resources>

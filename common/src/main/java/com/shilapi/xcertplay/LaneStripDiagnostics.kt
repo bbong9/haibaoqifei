@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.content.Context
 import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.glance.RouteGuidanceDiagnostics
 import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 
 internal object LaneStripDiagnostics {
@@ -21,4 +22,7 @@ internal object LaneStripDiagnostics {
         val enabled = if (AirPlayPersistence.loadClusterLaneStrip(context)) "on" else "off"
         return "laneStrip=$enabled laneUpdates=${stats.updates} laneMax=${stats.max} lastLanes=$last"
     }
+
+    fun guidanceReport(): String =
+        (CarPlayGlance.routeGuidanceDiagnostics() ?: RouteGuidanceDiagnostics.Snapshot()).reportLine()
 }

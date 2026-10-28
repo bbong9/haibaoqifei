@@ -955,4 +955,6 @@
     <string name="settings_cluster_speedometer_album_color">Цвет альбома для фона спидометра</string>
     <string name="settings_cluster_speedometer_album_color_description">Плавно меняет фон на цвет рамки альбома. Сохраняет выбранную непрозрачность.</string>
     <string name="wireless_startup_slow_retry">Ожидание iPhone. DiPlay повторяет попытку каждые 30 секунд, но можно повторить её сейчас.</string>
+    <string name="settings_cluster_snapshot">Записать состояние панели</string>
+    <string name="settings_cluster_snapshot_done">Записано. Экспортируйте отчёт диагностики для просмотра.</string>
 </resources>

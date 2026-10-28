@@ -1045,4 +1045,6 @@
     <string name="settings_cluster_speedometer_album_color">Usa il colore dell’album per lo sfondo del tachimetro</string>
     <string name="settings_cluster_speedometer_album_color_description">Abbina il colore della cornice dell’album con transizioni fluide. Mantiene l’opacità selezionata.</string>
     <string name="wireless_startup_slow_retry">In attesa di iPhone. DiPlay riprova ogni 30 secondi oppure puoi riprovare ora.</string>
+    <string name="settings_cluster_snapshot">Registra stato del quadro</string>
+    <string name="settings_cluster_snapshot_done">Registrato. Esporta il rapporto diagnostico per visualizzarlo.</string>
 </resources>

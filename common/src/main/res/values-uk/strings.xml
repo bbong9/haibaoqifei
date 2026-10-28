@@ -967,4 +967,6 @@
     <string name="settings_cluster_speedometer_album_color">Колір альбому для тла спідометра</string>
     <string name="settings_cluster_speedometer_album_color_description">Плавно змінює тло на колір рамки альбому. Зберігає вибрану непрозорість.</string>
     <string name="wireless_startup_slow_retry">Очікування iPhone. DiPlay повторює спробу кожні 30 секунд, або можна повторити її зараз.</string>
+    <string name="settings_cluster_snapshot">Записати стан панелі</string>
+    <string name="settings_cluster_snapshot_done">Записано. Експортуйте звіт діагностики для перегляду.</string>
 </resources>

@@ -1004,4 +1004,6 @@
     <string name="settings_cluster_speedometer_album_color">استخدام لون الألبوم لخلفية عداد السرعة</string>
     <string name="settings_cluster_speedometer_album_color_description">يطابق لون إطار الألبوم بانتقالات سلسة مع الحفاظ على التعتيم المحدد.</string>
     <string name="wireless_startup_slow_retry">بانتظار iPhone. يحاول DiPlay مجددًا كل 30 ثانية، أو يمكنك إعادة المحاولة الآن.</string>
+    <string name="settings_cluster_snapshot">تسجيل حالة لوحة العدادات</string>
+    <string name="settings_cluster_snapshot_done">تم التسجيل. صدّر تقرير التشخيص للاطلاع عليه.</string>
 </resources>

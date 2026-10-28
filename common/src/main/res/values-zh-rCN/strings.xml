@@ -1015,4 +1015,6 @@
     <string name="settings_cluster_speedometer_album_color">速度表背景使用专辑颜色</string>
     <string name="settings_cluster_speedometer_album_color_description">平滑过渡到专辑边框的颜色，并保留所选的不透明度。</string>
     <string name="wireless_startup_slow_retry">正在等待 iPhone，每 30 秒自动再试一次，也可以立即重试。</string>
+    <string name="settings_cluster_snapshot">记录仪表当前状态</string>
+    <string name="settings_cluster_snapshot_done">已记录，导出诊断报告即可查看</string>
 </resources>
