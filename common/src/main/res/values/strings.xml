@@ -1062,4 +1062,18 @@
     <string name="wireless_startup_slow_retry">Waiting for the iPhone. DiPlay tries again every 30 seconds, or retry now.</string>
     <string name="settings_cluster_snapshot">Record cluster status</string>
     <string name="settings_cluster_snapshot_done">Recorded. Export the diagnostic report to view it.</string>
+    <string name="settings_seal_display">Screen</string>
+    <string name="settings_seal_audio">Sound</string>
+    <string name="settings_seal_navigation">Navigation and cluster</string>
+    <string name="settings_seal_system">System</string>
+    <string name="settings_seal_system_summary">Diagnostics, language, backup, updates and about</string>
+    <string name="settings_seal_cluster">Cluster</string>
+    <string name="settings_seal_cluster_summary">Map, turn card and music</string>
+    <string name="settings_seal_cluster_map">Map</string>
+    <string name="settings_seal_cluster_turns">Turn card and lanes</string>
+    <string name="settings_seal_cluster_music">Music card</string>
+    <string name="settings_seal_appearance_group">Appearance and day/night</string>
+    <string name="settings_seal_picture_group">Picture and layout</string>
+    <string name="settings_seal_performance_group">Resolution and frame rate</string>
+    <string name="settings_seal_video_group">Video output</string>
 </resources>

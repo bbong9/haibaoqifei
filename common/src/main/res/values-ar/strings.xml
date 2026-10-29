@@ -1008,4 +1008,18 @@
     <string name="wireless_startup_slow_retry">بانتظار iPhone. يحاول DiPlay مجددًا كل 30 ثانية، أو يمكنك إعادة المحاولة الآن.</string>
     <string name="settings_cluster_snapshot">تسجيل حالة لوحة العدادات</string>
     <string name="settings_cluster_snapshot_done">تم التسجيل. صدّر تقرير التشخيص للاطلاع عليه.</string>
+    <string name="settings_seal_display">الشاشة</string>
+    <string name="settings_seal_audio">الصوت</string>
+    <string name="settings_seal_navigation">الملاحة والعدادات</string>
+    <string name="settings_seal_system">النظام</string>
+    <string name="settings_seal_system_summary">التشخيص واللغة والنسخ الاحتياطي والتحديثات والمعلومات</string>
+    <string name="settings_seal_cluster">العدادات</string>
+    <string name="settings_seal_cluster_summary">الخريطة وبطاقة الانعطاف والموسيقى</string>
+    <string name="settings_seal_cluster_map">الخريطة</string>
+    <string name="settings_seal_cluster_turns">بطاقة الانعطاف والمسارات</string>
+    <string name="settings_seal_cluster_music">بطاقة الموسيقى</string>
+    <string name="settings_seal_appearance_group">المظهر والوضع الليلي والنهاري</string>
+    <string name="settings_seal_picture_group">الصورة والتخطيط</string>
+    <string name="settings_seal_performance_group">الدقة ومعدل الإطارات</string>
+    <string name="settings_seal_video_group">إخراج الفيديو</string>
 </resources>

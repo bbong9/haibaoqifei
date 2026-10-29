@@ -1055,4 +1055,18 @@
     <string name="wireless_startup_slow_retry">iPhone을 기다리는 중입니다. DiPlay가 30초마다 다시 시도합니다. 지금 다시 시도할 수도 있습니다.</string>
     <string name="settings_cluster_snapshot">계기판 상태 기록</string>
     <string name="settings_cluster_snapshot_done">기록했습니다. 진단 보고서를 내보내 확인하세요.</string>
+    <string name="settings_seal_display">화면</string>
+    <string name="settings_seal_audio">소리</string>
+    <string name="settings_seal_navigation">내비게이션 및 계기판</string>
+    <string name="settings_seal_system">시스템</string>
+    <string name="settings_seal_system_summary">진단, 언어, 백업, 업데이트 및 정보</string>
+    <string name="settings_seal_cluster">계기판</string>
+    <string name="settings_seal_cluster_summary">지도, 회전 안내 및 음악</string>
+    <string name="settings_seal_cluster_map">지도</string>
+    <string name="settings_seal_cluster_turns">회전 안내 및 차선</string>
+    <string name="settings_seal_cluster_music">음악 카드</string>
+    <string name="settings_seal_appearance_group">모양 및 주야간 모드</string>
+    <string name="settings_seal_picture_group">화면 및 배치</string>
+    <string name="settings_seal_performance_group">해상도 및 프레임 속도</string>
+    <string name="settings_seal_video_group">비디오 출력</string>
 </resources>

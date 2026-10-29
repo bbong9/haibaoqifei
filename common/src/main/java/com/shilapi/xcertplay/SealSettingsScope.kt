@@ -19,10 +19,15 @@ internal enum class SealHiddenControl {
 }
 
 internal object SealSettingsScope {
-    val hiddenCategories = setOf(SettingsCategory.ADVANCED)
+    val hiddenCategories = setOf(SettingsCategory.ADVANCED, SettingsCategory.LANGUAGE, SettingsCategory.ABOUT)
+    val categoryAliases = mapOf(
+        SettingsCategory.LANGUAGE to SettingsCategory.DIAGNOSTICS,
+        SettingsCategory.ABOUT to SettingsCategory.DIAGNOSTICS,
+    )
     val relocatedSections = mapOf(
         SettingsSection.AMBIENT_LIGHTING to SettingsCategory.VEHICLE,
         SettingsSection.CLUSTER_MAP to SettingsCategory.NAVIGATION,
+        SettingsSection.LANGUAGE to SettingsCategory.DIAGNOSTICS,
     )
     val hiddenSections = setOf(SettingsSection.USB_CONNECTION) +
         (SettingsInformationArchitecture.sectionsByCategory.getValue(SettingsCategory.ADVANCED) - relocatedSections.keys)

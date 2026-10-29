@@ -1,18 +1,22 @@
 package com.shilapi.xcertplay
 
 import android.app.AlertDialog
+import android.app.AppOpsManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Looper
+import android.provider.Settings
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
+import android.widget.Button
 import android.widget.Switch
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
@@ -21,6 +25,7 @@ import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.setup.DiLinkGeneration
+import com.shilapi.xcertplay.update.UpdateRelease
 import java.io.File
 import java.util.concurrent.CompletableFuture
 import org.junit.After
@@ -43,6 +48,7 @@ import org.robolectric.util.ReflectionHelpers
 class SealSettingsUiTest {
     private val context get() = RuntimeEnvironment.getApplication()
     private var activity: DiPlayActivity? = null
+    private var previousUsageMode: Int? = null
 
     @Before fun setUp() {
         shadowOf(context.packageManager).installPackage(PackageInfo().apply {
@@ -58,6 +64,10 @@ class SealSettingsUiTest {
     }
 
     @After fun tearDown() {
+        previousUsageMode?.let { mode ->
+            shadowOf(context.getSystemService(AppOpsManager::class.java)).setMode(
+                AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName, mode)
+        }
         CarPlayBackgroundSession.clear()
         PendingReconnect.clear()
         activity?.finish()
@@ -185,10 +195,208 @@ class SealSettingsUiTest {
     @Test fun sealMovesClusterCardAndItsSearchEntriesToNavigation() {
         val screen = openSettings()
         openCategory(screen, SettingsCategory.NAVIGATION)
+        assertHas(screen, R.string.settings_seal_cluster)
+        assertMissing(screen, R.string.adb_cluster_activity_mode)
+        openCluster(screen)
         assertHas(screen, R.string.carplay_map_on_instrument_cluster_experimental)
         assertHas(screen, R.string.adb_cluster_activity_mode)
         assertSearchCategory(screen, R.string.carplay_map_on_instrument_cluster_experimental, SettingsCategory.NAVIGATION)
         assertSearchCategory(screen, R.string.adb_cluster_activity_mode, SettingsCategory.NAVIGATION)
+    }
+
+    @Test fun sealSettingsLiveInTheSevenDriverCategories() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
+        AirPlayPersistence.saveCenterMapOverlay(context, true)
+        ClusterMusicSettings.saveEnabled(context, true)
+        val screen = openSettings()
+        val expected = mapOf(
+            SettingsCategory.CONNECTION to listOf(R.string.open_connection_setup, R.string.connect_when_diplay_opens,
+                R.string.connect_when_iphone_bluetooth_connects, R.string.open_after_the_car_starts,
+                R.string.app_permissions, R.string.bluetooth_settings),
+            SettingsCategory.DISPLAY to listOf(R.string.settings_app_appearance, R.string.carplay_night_mode,
+                R.string.picture_adjustments, R.string.carplay_size, R.string.carplay_dock, R.string.resolution,
+                R.string.frame_rate, R.string.efficient_video, R.string.smooth_video,
+                R.string.settings_direct_video_output, R.string.settings_low_latency_decoder),
+            SettingsCategory.AUDIO to listOf(R.string.contrib_audio_home_media_channel_label,
+                R.string.contrib_audio_home_nav_channel_label, R.string.settings_navigation_attenuation,
+                R.string.settings_music_buffer_wireless),
+            SettingsCategory.NAVIGATION to listOf(R.string.report_location_to_iphone, R.string.settings_seal_cluster),
+            SettingsCategory.VEHICLE to listOf(R.string.settings_gesture_fingers_label, R.string.wheel_siri_key,
+                R.string.wheel_media_play_pause, R.string.settings_external_controller, R.string.settings_ambient_title,
+                R.string.settings_hide_byd_call_popup),
+            SettingsCategory.DIAGNOSTICS to listOf(R.string.save_diagnostic_report, R.string.choose_save_location,
+                R.string.settings_report_on_phone, R.string.settings_fps_counter, R.string.language_app_language,
+                R.string.backup_open, R.string.update_check, R.string.settings_background_update_checks),
+        )
+        for ((category, titles) in expected) {
+            openCategory(screen, category)
+            for (title in titles) {
+                assertHas(screen, title)
+                assertSearchCategory(screen, title, category)
+            }
+        }
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        openCluster(screen)
+        listOf(R.string.adb_cluster_activity_mode, R.string.carplay_map_on_instrument_cluster_experimental,
+            R.string.dashboard_shows, R.string.turn_card_overlay_size, R.string.settings_cluster_lane_strip,
+            R.string.settings_cluster_music, R.string.settings_cluster_music_seconds).forEach { title ->
+            assertHas(screen, title)
+            val result = search(screen, title).single { it.title == screen.getString(title) }
+            assertEquals(SettingsCategory.NAVIGATION, result.category)
+            assertTrue(result.clusterSubpage)
+        }
+    }
+
+    @Test fun sealOverviewLinksToEachVisibleCategoryAndVisibleControlsHaveOneDestination() {
+        denyUsageAccess()
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
+        AirPlayPersistence.saveCenterMapOverlay(context, true)
+        ClusterMusicSettings.saveEnabled(context, true)
+        val screen = openSettings()
+        val visible = SettingsInformationArchitecture.visibleCategories(true, SettingsCategory.OVERVIEW)
+        assertEquals(7, visible.size)
+        visible.filter { it != SettingsCategory.OVERVIEW }.forEach { category ->
+            val title = ReflectionHelpers.callInstanceMethod<String>(screen, "settingsCategoryTitle",
+                ReflectionHelpers.ClassParameter(SettingsCategory::class.java, category))
+            assertTrue(category.name, descendants(categoryContent(screen)).any {
+                it.contentDescription == screen.getString(R.string.settings_open_category, title)
+            })
+        }
+        val index = ReflectionHelpers.callInstanceMethod<List<DiPlayActivity.SettingsSearchResult>>(screen, "buildSettingsSearchIndex")
+        val destinations = mutableMapOf<String, MutableSet<SettingsCategory>>()
+        fun collect(category: SettingsCategory) {
+            descendants(categoryContent(screen)).filter { it.isShown }.forEach { view ->
+                val title = when (view) {
+                    is Switch -> view.contentDescription?.toString()
+                    is Button -> view.text?.toString()?.substringBefore(" · ")
+                    else -> null
+                }?.takeIf { it.isNotBlank() } ?: return@forEach
+                destinations.getOrPut(title) { mutableSetOf() }.add(category)
+            }
+        }
+        for (category in visible.filter { it != SettingsCategory.OVERVIEW }) {
+            openCategory(screen, category)
+            collect(category)
+            if (category == SettingsCategory.NAVIGATION) { openCluster(screen); collect(category) }
+        }
+        destinations.forEach { (title, categories) ->
+            assertEquals("$title appears in $categories", 1, categories.size)
+            assertTrue("$title has no searchable destination", index.any { it.title == title && it.category in categories })
+        }
+    }
+
+    @Test fun clusterPermissionActionRemainsAvailableOnlyInConnectionWhenNeeded() {
+        denyUsageAccess()
+        val resolver = context.contentResolver
+        val previousServices = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        val previousEnabled = Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
+        try {
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                "${context.packageName}/com.shilapi.xcertplay.UsbAutoConfirmService")
+            Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+            AirPlayPersistence.saveClusterMapEnabled(context, true)
+            AirPlayPersistence.saveCenterMapOverlay(context, true)
+            val screen = openSettings()
+            openCategory(screen, SettingsCategory.CONNECTION)
+            assertHas(screen, R.string.btn_auto_apply_permissions)
+            val permissionButton = descendants(categoryContent(screen)).filterIsInstance<Button>()
+                .single { it.text.toString() == screen.getString(R.string.btn_auto_apply_permissions) }
+            val palette = ReflectionHelpers.getField<DiPlayPalette>(screen, "palette")
+            assertEquals(palette.primaryText, permissionButton.currentTextColor)
+            openCategory(screen, SettingsCategory.NAVIGATION)
+            openCluster(screen)
+            assertMissing(screen, R.string.btn_auto_apply_permissions)
+            assertSearchCategory(screen, R.string.btn_auto_apply_permissions, SettingsCategory.CONNECTION)
+        } finally {
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, previousServices)
+            Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, previousEnabled)
+        }
+    }
+
+    @Test fun searchOpensClusterSubpageAndBackAndRecreationKeepItsDestination() {
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
+        val screen = openSettings()
+        val result = search(screen, R.string.settings_cluster_lane_strip).single {
+            it.title == screen.getString(R.string.settings_cluster_lane_strip)
+        }
+        assertTrue(result.clusterSubpage)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "openSearchResult",
+            ReflectionHelpers.ClassParameter(DiPlayActivity.SettingsSearchResult::class.java, result))
+        layoutRoot(screen)
+        assertEquals(SettingsCategory.NAVIGATION, currentCategory(screen))
+        assertTrue(ReflectionHelpers.getField(screen, "settingsClusterSubpage"))
+        assertHas(screen, R.string.settings_cluster_lane_strip)
+        val scroll = categoryContent(screen)
+        val target = descendants(scroll).filterIsInstance<TextView>()
+            .first { it.text.toString() == screen.getString(R.string.settings_cluster_lane_strip) }
+        val bounds = Rect()
+        target.getDrawingRect(bounds)
+        scroll.offsetDescendantRectToMyCoords(target, bounds)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        scroll.computeScroll()
+        assertTrue("Search did not scroll to the lane setting", bounds.top - scroll.scrollY in 0 until scroll.height)
+        val changed = Configuration(screen.resources.configuration).apply {
+            orientation = if (orientation == Configuration.ORIENTATION_LANDSCAPE)
+                Configuration.ORIENTATION_PORTRAIT else Configuration.ORIENTATION_LANDSCAPE
+        }
+        screen.onConfigurationChanged(changed)
+        assertTrue(ReflectionHelpers.getField(screen, "settingsClusterSubpage"))
+        val state = Bundle()
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "onSaveInstanceState",
+            ReflectionHelpers.ClassParameter(Bundle::class.java, state))
+        screen.finish()
+        val restored = openSettings(savedState = state)
+        assertEquals(SettingsCategory.NAVIGATION, currentCategory(restored))
+        assertTrue(ReflectionHelpers.getField(restored, "settingsClusterSubpage"))
+        assertHas(restored, R.string.settings_cluster_lane_strip)
+        restored.onBackPressedDispatcher.onBackPressed()
+        assertFalse(ReflectionHelpers.getField(restored, "settingsClusterSubpage"))
+        assertHas(restored, R.string.settings_seal_cluster)
+        openCluster(restored)
+        descendants(restored.window.decorView).filterIsInstance<Button>()
+            .first { it.text.toString() == restored.getString(R.string.back) }.performClick()
+        assertFalse(ReflectionHelpers.getField(restored, "settingsClusterSubpage"))
+        assertEquals(SettingsCategory.NAVIGATION, currentCategory(restored))
+    }
+
+    @Test @Config(sdk = [29], qualifiers = "en-w400dp-h700dp")
+    fun compactClusterSubpageReturnsToNavigationFromBothBackControls() {
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        openCluster(screen)
+        screen.onBackPressedDispatcher.onBackPressed()
+        assertEquals(SettingsCategory.NAVIGATION, currentCategory(screen))
+        assertHas(screen, R.string.settings_seal_cluster)
+        openCluster(screen)
+        descendants(screen.window.decorView).filterIsInstance<Button>()
+            .first { it.text.toString() == screen.getString(R.string.back) }.performClick()
+        assertEquals(SettingsCategory.NAVIGATION, currentCategory(screen))
+        assertHas(screen, R.string.settings_seal_cluster)
+    }
+
+    @Test fun sealUpdateAndBackupEntriesReturnToSystem() {
+        val screen = openSettings()
+        val release = UpdateRelease("v-test", "test.apk", "https://github.com/test.apk", "https://github.com/SHA256SUMS.txt")
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "openAvailableUpdate",
+            ReflectionHelpers.ClassParameter(UpdateRelease::class.java, release))
+        assertEquals(SettingsCategory.DIAGNOSTICS, currentCategory(screen))
+        assertHas(screen, R.string.update_download)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "openBackup",
+            ReflectionHelpers.ClassParameter(SettingsCategory::class.java, SettingsCategory.ABOUT))
+        assertEquals(SettingsCategory.ABOUT, ReflectionHelpers.getField<SettingsCategory>(screen, "backupOpenedFrom"))
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "navigateBack")
+        assertEquals(SettingsCategory.DIAGNOSTICS, currentCategory(screen))
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "openBackup",
+            ReflectionHelpers.ClassParameter(SettingsCategory::class.java, SettingsCategory.DIAGNOSTICS))
+        assertEquals(SettingsCategory.DIAGNOSTICS, ReflectionHelpers.getField<SettingsCategory>(screen, "backupOpenedFrom"))
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "navigateBack")
+        assertEquals(SettingsCategory.DIAGNOSTICS, currentCategory(screen))
     }
 
     @Test fun laneStripAppearsOnlyForTheCustomCardInSealNavigationAndAppliesImmediately() {
@@ -196,6 +404,7 @@ class SealSettingsUiTest {
         AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
         val screen = openSettings()
         openCategory(screen, SettingsCategory.NAVIGATION)
+        openCluster(screen)
         assertHas(screen, R.string.settings_cluster_lane_strip)
         assertSearchCategory(screen, R.string.settings_cluster_lane_strip, SettingsCategory.NAVIGATION)
         var refreshed = 0
@@ -210,6 +419,7 @@ class SealSettingsUiTest {
         for (content in CarPlayClusterDisplay.Content.entries.filter { it != CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD }) {
             AirPlayPersistence.saveClusterContent(context, content)
             openCategory(screen, SettingsCategory.NAVIGATION)
+            openCluster(screen)
             assertMissing(screen, R.string.settings_cluster_lane_strip)
         }
         AirPlayPersistence.overlaySettingsListener = null
@@ -220,6 +430,7 @@ class SealSettingsUiTest {
         AirPlayPersistence.saveAdbClusterEnabled(context, true)
         val screen = openSettings()
         openCategory(screen, SettingsCategory.NAVIGATION)
+        openCluster(screen)
         assertMissing(screen, R.string.settings_cluster_music_seconds)
         fun musicSwitch() = descendants(categoryContent(screen)).filterIsInstance<Switch>()
             .single { it.contentDescription == screen.getString(R.string.settings_cluster_music) }
@@ -289,6 +500,7 @@ class SealSettingsUiTest {
         ClusterMusicSettings.saveEnabled(context, true)
         val screen = openSettings()
         openCategory(screen, SettingsCategory.NAVIGATION)
+        openCluster(screen)
         listOf(R.string.settings_cluster_speedometer, R.string.settings_cluster_music,
             R.string.settings_cluster_music_mode, R.string.settings_cluster_music_seconds,
             R.string.dashboard_shows, R.string.turn_card_overlay_size,
@@ -298,24 +510,11 @@ class SealSettingsUiTest {
         val title = screen.getString(R.string.settings_cluster_music_seconds)
         val target = descendants(scroll).filterIsInstance<TextView>()
             .first { it.text.toString().startsWith("$title · ") }
-        val dashboardTitle = screen.getString(R.string.dashboard_shows)
-        val dashboard = descendants(scroll).filterIsInstance<TextView>()
-            .first { it.text.toString().startsWith("$dashboardTitle · ") }
-        var card: View = target
-        while (descendants(card).none { it === dashboard }) {
-            card = card.parent as View
-        }
-        assertTrue(card.width > 0 && card.height > 0)
+        listOf(R.string.settings_seal_cluster_map, R.string.settings_seal_cluster_turns,
+            R.string.settings_seal_cluster_music).forEach { assertHas(screen, it) }
         val base = File(requireNotNull(System.getProperty("user.dir")))
         val project = if (base.name == "common") base.parentFile else base
-        val directory = File(project, "build/cluster-settings-card16").apply { mkdirs() }
-        val cardBitmap = Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888)
-        try {
-            card.draw(Canvas(cardBitmap))
-            File(directory, "$name-card.png").outputStream().use {
-                assertTrue(cardBitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-            }
-        } finally { cardBitmap.recycle() }
+        val directory = File(project, "build/seal-settings-card20").apply { mkdirs() }
         val rect = Rect()
         target.getDrawingRect(rect)
         scroll.offsetDescendantRectToMyCoords(target, rect)
@@ -334,6 +533,7 @@ class SealSettingsUiTest {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
         } finally { bitmap.recycle() }
+        captureCategoryPages(screen, root, directory, "$name-cluster")
     }
 
     private fun captureCategories(layout: String) {
@@ -344,7 +544,7 @@ class SealSettingsUiTest {
         val rootDir = File(requireNotNull(System.getProperty("user.dir")))
         val project = if (rootDir.name == "common") rootDir.parentFile else rootDir
         val directory = File(project, "build/seal-settings-screenshots").apply { mkdirs() }
-        val auditDirectory = File(project, "build/seal-settings-card19").apply { mkdirs() }
+        val auditDirectory = File(project, "build/seal-settings-card20").apply { mkdirs() }
         for (category in SettingsInformationArchitecture.visibleCategories(true, SettingsCategory.OVERVIEW)) {
             openCategory(screen, category)
             layoutRoot(screen)
@@ -457,6 +657,20 @@ class SealSettingsUiTest {
             ReflectionHelpers.ClassParameter(SettingsCategory::class.java, category))
     }
 
+    private fun openCluster(screen: DiPlayActivity) {
+        val title = screen.getString(R.string.settings_seal_cluster)
+        descendants(categoryContent(screen)).filterIsInstance<TextView>()
+            .first { it.text.toString().startsWith("$title · ") }.performClick()
+    }
+
+    private fun denyUsageAccess() {
+        val manager = context.getSystemService(AppOpsManager::class.java)
+        previousUsageMode = manager.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(), context.packageName)
+        shadowOf(manager).setMode(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(),
+            context.packageName, AppOpsManager.MODE_IGNORED)
+    }
+
     private fun currentCategory(screen: DiPlayActivity) =
         ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory")
 
@@ -482,7 +696,10 @@ class SealSettingsUiTest {
     }
 
     private fun assertSearchCategory(screen: DiPlayActivity, title: Int, category: SettingsCategory) {
-        assertEquals(category, search(screen, title).single { it.title == screen.getString(title) }.category)
+        val label = screen.getString(title)
+        val result = search(screen, title).singleOrNull { it.title == label }
+        assertNotNull("Missing search result for $label", result)
+        assertEquals(category, result!!.category)
     }
 
     private fun layoutRoot(screen: DiPlayActivity) {

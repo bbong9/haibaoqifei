@@ -1049,4 +1049,18 @@
     <string name="wireless_startup_slow_retry">In attesa di iPhone. DiPlay riprova ogni 30 secondi oppure puoi riprovare ora.</string>
     <string name="settings_cluster_snapshot">Registra stato del quadro</string>
     <string name="settings_cluster_snapshot_done">Registrato. Esporta il rapporto diagnostico per visualizzarlo.</string>
+    <string name="settings_seal_display">Schermo</string>
+    <string name="settings_seal_audio">Audio</string>
+    <string name="settings_seal_navigation">Navigazione e quadro</string>
+    <string name="settings_seal_system">Sistema</string>
+    <string name="settings_seal_system_summary">Diagnostica, lingua, backup, aggiornamenti e informazioni</string>
+    <string name="settings_seal_cluster">Quadro</string>
+    <string name="settings_seal_cluster_summary">Mappa, svolte e musica</string>
+    <string name="settings_seal_cluster_map">Mappa</string>
+    <string name="settings_seal_cluster_turns">Svolte e corsie</string>
+    <string name="settings_seal_cluster_music">Scheda musica</string>
+    <string name="settings_seal_appearance_group">Aspetto e modalità giorno/notte</string>
+    <string name="settings_seal_picture_group">Immagine e disposizione</string>
+    <string name="settings_seal_performance_group">Risoluzione e frequenza</string>
+    <string name="settings_seal_video_group">Uscita video</string>
 </resources>

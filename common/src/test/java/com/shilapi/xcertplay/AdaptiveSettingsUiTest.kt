@@ -754,8 +754,14 @@ class AdaptiveSettingsUiTest {
         val vehicle = visibleIn(R.string.settings_vehicle)
         val advanced = visibleIn(R.string.settings_advanced)
         val connection = visibleIn(R.string.connection)
+        val diagnostics = visibleIn(R.string.diagnostics)
+        val language = visibleIn(R.string.language_section_title)
+        val about = visibleIn(R.string.about)
 
         assertTrue(display.any { it.startsWith(text(R.string.carplay_dock)) })
+        assertTrue(text(R.string.save_diagnostic_report) in diagnostics)
+        assertTrue(language.any { it.startsWith(text(R.string.language_app_language)) })
+        assertTrue(text(R.string.update_check) in about)
         assertFalse(vehicle.any { it.startsWith(text(R.string.carplay_dock)) })
 
         assertTrue(connection.any { it.startsWith(text(R.string.settings_usb_charging)) })

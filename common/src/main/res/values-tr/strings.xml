@@ -1047,4 +1047,18 @@
     <string name="wireless_startup_slow_retry">iPhone bekleniyor. DiPlay her 30 saniyede bir yeniden dener; şimdi de yeniden deneyebilirsiniz.</string>
     <string name="settings_cluster_snapshot">Gösterge durumunu kaydet</string>
     <string name="settings_cluster_snapshot_done">Kaydedildi. Görüntülemek için tanılama raporunu dışa aktarın.</string>
+    <string name="settings_seal_display">Ekran</string>
+    <string name="settings_seal_audio">Ses</string>
+    <string name="settings_seal_navigation">Navigasyon ve gösterge</string>
+    <string name="settings_seal_system">Sistem</string>
+    <string name="settings_seal_system_summary">Tanılama, dil, yedekleme, güncellemeler ve hakkında</string>
+    <string name="settings_seal_cluster">Gösterge</string>
+    <string name="settings_seal_cluster_summary">Harita, dönüş kartı ve müzik</string>
+    <string name="settings_seal_cluster_map">Harita</string>
+    <string name="settings_seal_cluster_turns">Dönüş kartı ve şeritler</string>
+    <string name="settings_seal_cluster_music">Müzik kartı</string>
+    <string name="settings_seal_appearance_group">Görünüm ve gece/gündüz modu</string>
+    <string name="settings_seal_picture_group">Görüntü ve düzen</string>
+    <string name="settings_seal_performance_group">Çözünürlük ve kare hızı</string>
+    <string name="settings_seal_video_group">Video çıkışı</string>
 </resources>

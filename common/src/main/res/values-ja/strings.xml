@@ -1061,4 +1061,18 @@
     <string name="wireless_startup_slow_retry">iPhoneを待機中です。DiPlayは30秒ごとに再試行します。今すぐ再試行することもできます。</string>
     <string name="settings_cluster_snapshot">メーターの状態を記録</string>
     <string name="settings_cluster_snapshot_done">記録しました。診断レポートを出力して確認してください。</string>
+    <string name="settings_seal_display">画面</string>
+    <string name="settings_seal_audio">音声</string>
+    <string name="settings_seal_navigation">ナビとメーター</string>
+    <string name="settings_seal_system">システム</string>
+    <string name="settings_seal_system_summary">診断、言語、バックアップ、更新、情報</string>
+    <string name="settings_seal_cluster">メーター</string>
+    <string name="settings_seal_cluster_summary">地図、案内カード、音楽</string>
+    <string name="settings_seal_cluster_map">地図</string>
+    <string name="settings_seal_cluster_turns">案内カードと車線</string>
+    <string name="settings_seal_cluster_music">音楽カード</string>
+    <string name="settings_seal_appearance_group">外観と昼夜モード</string>
+    <string name="settings_seal_picture_group">画面とレイアウト</string>
+    <string name="settings_seal_performance_group">解像度とフレームレート</string>
+    <string name="settings_seal_video_group">映像出力</string>
 </resources>

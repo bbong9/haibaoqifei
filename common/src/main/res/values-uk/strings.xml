@@ -971,4 +971,18 @@
     <string name="wireless_startup_slow_retry">Очікування iPhone. DiPlay повторює спробу кожні 30 секунд, або можна повторити її зараз.</string>
     <string name="settings_cluster_snapshot">Записати стан панелі</string>
     <string name="settings_cluster_snapshot_done">Записано. Експортуйте звіт діагностики для перегляду.</string>
+    <string name="settings_seal_display">Екран</string>
+    <string name="settings_seal_audio">Звук</string>
+    <string name="settings_seal_navigation">Навігація та прилади</string>
+    <string name="settings_seal_system">Система</string>
+    <string name="settings_seal_system_summary">Діагностика, мова, резервна копія, оновлення та відомості</string>
+    <string name="settings_seal_cluster">Прилади</string>
+    <string name="settings_seal_cluster_summary">Мапа, повороти та музика</string>
+    <string name="settings_seal_cluster_map">Мапа</string>
+    <string name="settings_seal_cluster_turns">Повороти та смуги</string>
+    <string name="settings_seal_cluster_music">Картка музики</string>
+    <string name="settings_seal_appearance_group">Вигляд і режим день/ніч</string>
+    <string name="settings_seal_picture_group">Зображення та розташування</string>
+    <string name="settings_seal_performance_group">Роздільність і частота кадрів</string>
+    <string name="settings_seal_video_group">Виведення відео</string>
 </resources>

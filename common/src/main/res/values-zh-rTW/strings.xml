@@ -1019,4 +1019,18 @@
     <string name="wireless_startup_slow_retry">正在等待 iPhone，每 30 秒自動再試一次，也可以立即重試。</string>
     <string name="settings_cluster_snapshot">記錄儀表目前狀態</string>
     <string name="settings_cluster_snapshot_done">已記錄，匯出診斷報告即可查看</string>
+    <string name="settings_seal_display">畫面</string>
+    <string name="settings_seal_audio">聲音</string>
+    <string name="settings_seal_navigation">導航與儀表</string>
+    <string name="settings_seal_system">系統</string>
+    <string name="settings_seal_system_summary">診斷、語言、備份、更新與關於</string>
+    <string name="settings_seal_cluster">儀表</string>
+    <string name="settings_seal_cluster_summary">地圖、轉向卡與音樂卡片</string>
+    <string name="settings_seal_cluster_map">地圖</string>
+    <string name="settings_seal_cluster_turns">轉向卡與車道</string>
+    <string name="settings_seal_cluster_music">音樂卡片</string>
+    <string name="settings_seal_appearance_group">外觀與日夜模式</string>
+    <string name="settings_seal_picture_group">畫面與版面</string>
+    <string name="settings_seal_performance_group">解析度與畫面更新率</string>
+    <string name="settings_seal_video_group">視訊輸出</string>
 </resources>

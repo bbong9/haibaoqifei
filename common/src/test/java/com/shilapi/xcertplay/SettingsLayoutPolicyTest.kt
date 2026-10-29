@@ -75,7 +75,7 @@ class SettingsLayoutPolicyTest {
         val ordinary = SettingsInformationArchitecture.sectionsByCategory
             .filterKeys { it != SettingsCategory.ADVANCED }.values.flatten().toSet()
         assertEquals(setOf(SettingsSection.USB_CONNECTION), SealSettingsScope.hiddenSections intersect ordinary)
-        assertEquals(setOf(SettingsCategory.ADVANCED), SealSettingsScope.hiddenCategories)
+        assertEquals(setOf(SettingsCategory.ADVANCED, SettingsCategory.LANGUAGE, SettingsCategory.ABOUT), SealSettingsScope.hiddenCategories)
         assertEquals(SealHiddenControl.entries.toSet(), SealSettingsScope.hiddenControls)
     }
 
@@ -83,8 +83,11 @@ class SettingsLayoutPolicyTest {
         val visible = SettingsInformationArchitecture.visibleCategories(true, SettingsCategory.OVERVIEW)
         val assignments = visible.flatMap { SettingsInformationArchitecture.sectionsFor(it, true) }
         assertEquals(assignments.toSet().size, assignments.size)
+        assertEquals(SettingsSection.entries.toSet() - SealSettingsScope.hiddenSections, assignments.toSet())
         assertTrue(SettingsSection.AMBIENT_LIGHTING in SettingsInformationArchitecture.sectionsFor(SettingsCategory.VEHICLE, true))
         assertTrue(SettingsSection.CLUSTER_MAP in SettingsInformationArchitecture.sectionsFor(SettingsCategory.NAVIGATION, true))
+        assertTrue(SettingsSection.LANGUAGE in SettingsInformationArchitecture.sectionsFor(SettingsCategory.DIAGNOSTICS, true))
+        assertEquals(7, visible.size)
         for (category in SettingsCategory.entries) {
             assertEquals(SettingsInformationArchitecture.sectionsByCategory.getValue(category),
                 SettingsInformationArchitecture.sectionsFor(category, false))
