@@ -973,4 +973,5 @@
     <string name="settings_seal_picture_group">Imagen y disposición</string>
     <string name="settings_seal_performance_group">Resolución y frecuencia</string>
     <string name="settings_seal_video_group">Salida de vídeo</string>
+    <string name="settings_description_for">Descripción de %1$s</string>
 </resources>

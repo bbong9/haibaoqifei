@@ -985,4 +985,5 @@
     <string name="settings_seal_picture_group">Зображення та розташування</string>
     <string name="settings_seal_performance_group">Роздільність і частота кадрів</string>
     <string name="settings_seal_video_group">Виведення відео</string>
+    <string name="settings_description_for">Опис: %1$s</string>
 </resources>

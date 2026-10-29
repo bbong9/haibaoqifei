@@ -1022,4 +1022,5 @@
     <string name="settings_seal_picture_group">الصورة والتخطيط</string>
     <string name="settings_seal_performance_group">الدقة ومعدل الإطارات</string>
     <string name="settings_seal_video_group">إخراج الفيديو</string>
+    <string name="settings_description_for">شرح %1$s</string>
 </resources>

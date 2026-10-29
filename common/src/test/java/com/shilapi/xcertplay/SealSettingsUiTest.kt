@@ -22,6 +22,7 @@ import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.media.AndroidMediaSink
+import com.shilapi.xcertplay.settings.SettingsPalette
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.setup.DiLinkGeneration
@@ -305,8 +306,7 @@ class SealSettingsUiTest {
             assertHas(screen, R.string.btn_auto_apply_permissions)
             val permissionButton = descendants(categoryContent(screen)).filterIsInstance<Button>()
                 .single { it.text.toString() == screen.getString(R.string.btn_auto_apply_permissions) }
-            val palette = ReflectionHelpers.getField<DiPlayPalette>(screen, "palette")
-            assertEquals(palette.primaryText, permissionButton.currentTextColor)
+            assertEquals(SettingsPalette.of(screen.currentAppNight).text, permissionButton.currentTextColor)
             openCategory(screen, SettingsCategory.NAVIGATION)
             openCluster(screen)
             assertMissing(screen, R.string.btn_auto_apply_permissions)
@@ -490,6 +490,170 @@ class SealSettingsUiTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
     fun clusterArabicLargeFontScreenshot() = captureClusterSettings("compact-ar")
+
+    @Test fun descriptionsAndNextConnectionMarkerDoNotChangeSavedValues() {
+        AirPlayPersistence.saveSmoothVideo(context, true)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.DISPLAY)
+        val title = screen.getString(R.string.smooth_video)
+        val description = descendants(categoryContent(screen)).filterIsInstance<TextView>()
+            .single { it.text.toString() == screen.getString(R.string.smooth_video_description) }
+        val help = descendants(categoryContent(screen)).single {
+            it.contentDescription == screen.getString(R.string.settings_description_for, title)
+        }
+        assertFalse(description.isShown)
+        help.performClick()
+        assertTrue(description.isShown)
+        assertTrue(AirPlayPersistence.loadSmoothVideo(context))
+        help.performClick()
+        assertFalse(description.isShown)
+        val latencyTitle = screen.getString(R.string.settings_smooth_video_latency)
+        val latency = descendants(categoryContent(screen)).filterIsInstance<TextView>()
+            .single { it.text.toString().startsWith("$latencyTitle · ") }
+        val wrapper = latency.parent as ViewGroup
+        assertTrue(descendants(wrapper).any {
+            it.tag == "settings_next_connection" &&
+                it.contentDescription == screen.getString(R.string.saved_for_your_next_connection)
+        })
+    }
+
+    @Test fun connectionPermissionAndLanguageDescriptionsExpandFromTheirRows() {
+        val screen = openSettings()
+        fun checkDescription(title: Int, description: Int) {
+            val content = categoryContent(screen)
+            val note = descendants(content).filterIsInstance<TextView>()
+                .single { it.text.toString() == screen.getString(description) }
+            val help = descendants(content).single {
+                it.contentDescription == screen.getString(R.string.settings_description_for, screen.getString(title))
+            }
+            assertFalse(note.isShown)
+            help.performClick()
+            assertTrue(note.isShown)
+            help.performClick()
+            assertFalse(note.isShown)
+        }
+        openCategory(screen, SettingsCategory.CONNECTION)
+        checkDescription(R.string.open_connection_setup, R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your)
+        checkDescription(R.string.app_permissions, R.string.settings_seal_wireless_permissions_description)
+        openCategory(screen, SettingsCategory.DIAGNOSTICS)
+        checkDescription(R.string.language_app_language, R.string.language_hint)
+    }
+
+    @Test fun conditionalNightModeDescriptionsExpandFromTheirRows() {
+        for ((mode, title, description) in listOf(
+            Triple(CarPlayNightMode.AMBIENT, R.string.ambient_light_threshold_title, R.string.carplay_night_ambient_hint),
+            Triple(CarPlayNightMode.SCHEDULE, R.string.carplay_night_start, R.string.carplay_night_schedule_hint),
+        )) {
+            AirPlayPersistence.saveCarPlayNightMode(context, mode)
+            val screen = openSettings()
+            openCategory(screen, SettingsCategory.DISPLAY)
+            val content = categoryContent(screen)
+            val note = descendants(content).filterIsInstance<TextView>()
+                .single { it.text.toString() == screen.getString(description) }
+            val help = descendants(content).single {
+                it.contentDescription == screen.getString(R.string.settings_description_for, screen.getString(title))
+            }
+            assertFalse(note.isShown)
+            help.performClick()
+            assertTrue(note.isShown)
+            help.performClick()
+            assertFalse(note.isShown)
+            screen.finish()
+        }
+    }
+
+    @Test fun experimentalTitleKeepsItsSourceTextAndUsesABadge() {
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.NAVIGATION)
+        openCluster(screen)
+        val title = screen.getString(R.string.carplay_map_on_instrument_cluster_experimental)
+        val view = descendants(categoryContent(screen)).filterIsInstance<TextView>().single { it.text.toString() == title }
+        val transformed = view.transformationMethod.getTransformation(view.text, view) as android.text.Spanned
+        assertEquals(title, view.text.toString())
+        assertTrue(transformed.getSpans(0, transformed.length, android.text.style.ReplacementSpan::class.java).isNotEmpty())
+    }
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
+    fun card21ChineseCompactScreenshots() = captureCard21("zh", "compact", false)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
+    fun card21ChineseExpandedScreenshots() = captureCard21("zh", "expanded", false)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "ar-w480dp-h800dp")
+    fun card21ArabicCompactScreenshots() = captureCard21("ar", "compact", true)
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "ar-w1280dp-h800dp")
+    fun card21ArabicExpandedScreenshots() = captureCard21("ar", "expanded", true)
+
+    private fun captureCard21(language: String, layout: String, rtlOnly: Boolean) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val originalFlags = context.applicationInfo.flags
+        context.applicationInfo.flags = originalFlags or ApplicationInfo.FLAG_SUPPORTS_RTL
+        AirPlayPersistence.saveSmoothVideo(context, true)
+        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        AirPlayPersistence.saveAdbClusterEnabled(context, true)
+        AirPlayPersistence.saveLegacyClusterEnabled(context, false)
+        AirPlayPersistence.saveClusterContent(context, CarPlayClusterDisplay.Content.MAP_WITH_CUSTOM_CARD)
+        ClusterMusicSettings.saveEnabled(context, true)
+        val base = File(requireNotNull(System.getProperty("user.dir")))
+        val project = if (base.name == "common") base.parentFile else base
+        val directory = File(project, "build/seal-settings-card21").apply { mkdirs() }
+        for (appearance in listOf(AppAppearance.DARK, AppAppearance.LIGHT)) {
+            AirPlayPersistence.saveAppAppearance(context, appearance)
+            val screen = openSettings()
+            assertEquals(appearance == AppAppearance.DARK, screen.currentAppNight)
+            val pages = if (rtlOnly) listOf("overview", "cluster") else
+                listOf("overview", "display", "connection", "navigation", "cluster", "system")
+            for (page in pages) {
+                val category = when (page) {
+                    "display" -> SettingsCategory.DISPLAY
+                    "connection" -> SettingsCategory.CONNECTION
+                    "navigation", "cluster" -> SettingsCategory.NAVIGATION
+                    "system" -> SettingsCategory.DIAGNOSTICS
+                    else -> SettingsCategory.OVERVIEW
+                }
+                openCategory(screen, category)
+                if (page == "cluster") openCluster(screen)
+                layoutRoot(screen)
+                val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+                val scroll = categoryContent(screen)
+                assertTrue(root.width > 0 && root.height > 0)
+                if (language == "ar") assertEquals(View.LAYOUT_DIRECTION_RTL, root.layoutDirection)
+                val maximum = (scroll.getChildAt(0).height - scroll.height).coerceAtLeast(0)
+                val step = (scroll.height * 4 / 5).coerceAtLeast(1)
+                var position = 0
+                var number = 0
+                while (true) {
+                    scroll.scrollTo(0, position)
+                    shadowOf(Looper.getMainLooper()).idle()
+                    val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+                    try {
+                        val canvas = Canvas(bitmap)
+                        val background = root.background
+                        if (root === scroll) {
+                            background?.setBounds(0, 0, root.width, root.height)
+                            background?.draw(canvas)
+                            root.background = null
+                            canvas.translate(0f, -scroll.scrollY.toFloat())
+                        }
+                        try { root.draw(canvas) } finally { if (root === scroll) root.background = background }
+                        val file = File(directory, "$language-${appearance.name.lowercase()}-$layout-$page-${number.toString().padStart(3, '0')}.png")
+                        file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+                        assertTrue(file.length() > 0)
+                    } finally { bitmap.recycle() }
+                    if (position == maximum) break
+                    position = (position + step).coerceAtMost(maximum)
+                    number++
+                }
+            }
+            screen.finish()
+        }
+        context.applicationInfo.flags = originalFlags
+    }
 
     private fun captureClusterSettings(name: String) {
         RuntimeEnvironment.setFontScale(1.3f)

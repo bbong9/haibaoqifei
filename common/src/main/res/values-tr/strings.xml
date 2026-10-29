@@ -1061,4 +1061,5 @@
     <string name="settings_seal_picture_group">Görüntü ve düzen</string>
     <string name="settings_seal_performance_group">Çözünürlük ve kare hızı</string>
     <string name="settings_seal_video_group">Video çıkışı</string>
+    <string name="settings_description_for">%1$s açıklaması</string>
 </resources>

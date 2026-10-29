@@ -15,6 +15,7 @@ import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.media.SmoothVideoLatency
 import com.shilapi.xcertplay.orchestration.CarPlayController
+import com.shilapi.xcertplay.settings.SettingsPalette
 import java.io.File
 import org.junit.After
 import org.junit.Assert.*
@@ -120,6 +121,9 @@ class SmoothVideoLatencySettingsTest {
         val button = latencyButton(screen)
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue("Latency choice must be visible", isVisible(button))
+        val group = (button.parent as View).parent as View
+        assertEquals(Math.round(SettingsPalette.SUBITEM_INDENT_DP * screen.resources.displayMetrics.density), group.paddingStart)
+        assertEquals(0, group.paddingEnd)
         val layout = requireNotNull(button.layout)
         for (line in 0 until layout.lineCount) assertEquals("Clipped latency choice", 0, layout.getEllipsisCount(line))
         assertTrue("Latency choice text extends outside its row: ${button.text}", layout.getLineBottom(layout.lineCount - 1) <=
@@ -129,7 +133,9 @@ class SmoothVideoLatencySettingsTest {
         val directRow = descendants(screen.window.decorView).filterIsInstance<Switch>()
             .single { it.contentDescription == screen.getString(R.string.settings_direct_video_output) }.parent as View
         val card = smoothRow.parent as ViewGroup
-        assertSame(card, (button.parent as View).parent)
+        val visualRow = button.parent as View
+        assertEquals("settings_row_wrapper", visualRow.tag)
+        assertSame(card, ((visualRow.parent as View).parent))
         assertSame(card, directRow.parent)
         val bitmap = Bitmap.createBitmap(card.width, directRow.bottom - smoothRow.top, Bitmap.Config.ARGB_8888)
         try {

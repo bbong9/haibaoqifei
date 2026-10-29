@@ -1033,4 +1033,5 @@
     <string name="settings_seal_picture_group">畫面與版面</string>
     <string name="settings_seal_performance_group">解析度與畫面更新率</string>
     <string name="settings_seal_video_group">視訊輸出</string>
+    <string name="settings_description_for">%1$s的說明</string>
 </resources>

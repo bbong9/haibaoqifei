@@ -1075,4 +1075,5 @@
     <string name="settings_seal_picture_group">画面とレイアウト</string>
     <string name="settings_seal_performance_group">解像度とフレームレート</string>
     <string name="settings_seal_video_group">映像出力</string>
+    <string name="settings_description_for">%1$sの説明</string>
 </resources>

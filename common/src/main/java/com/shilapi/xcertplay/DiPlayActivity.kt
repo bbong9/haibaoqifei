@@ -90,6 +90,8 @@ import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import com.shilapi.xcertplay.settings.SettingsTheme
 import com.shilapi.xcertplay.settings.SettingsWidgets
+import com.shilapi.xcertplay.settings.SettingsPalette
+import com.shilapi.xcertplay.settings.SettingsVisuals
 import com.shilapi.xcertplay.setup.DiLinkGeneration
 import com.shilapi.xcertplay.setup.SetupGuide
 import com.shilapi.xcertplay.transport.EvChargingConnectors
@@ -235,6 +237,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var toneStop: Runnable? = null
     private var exportButton: Button? = null
     private var rootScroll: ScrollView? = null
+    private var settingsBackground: GradientDrawable? = null
+    private var settingsBackgroundNight: Boolean? = null
+    private var settingsBackgroundOwner: View? = null
     private var settingsRailScroll: ScrollView? = null
     private var reconnectBar: View? = null
     private var readinessCard: LinearLayout? = null
@@ -631,6 +636,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onDestroy() {
+        releaseSettingsBackground()
         settingsSearchPopup?.dismiss()
         appearanceObserverRemoval?.invoke()
         appearanceObserverRemoval = null
@@ -766,7 +772,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             "settings" -> !SettingsLayoutPreferences.isActive(this)
             else -> true
         }
-        val scroll = ScrollView(this).apply { setBackgroundColor(BG); isFillViewport = true; clipToPadding = false }
+        val scroll = ScrollView(this).apply {
+            if (page != "settings") setBackgroundColor(BG)
+            isFillViewport = true
+            clipToPadding = false
+        }
         rootScroll = scroll
         val content = column()
         scroll.addView(content)
@@ -784,7 +794,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 compact -> 8
                 else -> 24
             }))
-            if (page == "settings") content.addView(reconnectBar(), LinearLayout.LayoutParams(-1, -2).apply {
+            if (page == "settings" && settingsCategory != SettingsCategory.OVERVIEW) content.addView(reconnectBar(), LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(SETTINGS_BLOCK_GAP_DP)
             })
             when (page) {
@@ -796,6 +806,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
             scroll
         }
+        if (page == "settings") attachSettingsBackground(root) else releaseSettingsBackground()
         // Keep the background full screen, but all controls inside the camera and
         // visible system/keyboard bounds. Insets are physical pixels, not scaled dp.
         val baseLeft = root.paddingLeft
@@ -857,6 +868,23 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             pendingRailScrollY = null
             pendingRailFocus = false
         }
+    }
+
+    private fun attachSettingsBackground(root: View) {
+        settingsBackgroundOwner?.background = null
+        if (settingsBackground == null || settingsBackgroundNight != appNight) {
+            settingsBackground = SettingsPalette.of(appNight).background()
+            settingsBackgroundNight = appNight
+        }
+        root.background = settingsBackground
+        settingsBackgroundOwner = root
+    }
+
+    private fun releaseSettingsBackground() {
+        settingsBackgroundOwner?.background = null
+        settingsBackgroundOwner = null
+        settingsBackground = null
+        settingsBackgroundNight = null
     }
 
     private fun standardHeader(compact: Boolean): LinearLayout = row().apply {
@@ -1140,13 +1168,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     // Only the category scrolls, so the rail keeps showing where the driver is.
     private fun expandedSettingsShell(header: View, categoryScroll: ScrollView): LinearLayout = column().apply {
-        setBackgroundColor(BG)
         setPadding(dp(32), dp(24), dp(32), 0)
         addView(header)
         addView(space(24))
-        addView(reconnectBar(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
+        if (settingsCategory != SettingsCategory.OVERVIEW) {
+            addView(reconnectBar(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
+        }
         val split = row().apply { gravity = Gravity.TOP }
         // The rail scrolls on its own only when the window is too short for every destination.
+        val availableRailWidth = (resources.configuration.screenWidthDp - SETTINGS_SHELL_INSET_DP * 2 -
+            SettingsPalette.RAIL_GAP_DP - SETTINGS_CONTENT_MIN_WIDTH_DP).coerceAtLeast(SETTINGS_RAIL_MIN_WIDTH_DP)
         split.addView(ScrollView(this@DiPlayActivity).apply {
             addView(column().apply {
                 setPadding(0, 0, 0, dp(12))
@@ -1154,8 +1185,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             })
             settingsRailScroll = this
         },
-            LinearLayout.LayoutParams(dp(SettingsLayoutPolicy.railWidthDp(resources.configuration.fontScale)), -2))
-        split.addView(space(24), LinearLayout.LayoutParams(dp(24), 1))
+            LinearLayout.LayoutParams(dp(SettingsLayoutPolicy.railWidthDp(resources.configuration.fontScale)
+                .coerceAtMost(availableRailWidth)), -2))
+        split.addView(space(SettingsPalette.RAIL_GAP_DP), LinearLayout.LayoutParams(dp(SettingsPalette.RAIL_GAP_DP), 1))
         split.addView(categoryScroll, LinearLayout.LayoutParams(0, -1, 1f))
         addView(split, LinearLayout.LayoutParams(-1, 0, 1f))
     }
@@ -1183,29 +1215,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             isSelected = selected
             foreground = focusRing(12)
             contentDescription = getString(R.string.settings_open_category, title)
-            background = android.graphics.drawable.RippleDrawable(
-                ColorStateList.valueOf(RIPPLE),
-                GradientDrawable().apply {
-                    setColor(if (selected) RAIL_SELECTED else Color.TRANSPARENT)
-                    cornerRadius = dp(12).toFloat()
-                    if (selected) setStroke(dp(1), RAIL_SELECTED_BORDER)
-                },
-                null,
-            )
+            background = GradientDrawable().apply {
+                setColor(if (selected) RAIL_SELECTED else Color.TRANSPARENT)
+                cornerRadius = dp(SettingsPalette.CARD_CORNER_DP).toFloat()
+            }
             setPadding(dp(8), 0, dp(12), 0)
-            addView(View(this@DiPlayActivity).apply {
-                background = GradientDrawable().apply {
-                    setColor(if (selected) ACCENT else Color.TRANSPARENT)
-                    cornerRadius = dp(2).toFloat()
-                }
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(4), dp(34)).apply { marginEnd = dp(10) })
             addView(ImageView(this@DiPlayActivity).apply {
                 setImageResource(settingsCategoryIcon(category))
-                imageTintList = ColorStateList.valueOf(if (selected) ACCENT else TEXT)
+                imageTintList = ColorStateList.valueOf(if (selected) settingsPalette.selectedText else TEXT)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(12) })
-            addView(label(title, 16, if (selected) ACCENT else TEXT, true,
+            }, LinearLayout.LayoutParams(dp(SettingsPalette.ICON_SIZE_DP), dp(SettingsPalette.ICON_SIZE_DP)).apply {
+                marginEnd = dp(SettingsPalette.RAIL_ICON_GAP_DP)
+            })
+            addView(label(title, 16, if (selected) settingsPalette.selectedText else TEXT, true,
                 centreGlyphs = usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)),
                 LinearLayout.LayoutParams(0, -1, 1f))
             setOnClickListener {
@@ -1275,12 +1297,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         renderedReadiness = null
         refreshReadiness()
         content.addView(readiness, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
-        content.addView(button(getString(R.string.setup_guide), false) { openSetupGuide(fromSettings = true) },
-            LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(6) })
-        content.addView(label(getString(R.string.setup_guide_description), 14, MUTED).apply {
-            setPadding(0, 0, 0, dp(20))
-        })
-
         val visibleCategories = SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this), settingsCategory)
         val destinations = listOf(
             SettingsCategory.CONNECTION to if (sealEditionCheck(this)) R.string.settings_seal_connection_summary else R.string.settings_connection_summary,
@@ -1359,21 +1375,38 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 R.string.settings_seal_ready_saved_connection else R.string.settings_ready_usb)
         }
         val tint = when {
-            state.needsAction -> WARNING
+            state.needsAction -> TEXT
             state == SettingsReadiness.CONNECTED -> READY
             else -> TEXT
         }
         card.addView(label(title, 22, tint, true))
         card.addView(label(detail, 15, MUTED).apply { setPadding(0, dp(6), 0, 0) })
         when (state) {
-            SettingsReadiness.CHOOSE_IPHONE -> card.addView(button(getString(R.string.settings_choose_iphone_action), true) {
-                choosePhone()
-            }, matchButton(12, 56))
-            SettingsReadiness.SETUP_ERROR, SettingsReadiness.HOTSPOT_SETUP -> card.addView(button(getString(R.string.open_connection_setup), true) {
-                openConnectionSetupFromSettings()
-            }, matchButton(12, 56))
+            SettingsReadiness.CHOOSE_IPHONE -> card.addView(readinessLink(getString(R.string.settings_choose_iphone_action), ::choosePhone))
+            SettingsReadiness.SETUP_ERROR, SettingsReadiness.HOTSPOT_SETUP -> card.addView(
+                readinessLink(getString(R.string.open_connection_setup), ::openConnectionSetupFromSettings))
             else -> Unit
         }
+        card.addView(reconnectBar())
+        val setupTitle = getString(R.string.setup_guide)
+        searchIndexSink?.add(setupTitle)
+        val setupDescription = label(getString(R.string.setup_guide_description), 14, MUTED)
+        card.addView(row().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(readinessLink(setupTitle) { openSetupGuide(fromSettings = true) },
+                LinearLayout.LayoutParams(0, -2, 1f))
+            addView(SettingsVisuals.descriptionToggle(this@DiPlayActivity, setupTitle, setupDescription,
+                SettingsTheme.settings(settingsPalette)))
+        })
+        card.addView(setupDescription)
+    }
+
+    private fun readinessLink(title: String, action: () -> Unit): TextView = label(title, 15,
+        settingsPalette.selectedText, true).apply {
+        minimumHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { action() }
     }
 
     private fun quickSettingsCard(): LinearLayout = card().also(::buildQuickSettings).also(::normalizeSpacing)
@@ -1423,9 +1456,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setPadding(dp(24), dp(10), dp(24), dp(10))
         isClickable = true
         isFocusable = true
-        foreground = android.graphics.drawable.LayerDrawable(arrayOf(
-            android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), null, null),
-            focusRing((layoutCornerRadius() * 1.35f / resources.displayMetrics.density).roundToInt())))
+        foreground = focusRing(SettingsPalette.CARD_CORNER_DP)
         contentDescription = getString(R.string.settings_open_category, settingsCategoryTitle(category))
         addView(row().apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -1443,7 +1474,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun settingsPageTitle(content: LinearLayout, title: String, subtitle: String) {
-        content.addView(label(title, if (isExpandedSettingsLayout) 34 else 26, TEXT, true))
+        content.addView(label(title, 20, TEXT, true))
         content.addView(label(subtitle, 16, MUTED).apply { setPadding(0, dp(6), 0, dp(20)) })
     }
 
@@ -1486,6 +1517,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun navigationSettings(content: LinearLayout) {
         if (sealEditionCheck(this) && settingsClusterSubpage) {
+            content.addView(headerButton(settingsCategoryTitle(SettingsCategory.NAVIGATION), R.drawable.ic_dp_back,
+                isCompactLayout) { settingsClusterSubpage = false; render() }.apply {
+                background = ColorDrawable(Color.TRANSPARENT)
+            }, LinearLayout.LayoutParams(-2, dp(SettingsPalette.ROW_HEIGHT_DP)))
             settingsPageTitle(content, getString(R.string.settings_seal_cluster), getString(R.string.settings_seal_cluster_summary))
             renderSections(content, setOf(SettingsSection.CLUSTER_MAP))
             return
@@ -1505,11 +1540,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         renderSections(content, SettingsInformationArchitecture.sectionsFor(SettingsCategory.VEHICLE, sealEditionCheck(this)))
         if (SettingsCategory.ADVANCED in SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this), settingsCategory)) {
             section(content, getString(R.string.settings_advanced), R.drawable.ic_dp_advanced) { card ->
-                card.addView(label(getString(R.string.settings_vehicle_description), 16, MUTED))
+                val description = descriptionLabel(getString(R.string.settings_vehicle_description), 16)
+                if (page != "settings") card.addView(description)
                 card.addView(button(getString(R.string.settings_open_advanced), false) {
                     settingsCategory = SettingsCategory.ADVANCED
                     render()
                 }, matchButton(14, 56))
+                if (page == "settings") card.addView(description)
             }
         }
     }
@@ -1589,10 +1626,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             var top = 0
             var view: View? = target
             while (view != null && view !== scroll) { top += view.top; view = view.parent as? View }
-            scroll.smoothScrollTo(0, (top - dp(24)).coerceAtLeast(0))
+            scroll.scrollTo(0, (top - dp(24)).coerceAtLeast(0))
             target.requestFocus()
-            target.isPressed = true
-            handler.postDelayed({ target.isPressed = false }, SEARCH_HIGHLIGHT_MILLIS)
         }
     }
 
@@ -1729,7 +1764,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         settingsSearchPopup = PopupWindow(scroll, box.width, 0, false).apply {
             setBackgroundDrawable(rounded(SURFACE, BORDER))
-            elevation = dp(8).toFloat()
             // Tapping elsewhere closes the list and keeps the query; tapping the box reopens it.
             isOutsideTouchable = true
             inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
@@ -1780,8 +1814,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         isClickable = true
         isFocusable = true
         contentDescription = "${result.title}, $category"
-        foreground = android.graphics.drawable.LayerDrawable(arrayOf(
-            android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), null, null), focusRing(12)))
+        foreground = focusRing(12)
         minimumHeight = dp(56)
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -1864,7 +1897,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 reconnects = false) {
                 AirPlayPersistence.saveSettingsGestureFingers(this, gestureFingers[it])
             }
-            card.addView(label(getString(R.string.settings_gesture_fingers_hint), 14, MUTED).apply {
+            card.addView(descriptionLabel(getString(R.string.settings_gesture_fingers_hint)).apply {
                 setPadding(0, dp(10), 0, 0)
             })
             if (!sealHides(SealHiddenControl.RIGHT_HAND_DRIVE)) {
@@ -1876,8 +1909,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.settings_wheel_keys), R.drawable.ic_dp_controls, ::wheelKeysSettings)
         filteredSection(content, SettingsSection.CONNECTION_SETUP,
             getString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
-            card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
+            val description = descriptionLabel(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16)
+            if (page != "settings") card.addView(description)
             card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
+            if (page == "settings") card.addView(description)
             card.addView(space(12))
             if (!sealHides(SealHiddenControl.MFI_TARGET)) {
                 // Also here, not only in the CarPlay menu: with the CH341 removed CarPlay cannot connect,
@@ -1896,7 +1931,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             getString(R.string.setup_error_auth)
                         }
                     }
-                    card.addView(label(getString(R.string.settings_mfi_target_description), 14, MUTED))
+                    card.addView(descriptionLabel(getString(R.string.settings_mfi_target_description)))
                 }
             }
         }
@@ -1989,7 +2024,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 })
             }
             card.addView(button(getString(R.string.boot_start_repair), false) { repairBootStart() }, matchButton(6, 56))
-            card.addView(label(getString(R.string.boot_start_repair_desc), 14, MUTED).apply { setPadding(0, dp(8), 0, dp(6)) })
+            card.addView(descriptionLabel(getString(R.string.boot_start_repair_desc)).apply { setPadding(0, dp(8), 0, dp(6)) })
             card.addView(button(chooseIphoneTitle(), false) { choosePhone() }, matchButton(12, 60))
         }
         filteredSection(content, SettingsSection.USB_CONNECTION,
@@ -2003,7 +2038,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 AirPlayPersistence.saveUsbChargingCurrent(this, currents[it])
                 if (!AirPlayPersistence.loadWirelessEnabled(this)) markReconnectNeeded()
             }
-            card.addView(label(getString(R.string.settings_usb_charging_description), 14, MUTED))
+            card.addView(descriptionLabel(getString(R.string.settings_usb_charging_description)))
         }
         if (settingsSectionFilter?.contains(SettingsSection.BYD_ADB) != false) bydAdbSettings(content)
         displaySettingsSection(content)
@@ -2129,7 +2164,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     getString(R.string.settings_navigation_attenuation_value, db)
             }
             card.addView(gainSlider)
-            card.addView(label(getString(R.string.settings_navigation_attenuation_description), 14, MUTED).apply {
+            card.addView(descriptionLabel(getString(R.string.settings_navigation_attenuation_description)).apply {
                 setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
             })
             musicBufferChoice(card, wireless = true)
@@ -2160,7 +2195,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             toggle(card, getString(R.string.report_location_to_iphone),
                 getString(R.string.sends_precise_android_location_as_carplay_gps_data_when_th),
                 AirPlayPersistence.loadLocationReportingEnabled(this), save = ::onLocationReportingChanged)
-            card.addView(label(getString(R.string.location_reporting_reconnects), 14, MUTED))
+            card.addView(descriptionLabel(getString(R.string.location_reporting_reconnects)))
         }
         // A launcher shortcut. Some head units' launchers list only their own cards, so a normally
         // installed app never appears on the home screen; this app draws its own way back instead (#650).
@@ -2206,9 +2241,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         filteredSection(content, SettingsSection.PERMISSIONS_AND_HELP,
             getString(R.string.permissions_and_connection_help), R.drawable.ic_dp_permissions) { card ->
-            card.addView(label(getString(if (sealEditionCheck(this)) R.string.settings_seal_wireless_permissions_description
-                else R.string.nearby_devices_connects_your_iphone_microphone_enables_sir), 16, MUTED))
+            val description = descriptionLabel(getString(if (sealEditionCheck(this)) R.string.settings_seal_wireless_permissions_description
+                else R.string.nearby_devices_connects_your_iphone_microphone_enables_sir), 16)
+            if (page != "settings") card.addView(description)
             card.addView(button(getString(R.string.app_permissions), false) { openSystem(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }, matchButton(16, 60))
+            if (page == "settings") card.addView(description)
             card.addView(button(getString(R.string.bluetooth_settings), false) { openBluetoothSettings() }, matchButton(10, 60))
             card.addView(button(getString(R.string.wireless_connection_help), false) { wirelessHelp() }, matchButton(10, 60))
         }
@@ -2252,15 +2289,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             rememberLaunchAppearance()
             handler.post { checkForAppearanceChange() }
         }
-        card.addView(label(getString(R.string.settings_app_appearance_description), 14, MUTED))
+        card.addView(descriptionLabel(getString(R.string.settings_app_appearance_description)))
         val nightModes = CarPlayNightMode.entries
         val nightMode = AirPlayPersistence.loadCarPlayNightMode(this)
-        val ambientControls = column().apply {
-            visibility = if (nightMode == CarPlayNightMode.AMBIENT) View.VISIBLE else View.GONE
-        }
-        val scheduleControls = column().apply {
-            visibility = if (nightMode == CarPlayNightMode.SCHEDULE) View.VISIBLE else View.GONE
-        }
+        val ambientControls = dependentSettingsColumn(nightMode == CarPlayNightMode.AMBIENT)
+        val scheduleControls = dependentSettingsColumn(nightMode == CarPlayNightMode.SCHEDULE)
         choice(
             card,
             getString(R.string.carplay_night_mode),
@@ -2274,22 +2307,26 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             handler.post(::checkForAppearanceChange)
         }
         val sentenceSeparator = if (resources.configuration.locales[0].language == "zh") "" else " "
-        card.addView(label(getString(R.string.carplay_night_hint) + sentenceSeparator +
-            getString(R.string.carplay_night_time_note), 14, MUTED).apply {
+        card.addView(descriptionLabel(getString(R.string.carplay_night_hint) + sentenceSeparator +
+            getString(R.string.carplay_night_time_note)).apply {
             setPadding(0, 0, 0, dp(18))
         })
-        ambientControls.addView(label(getString(R.string.carplay_night_ambient_hint), 14, MUTED).apply {
+        val ambientHint = descriptionLabel(getString(R.string.carplay_night_ambient_hint)).apply {
             setPadding(0, 0, 0, dp(18))
-        })
+        }
+        if (page != "settings") ambientControls.addView(ambientHint)
         ambientLightThresholdControl(ambientControls)
+        if (page == "settings") ambientControls.addView(ambientHint)
         nightDelaySettingControl(ambientControls, R.string.ambient_delay_title, R.string.ambient_delay_hint,
             0..60, 2, R.string.ambient_delay_summary, { AirPlayPersistence.loadAmbientDelaySeconds(this) },
             save = { AirPlayPersistence.saveAmbientDelaySeconds(this, it) })
         card.addView(ambientControls)
-        scheduleControls.addView(label(getString(R.string.carplay_night_schedule_hint), 14, MUTED).apply {
+        val scheduleHint = descriptionLabel(getString(R.string.carplay_night_schedule_hint)).apply {
             setPadding(0, 0, 0, dp(18))
-        })
+        }
+        if (page != "settings") scheduleControls.addView(scheduleHint)
         scheduleTimeControl(scheduleControls, start = true)
+        if (page == "settings") scheduleControls.addView(scheduleHint)
         scheduleTimeControl(scheduleControls, start = false)
         card.addView(scheduleControls)
         picture.addView(button(getString(R.string.picture_adjustments), false) {
@@ -2323,7 +2360,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         picture.addView(button("${getString(R.string.settings_interface_size)} · ${InterfaceSize.displayName(this, InterfaceSize.preference(this))}", false) {
             InterfaceSize.showPicker(this)
         }, matchButton(12, 60))
-        picture.addView(label(getString(R.string.settings_interface_size_hint), 14, MUTED))
+        picture.addView(descriptionLabel(getString(R.string.settings_interface_size_hint)))
         if (!isNaturallyExpandedSettingsLayout) toggle(picture, getString(R.string.settings_force_full_settings),
             getString(R.string.settings_force_full_settings_hint), SettingsLayoutPreferences.forceFull(this)) {
             SettingsLayoutPreferences.saveForceFull(this, it)
@@ -2389,13 +2426,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         if (adbCluster && !AirPlayPersistence.loadLegacyClusterEnabled(this) && com.shilapi.xcertplay.hud.BydOemClusterNavi.applicable(this)) {
             val holds = com.shilapi.xcertplay.hud.BydOemClusterHold.entries
-            card.addView(label(getString(R.string.oem_cluster_map_description), 14, MUTED))
+            val description = descriptionLabel(getString(R.string.oem_cluster_map_description))
+            if (page != "settings") card.addView(description)
             choice(card, getString(R.string.oem_cluster_map), holds.map { it.localizedLabel(this) },
                 holds.indexOf(BydOutputSettings.oemClusterHold(this))) { index ->
                 BydOutputSettings.setOemClusterHold(this, holds[index])
                 ClusterActivityOutput.stopForSettings()
                 markReconnectNeeded()
             }
+            if (page == "settings") card.addView(description)
         }
         val clusterDisplay = ClusterMapPresentation.findDisplay(this)
         val clusterSize = clusterDisplay?.let { ClusterMapPresentation.sizeOf(it) }
@@ -2469,7 +2508,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 DiLink51ClusterLayout.saveTheme(this, themes[it])
                                 markReconnectNeeded()
                             }
-                            card.addView(label(getString(R.string.manual_mode_match_the_cluster_theme_here_the_map_cannot_fo), 14, MUTED))
+                            card.addView(descriptionLabel(getString(R.string.manual_mode_match_the_cluster_theme_here_the_map_cannot_fo)))
                         }
                         val contrasts = DiLink51ClusterLayout.Contrast.entries
                         choice(card, getString(R.string.instrument_contrast), contrasts.map { it.localizedLabel(this) }, contrasts.indexOf(DiLink51ClusterLayout.contrast(this))) {
@@ -2548,7 +2587,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             AirPlayPersistence.saveClusterTurnCardOverlayYPercent(this, ClusterTurnCardOverlay.DEFAULT_Y_PERCENT)
                             render()
                         }, matchButton(10, 56))
-                        turnGroup.addView(label(getString(R.string.turn_card_overlay_note), 14, MUTED))
+                        turnGroup.addView(descriptionLabel(getString(R.string.turn_card_overlay_note)))
                     }
                     val turnCard = officialCardOnly
                     val placementGroup = if (turnCard) turnGroup else card
@@ -2589,7 +2628,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             render()
                             markReconnectNeeded()
                         }
-                        card.addView(label(getString(R.string.cluster_small_window_marker_description), 14, MUTED).apply {
+                        card.addView(descriptionLabel(getString(R.string.cluster_small_window_marker_description)).apply {
                             setPadding(0, dp(8), 0, dp(6))
                         })
                         if (AirPlayPersistence.loadClusterSmallWindowMode(this) == 2) {
@@ -2662,7 +2701,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                                 ) { it -> getString(R.string.turn_card_overlay_opacity_option, it) }
                                     .also { it2 -> it2.onSave = { v -> AirPlayPersistence.saveClusterSmallWindowCardOpacityPercent(this, v) } })
                             }
-                            card.addView(label(getString(R.string.cluster_small_window_hint), 14, MUTED).apply { setPadding(0, dp(10), 0, 0) })
+                            card.addView(descriptionLabel(getString(R.string.cluster_small_window_hint)).apply { setPadding(0, dp(10), 0, 0) })
                         }
                     }
                     if (!fullPanelCluster) {
@@ -2676,7 +2715,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                             ), shapes.indexOf(BydOutputSettings.clusterProjectionShape(this)), reconnects = false) {
                                 BydOutputSettings.setClusterProjectionShape(this, shapes[it])
                             }
-                            card.addView(label(getString(R.string.cluster_projection_shape_description), 14, MUTED))
+                            card.addView(descriptionLabel(getString(R.string.cluster_projection_shape_description)))
                         }
                         toggle(card, getString(R.string.dashboard_map_only_in_small_and_full_navi),
                             getString(R.string.dashboard_map_only_in_small_and_full_navi_description),
@@ -2706,7 +2745,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         section(content, getString(R.string.backup_title)) { card ->
             card.addView(button(getString(R.string.backup_open), false) { openBackup() }, matchButton(0, 60))
-            card.addView(label(getString(R.string.backup_open_description), 14, MUTED).apply { setPadding(0, dp(10), 0, 0) })
+            card.addView(descriptionLabel(getString(R.string.backup_open_description)).apply { setPadding(0, dp(10), 0, 0) })
         }
         section(content, getString(R.string.made_possible_by_open_source)) { card ->
             card.addView(label(getString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay), 16, MUTED))
@@ -3893,7 +3932,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             )
         }
         parent.addView(control, matchButton(10, 60))
-        parent.addView(label(getString(R.string.contrib_audio_home_nav_channel_note), 14, MUTED).apply {
+        parent.addView(descriptionLabel(getString(R.string.contrib_audio_home_nav_channel_note)).apply {
             setPadding(0, dp(8), 0, dp(18))
         })
     }
@@ -4123,7 +4162,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             durations.indexOf(ClusterMusicSettings.temporarySeconds(this)), reconnects = false) {
             ClusterMusicSettings.saveTemporarySeconds(this, durations[it])
         }
-        card.addView(label(getString(R.string.settings_cluster_music_seconds_summary), 14, MUTED))
+        card.addView(descriptionLabel(getString(R.string.settings_cluster_music_seconds_summary)))
         listOf(
             Triple("x", R.string.settings_cluster_music_horizontal, ClusterMusicSettings.x(this)),
             Triple("y", R.string.settings_cluster_music_vertical, ClusterMusicSettings.y(this)),
@@ -4204,9 +4243,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             searchIndexSink?.add(title)
             orientation = VERTICAL
             val valueView = label(describe(current), 16, ACCENT, true)
-            val head = row().apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, 0) }
+            val head = row().apply {
+                gravity = Gravity.CENTER_VERTICAL
+                if (page == "settings") setPaddingRelative(dp(SettingsPalette.ROW_INSET_DP), 0,
+                    dp(SettingsPalette.ROW_INSET_DP), 0)
+                else setPadding(0, dp(12), 0, 0)
+            }
             head.addView(label(title, 16, TEXT, true), LinearLayout.LayoutParams(0, -2, 1f))
-            head.addView(valueView)
+            if (page == "settings") {
+                valueView.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                head.addView(valueView, LinearLayout.LayoutParams(0, -2, .7f).apply {
+                    marginStart = dp(SettingsPalette.SLIDER_VALUE_GAP_DP)
+                })
+            } else head.addView(valueView)
             addView(head)
             slider = SeekBar(context).apply {
                 max = steps.lastIndex
@@ -4223,7 +4272,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     override fun onStopTrackingTouch(seekBar: SeekBar?) { onCommit() }
                 })
             }
-            addView(slider, LinearLayout.LayoutParams(-1, dp(44)))
+            if (page == "settings") {
+                slider.minimumWidth = 0
+                slider.progressTintList = ColorStateList.valueOf(settingsPalette.accent)
+                slider.thumbTintList = ColorStateList.valueOf(settingsPalette.accent)
+                slider.progressBackgroundTintList = ColorStateList.valueOf(settingsPalette.switchOff)
+                head.addView(slider, head.childCount - 1, LinearLayout.LayoutParams(0, dp(SettingsPalette.ROW_HEIGHT_DP), 1f))
+                head.minimumHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
+            } else {
+                addView(slider, LinearLayout.LayoutParams(-1, dp(44)))
+            }
         }
     }
 
@@ -4740,8 +4798,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun advancedVehicleData(card: LinearLayout) {
         val legacyMode = BydOutputSettings.legacyVehicleProbe(this)
-        card.addView(label(getString(R.string.advanced_vehicle_data_description), 14, MUTED)
-            .apply { setPadding(0, dp(12), 0, 0) })
+        val description = descriptionLabel(getString(R.string.advanced_vehicle_data_description))
+            .apply { setPadding(0, dp(12), 0, 0) }
+        if (page != "settings") card.addView(description)
         choice(
             card,
             getString(R.string.vehicle_data_mode),
@@ -4755,6 +4814,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             // A switch during ADB work would be dropped by the running step.
             enabled = !adbSwitchChangePending && !vehicleAdbWorkInProgress(),
         ) { selectVehicleDataMode(it == 1) }
+        if (page == "settings") card.addView(description)
         if (!legacyMode) {
             defaultVehicleData(card)
             return
@@ -5452,7 +5512,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             render()
             markReconnectNeeded()
         }, matchButton(10, 56))
-        card.addView(label(getString(R.string.cluster_safe_area_hint), 14, MUTED))
+        card.addView(descriptionLabel(getString(R.string.cluster_safe_area_hint)))
     }
 
     private fun openClusterSafeAreaEditor() {
@@ -5518,13 +5578,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun reconnectBar(): View = row().apply {
         gravity = Gravity.CENTER_VERTICAL
-        background = rounded(RAIL_SELECTED, RAIL_SELECTED_BORDER)
-        setPadding(dp(20), dp(10), dp(12), dp(10))
+        val inOverview = page == "settings" && settingsCategory == SettingsCategory.OVERVIEW
+        if (!inOverview) background = rounded(RAIL_SELECTED, RAIL_SELECTED_BORDER)
+        if (inOverview) setPadding(0, 0, 0, 0) else setPadding(dp(20), dp(10), dp(12), dp(10))
         addView(label(getString(R.string.settings_reconnect_pending), 16, TEXT), LinearLayout.LayoutParams(0, -2, 1f))
-        addView(button(getString(R.string.settings_reconnect_now), true) {
-            // No clear(): if connect() stops early (hotspot off, a permission prompt), the change is still pending.
-            reconnectIfRunning()
-        }, LinearLayout.LayoutParams(-2, dp(52)).apply { marginStart = dp(12) })
+        // No clear(): if connect() stops early, the change is still pending.
+        val reconnectAction = if (inOverview) readinessLink(getString(R.string.settings_reconnect_now), ::reconnectIfRunning)
+            else button(getString(R.string.settings_reconnect_now), true, ::reconnectIfRunning)
+        addView(reconnectAction, LinearLayout.LayoutParams(-2, dp(52)).apply { marginStart = dp(12) })
         reconnectBar = this
         refreshReconnectBar()
     }
@@ -5798,7 +5859,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 markReconnectNeeded()
             }
         }
-        card.addView(label(getString(R.string.carplay_dock_hint), 14, MUTED).apply { setPadding(0, 0, 0, dp(18)) })
+        card.addView(descriptionLabel(getString(R.string.carplay_dock_hint)).apply { setPadding(0, 0, 0, dp(18)) })
     }
 
     private fun carButtonControls(parent: LinearLayout) {
@@ -5836,7 +5897,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 carButtonSaved()
             }
         }, matchButton(10, 60))
-        parent.addView(label(getString(R.string.car_button_description), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
+        parent.addView(descriptionLabel(getString(R.string.car_button_description)).apply { setPadding(0, dp(12), 0, 0) })
     }
 
     private fun carButtonSaved() {
@@ -5847,7 +5908,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     // Rebuilds only this card: render() would scroll the page back to the top.
     private fun refreshCarButton() {
         val card = carButtonCard ?: return
-        card.removeViews(1, card.childCount - 1)
+        if (page == "settings") card.removeAllViews() else card.removeViews(1, card.childCount - 1)
         carButtonControls(card)
         normalizeSpacing(card)
     }
@@ -5879,7 +5940,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 }.setNegativeButton(getString(R.string.cancel), null).show()
         }
         parent.addView(button, matchButton(0, 60)); parent.addView(space(12))
-        parent.addView(label(getString(R.string.changes_the_size_of_carplay_icons_and_text_applying_a_size), 14, MUTED).apply {
+        parent.addView(descriptionLabel(getString(R.string.changes_the_size_of_carplay_icons_and_text_applying_a_size)).apply {
             setPadding(0, 0, 0, dp(18))
         })
     }
@@ -6467,11 +6528,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun languageSettings(content: LinearLayout) {
         filteredSection(content, SettingsSection.LANGUAGE,
             getString(R.string.language_section_title), R.drawable.ic_dp_language) { card ->
-            card.addView(label(getString(R.string.language_hint), 14, MUTED))
+            val description = descriptionLabel(getString(R.string.language_hint))
+            if (page != "settings") card.addView(description)
             val current = AppLocale.preference(this)
             val languageButton = button("${getString(R.string.language_app_language)} · ${AppLocale.displayName(this, current)}", false) { }
             languageButton.setOnClickListener { AppLocale.showPicker(this) }
             card.addView(languageButton, matchButton(12, 60))
+            if (page == "settings") card.addView(description)
         }
     }
 
@@ -6486,7 +6549,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         heading.addView(label(title, 22, TEXT, true,
             centreGlyphs = icon != null && usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)),
             LinearLayout.LayoutParams(0, -2, 1f))
-        card.addView(heading)
+        if (page == "settings") parent.addView(heading) else card.addView(heading)
         build(card)
         if (page == "settings") normalizeSpacing(card)
         parent.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(SETTINGS_BLOCK_GAP_DP) })
@@ -6499,7 +6562,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             markReconnectNeeded()
         }
         val enabled = AirPlayPersistence.loadAudioFocusEnabled(this)
-        val dependent = column().apply { visibility = if (enabled) View.VISIBLE else View.GONE }
+        val dependent = dependentSettingsColumn(enabled)
         toggle(parent, getString(R.string.contrib_audio_home_toggle_audio_focus),
             getString(R.string.contrib_audio_home_toggle_audio_focus_desc), enabled) {
             AirPlayPersistence.saveAudioFocusEnabled(this, it)
@@ -6565,7 +6628,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
         }
         val smoothEnabled = AirPlayPersistence.loadSmoothVideo(this)
-        val latencyControls = column().apply { visibility = if (smoothEnabled) View.VISIBLE else View.GONE }
+        val latencyControls = dependentSettingsColumn(smoothEnabled)
         toggle(card, getString(R.string.smooth_video), getString(R.string.smooth_video_description), smoothEnabled) {
             AirPlayPersistence.saveSmoothVideo(this, it)
             latencyControls.visibility = if (it) View.VISIBLE else View.GONE
@@ -6629,9 +6692,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             label = title,
             description = description,
             checked = value,
-            theme = SettingsTheme.card(palette),
+            theme = if (page == "settings") SettingsTheme.settings(settingsPalette) else SettingsTheme.card(palette),
             contentDescription = title,
             enabled = enabled,
+            appliesAtNextConnection = page == "settings" && showsNextConnectionMarker(title),
             onChanged = save,
         )
         parent.addView(result.rowView)
@@ -6860,8 +6924,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         parent.addView(button, matchButton(0, 60)); parent.addView(space(12))
     }
-    private fun card() = column().apply { background = rounded(SURFACE, BORDER); setPadding(dp(24), dp(24), dp(24), dp(24)) }
+    private fun card() = column().apply {
+        background = rounded(SURFACE, BORDER)
+        if (page == "settings") setPadding(0, 0, 0, 0) else setPadding(dp(24), dp(24), dp(24), dp(24))
+    }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
+    private fun dependentSettingsColumn(visible: Boolean) = column().apply {
+        visibility = if (visible) View.VISIBLE else View.GONE
+        if (page == "settings") setPaddingRelative(dp(SettingsPalette.SUBITEM_INDENT_DP), 0, 0, 0)
+    }
     private fun row() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
     private class SettingsSearchEditText(context: android.content.Context) : EditText(context) {
         private val glyphBounds = android.graphics.Rect()
@@ -6930,9 +7001,12 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun label(value: String, size: Int, color: Int, bold: Boolean = false, centreGlyphs: Boolean = false) =
         (if (centreGlyphs) HeaderTitleView(this) else TextView(this)).apply {
-        text = value; textSize = size.toFloat(); setTextColor(color); gravity = Gravity.CENTER_VERTICAL
+        text = value; textSize = size.toFloat()
+        setTextColor(if (page == "settings" && !appNight && color == ACCENT) settingsPalette.selectedText else color)
+        gravity = Gravity.CENTER_VERTICAL
         typeface = if (bold) Typeface.create("sans-serif-medium", Typeface.NORMAL) else Typeface.create("sans-serif", Typeface.NORMAL)
         setLineSpacing(dp(3).toFloat(), 1f)
+        if (page == "settings") SettingsVisuals.experimentalBadge(this)
     }
     private fun headerIconSize(compact: Boolean) = dp(if (compact) 20 else 24)
 
@@ -6980,16 +7054,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun button(title: String, primary: Boolean, click: () -> Unit) = SettingButton(this, MUTED, ACCENT).apply {
         isAllCaps = false; textSize = 18f; setTextColor(if (primary) ON_ACCENT else TEXT)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), buttonShape(if (primary) ACCENT else BUTTON, if (primary) ACCENT else BORDER), null)
+        background = if (page == "settings") buttonShape(if (primary) ACCENT else BUTTON, if (primary) ACCENT else BORDER)
+            else android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), buttonShape(if (primary) ACCENT else BUTTON, if (primary) ACCENT else BORDER), null)
         setPadding(dp(16), 0, dp(16), 0); minHeight = dp(56); stateListAnimator = null
         compoundDrawablePadding = dp(12)
         foreground = buttonFocusRing()
         text = title
+        if (page == "settings") SettingsVisuals.experimentalBadge(this)
         searchIndexSink?.add(title.substringBefore(VALUE_SEPARATOR))
         setOnClickListener { click() }
         doOnLayout {
+            if (settingsRow) return@doOnLayout
             val shape = buttonShape(if (primary) ACCENT else BUTTON, if (primary) ACCENT else BORDER, height)
-            background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), shape, null)
+            background = if (page == "settings") shape else android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(RIPPLE), shape, null)
             foreground = focusRing((shape.cornerRadius / resources.displayMetrics.density).roundToInt())
         }
     }
@@ -7003,11 +7080,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         minimumWidth = dp(48)
         minimumHeight = dp(48)
         stateListAnimator = null
-        background = android.graphics.drawable.RippleDrawable(
-            ColorStateList.valueOf(RIPPLE),
-            buttonShape(BUTTON, BORDER),
-            null,
-        )
+        background = if (page == "settings") buttonShape(BUTTON, BORDER) else android.graphics.drawable.RippleDrawable(
+            ColorStateList.valueOf(RIPPLE), buttonShape(BUTTON, BORDER), null)
         foreground = buttonFocusRing()
         setOnClickListener { click() }
     }
@@ -7027,6 +7101,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private val accent: Int,
     ) : Button(context) {
         var action = false
+        var settingsRow = false
         var contentOffsetY = 0f
         var alignVisibleGlyphs = true
         private val glyphBounds = android.graphics.Rect()
@@ -7036,6 +7111,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
 
         override fun onDraw(canvas: android.graphics.Canvas) {
+            if (settingsRow) {
+                drawSettingsRow(canvas)
+                return
+            }
             var offset = contentOffsetY
             if (alignVisibleGlyphs) {
                 offset = 0f
@@ -7057,6 +7136,68 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             canvas.translate(0f, offset)
             super.onDraw(canvas)
             canvas.restoreToCount(checkpoint)
+        }
+
+        private fun rowLayouts(width: Int): Pair<android.text.StaticLayout, android.text.StaticLayout?> {
+            val rendered = transformationMethod?.getTransformation(text, this) ?: text
+            val split = if (action) -1 else rendered.indexOf(VALUE_SEPARATOR)
+            val hasValue = split > 0
+            val available = (width - paddingLeft - paddingRight - if (hasValue)
+                compoundDrawablePadding + dpForRow(SettingsPalette.ICON_SIZE_DP) else 0)
+                .coerceAtLeast(1)
+            val valueWidth = if (hasValue) (available * 0.38f).toInt().coerceAtLeast(1) else 0
+            val titleWidth = (available - valueWidth).coerceAtLeast(1)
+            val rtl = layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val direction = if (rtl) android.text.TextDirectionHeuristics.RTL else android.text.TextDirectionHeuristics.LTR
+            fun layout(value: CharSequence, width: Int, alignment: android.text.Layout.Alignment): android.text.StaticLayout =
+                android.text.StaticLayout.Builder.obtain(value, 0, value.length, paint, width)
+                    .setAlignment(alignment).setTextDirection(direction).setIncludePad(includeFontPadding).build()
+            val heading = if (hasValue) rendered.subSequence(0, split) else rendered
+            val value = if (hasValue) rendered.subSequence(split + VALUE_SEPARATOR.length, rendered.length) else null
+            return layout(heading, titleWidth, android.text.Layout.Alignment.ALIGN_NORMAL) to
+                value?.let { layout(it, valueWidth, android.text.Layout.Alignment.ALIGN_OPPOSITE) }
+        }
+
+        private fun dpForRow(value: Int) = (resources.displayMetrics.density * value).roundToInt()
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            if (!settingsRow || View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.EXACTLY) return
+            val (heading, value) = rowLayouts(measuredWidth)
+            val required = maxOf(suggestedMinimumHeight, heading.height + paddingTop + paddingBottom,
+                (value?.height ?: 0) + paddingTop + paddingBottom)
+            setMeasuredDimension(measuredWidth, View.resolveSize(required, heightMeasureSpec))
+        }
+
+        private fun drawSettingsRow(canvas: android.graphics.Canvas) {
+            val (heading, value) = rowLayouts(width)
+            val rtl = layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val iconWidth = if (value != null) dpForRow(SettingsPalette.ICON_SIZE_DP) + compoundDrawablePadding else 0
+            val titleX = if (rtl) width - paddingRight - heading.width else paddingLeft
+            val valueX = if (rtl) paddingLeft + iconWidth else width - paddingRight - iconWidth - (value?.width ?: 0)
+            val checkpoint = canvas.save()
+            paint.color = currentTextColor
+            canvas.translate(titleX.toFloat(), ((height - heading.height) / 2f).coerceAtLeast(0f))
+            heading.draw(canvas)
+            canvas.restoreToCount(checkpoint)
+            if (value != null) {
+                val valueCheckpoint = canvas.save()
+                paint.color = muted
+                canvas.translate(valueX.toFloat(), ((height - value.height) / 2f).coerceAtLeast(0f))
+                value.draw(canvas)
+                canvas.restoreToCount(valueCheckpoint)
+                val icon = compoundDrawablesRelative[2]
+                if (icon != null) {
+                    val iconCheckpoint = canvas.save()
+                    icon.layoutDirection = layoutDirection
+                    val iconSize = dpForRow(SettingsPalette.ICON_SIZE_DP)
+                    val left = if (rtl) paddingLeft else width - paddingRight - iconSize
+                    canvas.translate(left.toFloat(), (height - iconSize) / 2f)
+                    icon.setBounds(0, 0, iconSize, iconSize)
+                    icon.draw(canvas)
+                    canvas.restoreToCount(iconCheckpoint)
+                }
+            }
         }
 
         override fun setText(text: CharSequence?, type: BufferType?) {
@@ -7084,7 +7225,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         })
     }
 
-    private fun rounded(color: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = layoutCornerRadius() * 1.35f; setStroke(dp(1), stroke) }
+    private fun rounded(color: Int, stroke: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = if (page == "settings") dp(SettingsPalette.CARD_CORNER_DP).toFloat() else layoutCornerRadius() * 1.35f
+        setStroke(dp(1), stroke)
+    }
     private fun matchButton(top: Int = 0, height: Int = 68) = LinearLayout.LayoutParams(-1, dp(height)).apply { topMargin = dp(top) }
     private fun space(height: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(height)); tag = SPACER }
 
@@ -7093,10 +7238,145 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
      * line up, and a bottom gap so the note does not touch the control below it.
      */
     private fun choiceNote(value: String) = label(value, 13, MUTED).apply {
+        tag = SETTINGS_DESCRIPTION
         setPadding(
             dp(SETTINGS_CONTROL_INSET_DP), 0,
             dp(SETTINGS_CONTROL_INSET_DP), dp(SETTINGS_NOTE_GAP_DP),
         )
+    }
+
+    private fun descriptionLabel(value: String, size: Int = 14) = label(value, size, MUTED).apply {
+        tag = SETTINGS_DESCRIPTION
+    }
+
+    private fun showsNextConnectionMarker(title: String): Boolean {
+        val base = title.substringBefore(VALUE_SEPARATOR)
+        return listOf(
+            R.string.settings_smooth_video_latency,
+            R.string.carplay_dock,
+            R.string.settings_mtk_decoder_tuning,
+            R.string.settings_low_latency_decoder,
+            R.string.call_echo_cancellation,
+            R.string.call_voice_filter,
+            R.string.settings_disable_media_key_audio_focus,
+            R.string.settings_navigation_prompt_audio_focus,
+            R.string.split_screen_areas,
+            R.string.carplay_rotation,
+            R.string.side_panel,
+            R.string.settings_usb_charging,
+            R.string.settings_call_at_call_rate,
+            R.string.bt_suspend_during_carplay,
+            R.string.settings_wifi_direct_scan_pause,
+            R.string.mfi_certificate_signing_target,
+            R.string.cluster_small_window_marker,
+            R.string.cluster_safe_area_edit,
+            R.string.cluster_safe_area_reset,
+            R.string.choose_image,
+            R.string.default_icon,
+            R.string.car_button_name,
+        ).any { title == getString(it) || base == getString(it) }
+    }
+
+    private fun normalizeSettingsSpacing(container: LinearLayout) {
+        for (index in container.childCount - 1 downTo 0) {
+            if (container.getChildAt(index).tag == SPACER) container.removeViewAt(index)
+        }
+        container.dividerDrawable = GradientDrawable().apply {
+            setColor(settingsPalette.divider)
+            setSize(dp(SettingsPalette.DIVIDER_DP), dp(SettingsPalette.DIVIDER_DP))
+        }
+        container.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+        container.dividerPadding = dp(SettingsPalette.ROW_INSET_DP)
+        var index = 0
+        while (index < container.childCount) {
+            var child = container.getChildAt(index)
+            if (child is SettingButton) {
+                child.settingsRow = true
+                child.background = ColorDrawable(Color.TRANSPARENT)
+                child.setTextColor(TEXT)
+                child.minimumHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
+                child.minHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
+                child.setPaddingRelative(dp(SettingsPalette.ROW_INSET_DP), 0, dp(SettingsPalette.ROW_INSET_DP), 0)
+                val notes = mutableListOf<TextView>()
+                var next = index + 1
+                while (next < container.childCount) {
+                    val note = container.getChildAt(next) as? TextView ?: break
+                    if (note.tag != SETTINGS_DESCRIPTION) break
+                    notes.add(note)
+                    next++
+                }
+                val nextConnection = showsNextConnectionMarker(child.text.toString())
+                if (notes.isNotEmpty() || nextConnection) {
+                    val original = child
+                    val params = original.layoutParams as LinearLayout.LayoutParams
+                    container.removeViewAt(index)
+                    val wrapper = row().apply {
+                        tag = SETTINGS_ROW_WRAPPER
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(original, LinearLayout.LayoutParams(0, -2, 1f))
+                        if (nextConnection) addView(SettingsVisuals.nextConnectionMarker(this@DiPlayActivity,
+                            SettingsTheme.settings(settingsPalette)))
+                        if (notes.isNotEmpty()) {
+                            val help = SettingsVisuals.DescriptionToggle(this@DiPlayActivity,
+                                original.text.toString().substringBefore(VALUE_SEPARATOR), SettingsTheme.settings(settingsPalette))
+                            notes.forEach(help::addDescription)
+                            addView(help)
+                        }
+                    }
+                    container.addView(wrapper, index, params)
+                    child = wrapper
+                }
+            } else if (child is OverlaySliderRow) {
+                val notes = mutableListOf<TextView>()
+                var next = index + 1
+                while (next < container.childCount) {
+                    val note = container.getChildAt(next) as? TextView ?: break
+                    if (note.tag != SETTINGS_DESCRIPTION) break
+                    notes.add(note)
+                    next++
+                }
+                if (notes.isNotEmpty()) {
+                    val original = child
+                    val params = original.layoutParams as LinearLayout.LayoutParams
+                    container.removeViewAt(index)
+                    val wrapper = row().apply {
+                        tag = SETTINGS_ROW_WRAPPER
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(original, LinearLayout.LayoutParams(0, -2, 1f))
+                        val title = descendants(original).filterIsInstance<TextView>().firstOrNull()?.text?.toString().orEmpty()
+                        val help = SettingsVisuals.DescriptionToggle(this@DiPlayActivity, title, SettingsTheme.settings(settingsPalette))
+                        notes.forEach(help::addDescription)
+                        addView(help)
+                    }
+                    container.addView(wrapper, index, params)
+                    child = wrapper
+                }
+            } else if (child is LinearLayout && child.orientation == LinearLayout.HORIZONTAL) {
+                val help = descendants(child).filterIsInstance<SettingsVisuals.DescriptionToggle>().firstOrNull()
+                var next = index + 1
+                while (help != null && next < container.childCount) {
+                    val note = container.getChildAt(next) as? TextView ?: break
+                    if (note.tag != SETTINGS_DESCRIPTION) break
+                    help.addDescription(note)
+                    next++
+                }
+            } else if (child is LinearLayout && child.orientation == LinearLayout.VERTICAL && child.tag != SETTINGS_ROW_WRAPPER) {
+                normalizeSettingsSpacing(child)
+            }
+            (child.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+                if (child is SettingButton) {
+                    params.height = if (resources.configuration.fontScale > 1f || isCompactLayout)
+                        ViewGroup.LayoutParams.WRAP_CONTENT else dp(SettingsPalette.ROW_HEIGHT_DP)
+                } else if (child.tag == SETTINGS_ROW_WRAPPER) {
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                }
+                params.topMargin = 0
+                params.bottomMargin = if (child is LinearLayout && child.orientation == LinearLayout.HORIZONTAL &&
+                    (0 until child.childCount).any { child.getChildAt(it) is ImageView }) dp(CONTROL_GAP_DP) else 0
+                child.layoutParams = params
+            }
+            index++
+        }
     }
 
     /**
@@ -7106,6 +7386,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
      */
     private fun normalizeSpacing(container: LinearLayout, isCard: Boolean = true) {
         if (container.orientation != LinearLayout.VERTICAL) return
+        if (page == "settings") {
+            normalizeSettingsSpacing(container)
+            return
+        }
         for (i in container.childCount - 1 downTo 0) {
             if (container.getChildAt(i).tag == SPACER) container.removeViewAt(i)
         }
@@ -7241,18 +7525,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         applyFullscreenMode()
     }
 
+    private val settingsPalette get() = SettingsPalette.of(appNight)
     private val BG get() = palette.background
-    private val SURFACE get() = palette.surface
-    private val BUTTON get() = palette.button
-    private val BORDER get() = palette.outline
-    private val ACCENT get() = palette.accent
-    private val ON_ACCENT get() = palette.onAccent
-    private val RAIL_SELECTED get() = palette.railSelected
-    private val RAIL_SELECTED_BORDER get() = palette.railSelectedOutline
-    private val TEXT get() = palette.primaryText
-    private val MUTED get() = palette.secondaryText
+    private val SURFACE get() = if (page == "settings") settingsPalette.card else palette.surface
+    private val BUTTON get() = if (page == "settings") settingsPalette.card else palette.button
+    private val BORDER get() = if (page == "settings") settingsPalette.divider else palette.outline
+    private val ACCENT get() = if (page == "settings") settingsPalette.accent else palette.accent
+    private val ON_ACCENT get() = if (page == "settings") settingsPalette.onAccent else palette.onAccent
+    private val RAIL_SELECTED get() = if (page == "settings") settingsPalette.selected else palette.railSelected
+    private val RAIL_SELECTED_BORDER get() = if (page == "settings") settingsPalette.divider else palette.railSelectedOutline
+    private val TEXT get() = if (page == "settings") settingsPalette.text else palette.primaryText
+    private val MUTED get() = if (page == "settings") settingsPalette.secondary else palette.secondaryText
     private val WARNING get() = palette.warning
-    private val READY get() = palette.success
+    private val READY get() = if (page == "settings") settingsPalette.success else palette.success
     private val RIPPLE get() = palette.ripple
     private val FOCUS_RING get() = palette.focusRing
 
@@ -7317,7 +7602,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val SETTINGS_SEARCH_RESULTS_SHORT_HEIGHT_DP = 200
         private const val SETTINGS_SEARCH_RESULTS_HEIGHT_DP = 380
         private const val VALUE_SEPARATOR = " · "
-        private const val SEARCH_HIGHLIGHT_MILLIS = 900L
         private const val SPACER = "spacer"
         private const val CONTROL_HEIGHT_DP = 60
         private const val CONTROL_GAP_DP = 12
@@ -7329,5 +7613,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val SETTINGS_CONTROL_INSET_DP = 16
         /** Gap under an explanatory note, so it never touches the next control. */
         private const val SETTINGS_NOTE_GAP_DP = 12
+        private const val SETTINGS_SHELL_INSET_DP = 32
+        private const val SETTINGS_CONTENT_MIN_WIDTH_DP = 240
+        private const val SETTINGS_RAIL_MIN_WIDTH_DP = 80
+        private const val SETTINGS_ROW_WRAPPER = "settings_row_wrapper"
+        private const val SETTINGS_DESCRIPTION = "settings_description"
     }
 }

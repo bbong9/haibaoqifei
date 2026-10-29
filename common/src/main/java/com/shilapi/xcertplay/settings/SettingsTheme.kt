@@ -5,6 +5,7 @@ import com.shilapi.xcertplay.DiPlayPalette
 
 class SettingsTheme private constructor(
     val isOverlay: Boolean,
+    val isSettingsPage: Boolean,
     val textPrimary: Int,
     val textSecondary: Int,
     val accent: Int,
@@ -26,6 +27,7 @@ class SettingsTheme private constructor(
 
         internal fun card(palette: DiPlayPalette) = SettingsTheme(
             isOverlay = false,
+            isSettingsPage = false,
             textPrimary = palette.primaryText,
             textSecondary = palette.secondaryText,
             accent = palette.accent,
@@ -38,6 +40,7 @@ class SettingsTheme private constructor(
 
         internal fun overlay(palette: DiPlayPalette) = SettingsTheme(
             isOverlay = true,
+            isSettingsPage = false,
             textPrimary = palette.overlayPrimaryText,
             textSecondary = palette.overlaySecondaryText,
             accent = palette.overlayAccent,
@@ -46,6 +49,19 @@ class SettingsTheme private constructor(
             buttonText = palette.overlayOnAccent,
             ripple = palette.ripple,
             focusRing = palette.focusRing,
+        )
+
+        internal fun settings(palette: SettingsPalette) = SettingsTheme(
+            isOverlay = false,
+            isSettingsPage = true,
+            textPrimary = palette.text,
+            textSecondary = palette.secondary,
+            accent = palette.accent,
+            accentTrack = palette.accent,
+            trackOff = palette.switchOff,
+            buttonText = palette.onAccent,
+            ripple = palette.selected,
+            focusRing = palette.selectedText,
         )
     }
 }

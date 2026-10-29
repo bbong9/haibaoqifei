@@ -22,6 +22,13 @@ import kotlin.math.roundToInt
 
 object SettingsWidgets {
 
+    private class StaticSettingsSwitch(context: Context) : Switch(context) {
+        override fun setChecked(checked: Boolean) {
+            super.setChecked(checked)
+            jumpDrawablesToCurrentState()
+        }
+    }
+
     private fun TextView.applyTextStyle(context: Context, theme: SettingsTheme, bold: Boolean = false) {
         if (theme.isOverlay) {
             typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
@@ -108,17 +115,23 @@ object SettingsWidgets {
         contentDescription: String = label,
         enabled: Boolean = true,
         labelSizeSp: Float = 18f,
+        appliesAtNextConnection: Boolean = false,
         onChanged: (Boolean) -> Unit,
     ): SwitchRowResult {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val switch = Switch(context).apply {
+        val switch = (if (theme.isSettingsPage) StaticSettingsSwitch(context) else Switch(context)).apply {
             isChecked = checked
             this.contentDescription = contentDescription
             isEnabled = enabled
-            applyLargeSwitchStyle(this, theme.accent, theme.textSecondary, theme.accentTrack, theme.trackOff)
+            if (theme.isSettingsPage) {
+                applyLargeSwitchStyle(this, Color.WHITE, Color.WHITE, theme.accentTrack, theme.trackOff)
+                trackDrawable.alpha = 255
+            } else {
+                applyLargeSwitchStyle(this, theme.accent, theme.textSecondary, theme.accentTrack, theme.trackOff)
+            }
             if (!theme.isOverlay) minHeight = theme.dp(context, 56)
             setOnCheckedChangeListener { _, isChecked -> onChanged(isChecked) }
         }
@@ -132,6 +145,50 @@ object SettingsWidgets {
             }
             row.addView(labelView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             row.addView(switch, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        } else if (theme.isSettingsPage) {
+            row.minimumHeight = theme.dp(context, SettingsPalette.ROW_HEIGHT_DP)
+            row.setPaddingRelative(theme.dp(context, SettingsPalette.ROW_INSET_DP), 0,
+                theme.dp(context, SettingsPalette.ROW_INSET_DP), 0)
+            val textCol = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+            val labelView = TextView(context).apply {
+                text = label
+                textSize = labelSizeSp
+                setTextColor(theme.textPrimary)
+                applyTextStyle(context, theme, bold = true)
+                SettingsVisuals.experimentalBadge(this)
+            }
+            val descView = TextView(context).apply {
+                text = description
+                textSize = 14f
+                setTextColor(theme.textSecondary)
+                applyTextStyle(context, theme)
+                visibility = View.GONE
+            }
+            textCol.addView(labelView)
+            if (description.isNotBlank()) textCol.addView(descView)
+            row.addView(textCol, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (appliesAtNextConnection) row.addView(SettingsVisuals.nextConnectionMarker(context, theme))
+            if (description.isNotBlank()) row.addView(SettingsVisuals.descriptionToggle(context, label, descView, theme))
+            row.addView(switch)
+            switch.isFocusable = false
+            row.isFocusable = true
+            row.foreground = android.graphics.drawable.StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT)
+                    setStroke(theme.dp(context, 3), theme.focusRing)
+                })
+            }
+            row.setOnClickListener { if (switch.isEnabled) switch.toggle() }
+            switch.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            row.accessibilityDelegate = object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = Switch::class.java.name
+                    info.isCheckable = true
+                    info.isChecked = switch.isChecked
+                    info.isEnabled = switch.isEnabled
+                }
+            }
         } else {
             row.setPadding(0, theme.dp(context, 12), 0, theme.dp(context, 12))
             val textCol = LinearLayout(context).apply {

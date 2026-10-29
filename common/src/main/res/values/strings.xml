@@ -1076,4 +1076,5 @@
     <string name="settings_seal_picture_group">Picture and layout</string>
     <string name="settings_seal_performance_group">Resolution and frame rate</string>
     <string name="settings_seal_video_group">Video output</string>
+    <string name="settings_description_for">Description for %1$s</string>
 </resources>

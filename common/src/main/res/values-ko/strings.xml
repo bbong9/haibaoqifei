@@ -1069,4 +1069,5 @@
     <string name="settings_seal_picture_group">화면 및 배치</string>
     <string name="settings_seal_performance_group">해상도 및 프레임 속도</string>
     <string name="settings_seal_video_group">비디오 출력</string>
+    <string name="settings_description_for">%1$s 설명</string>
 </resources>

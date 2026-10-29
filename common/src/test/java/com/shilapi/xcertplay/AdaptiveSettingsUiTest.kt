@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
@@ -26,6 +27,7 @@ import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.media.AndroidMediaSink
+import com.shilapi.xcertplay.settings.SettingsPalette
 import java.time.Duration
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -128,7 +130,8 @@ class AdaptiveSettingsUiTest {
         val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
 
         assertSame(DiPlayPalette.LIGHT, palette)
-        assertEquals(DiPlayPalette.LIGHT.background, (scroll.background as ColorDrawable).color)
+        assertEquals(GradientDrawable.Orientation.BL_TR, (scroll.background as GradientDrawable).orientation)
+        assertTrue(SettingsPalette.of(false).gradient.contentEquals((scroll.background as GradientDrawable).colors))
         assertEquals(
             DiPlayPalette.LIGHT.background,
             (screen.window.decorView.background as ColorDrawable).color,
@@ -168,7 +171,8 @@ class AdaptiveSettingsUiTest {
 
         assertSame(DiPlayPalette.DARK, ReflectionHelpers.getField<DiPlayPalette>(screen, "palette"))
         val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
-        assertEquals(DiPlayPalette.DARK.background, (scroll.background as ColorDrawable).color)
+        assertEquals(GradientDrawable.Orientation.BL_TR, (scroll.background as GradientDrawable).orientation)
+        assertTrue(SettingsPalette.of(true).gradient.contentEquals((scroll.background as GradientDrawable).colors))
     }
 
     @Test fun hostAppearancePublishedOffMainRepaintsOnMain() {
@@ -592,6 +596,17 @@ class AdaptiveSettingsUiTest {
             assertEquals(button.text.toString(), 0, lp.topMargin)
             assertTrue(button.text.toString(), lp.bottomMargin in setOf(0, dp(6), dp(12)))
         }
+        val wrappedButtons = descendants(scroll).filterIsInstance<android.widget.Button>()
+            .filter { (it.parent as? View)?.tag == "settings_row_wrapper" }
+            .toList()
+        assertTrue(wrappedButtons.isNotEmpty())
+        wrappedButtons.forEach { button ->
+            val wrapper = button.parent as LinearLayout
+            val lp = wrapper.layoutParams as LinearLayout.LayoutParams
+            assertEquals(button.text.toString(), dp(60), button.minimumHeight)
+            assertEquals(button.text.toString(), 0, lp.topMargin)
+            assertTrue(button.text.toString(), lp.bottomMargin in setOf(0, dp(6), dp(12)))
+        }
         val page = scroll.getChildAt(0)
         assertFalse(descendants(scroll).any { it.tag == "spacer" && it.parent !== page })
     }
@@ -611,8 +626,10 @@ class AdaptiveSettingsUiTest {
                 screen.getString(R.string.settings_vehicle)) }
             .performClick()
         val chooseImage = texts(screen).single { it.text == screen.getString(R.string.choose_image) }
-        val card = chooseImage.parent as LinearLayout
-        val preview = card.getChildAt(card.indexOfChild(chooseImage) - 1)
+        val visualRow = chooseImage.parent as LinearLayout
+        assertEquals("settings_row_wrapper", visualRow.tag)
+        val card = visualRow.parent as LinearLayout
+        val preview = card.getChildAt(card.indexOfChild(visualRow) - 1)
 
         assertEquals(Math.round(12 * screen.resources.displayMetrics.density),
             (preview.layoutParams as LinearLayout.LayoutParams).bottomMargin)

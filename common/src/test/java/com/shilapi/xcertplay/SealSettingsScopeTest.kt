@@ -107,6 +107,14 @@ class SealSettingsScopeTest {
         assertMissing(R.string.settings_ready_usb)
         assertMissing(R.string.settings_connection_summary)
         assertHas(R.string.settings_seal_ready_saved_connection)
+        val autoDescription = descendants(screen.window.decorView).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_seal_auto_connection_description)
+        }
+        assertFalse(autoDescription.isShown)
+        descendants(screen.window.decorView).single {
+            it.contentDescription == screen.getString(R.string.settings_description_for,
+                screen.getString(R.string.connect_when_diplay_opens))
+        }.performClick()
         assertHas(R.string.settings_seal_auto_connection_description)
         assertFalse(AirPlayPersistence.loadWirelessEnabled(context))
         assertTrue(UsbPermissionSetup.Permission.ACCESSIBILITY.granted(context))
@@ -126,6 +134,9 @@ class SealSettingsScopeTest {
 
     @Test fun sealOmitsWiredOnlyExplanationsWithoutChangingOtherEditions() {
         category(SettingsCategory.CONNECTION)
+        descendants(screen.window.decorView).single {
+            it.contentDescription == screen.getString(R.string.settings_description_for, screen.getString(R.string.app_permissions))
+        }.performClick()
         assertTextAbsent("USB mode may ask")
         assertTrue(texts().any { it.contains("Older Android versions also require Location") })
         category(SettingsCategory.ABOUT)
@@ -134,6 +145,9 @@ class SealSettingsScopeTest {
 
         screen.sealEditionCheck = { false }
         category(SettingsCategory.CONNECTION)
+        descendants(screen.window.decorView).single {
+            it.contentDescription == screen.getString(R.string.settings_description_for, screen.getString(R.string.app_permissions))
+        }.performClick()
         assertHas(R.string.nearby_devices_connects_your_iphone_microphone_enables_sir)
         category(SettingsCategory.ABOUT)
         assertHas(R.string.an_independent_carplay_receiver_for_android_head_units_wir)

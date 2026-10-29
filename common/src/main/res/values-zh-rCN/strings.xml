@@ -1033,4 +1033,5 @@
     <string name="settings_seal_picture_group">画面与布局</string>
     <string name="settings_seal_performance_group">分辨率与帧率</string>
     <string name="settings_seal_video_group">视频输出</string>
+    <string name="settings_description_for">%1$s的说明</string>
 </resources>
