@@ -45,6 +45,22 @@ object SettingsWidgets {
         val switch: Switch,
     )
 
+    private class SettingsSwitchRow(context: Context) : LinearLayout(context) {
+        lateinit var titleView: TextView
+
+        override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+            super.onLayout(changed, left, top, right, bottom)
+            if (!::titleView.isInitialized) return
+            val textColumn = titleView.parent as View
+            val titleCenter = textColumn.top + (titleView.top + titleView.bottom) / 2
+            for (index in 1 until childCount) {
+                val child = getChildAt(index)
+                val childTop = titleCenter - child.height / 2
+                child.layout(child.left, childTop, child.right, childTop + child.height)
+            }
+        }
+    }
+
     data class ChoiceRowResult<T>(
         val container: View,
         val radioGroup: RadioGroup,
@@ -118,7 +134,7 @@ object SettingsWidgets {
         appliesAtNextConnection: Boolean = false,
         onChanged: (Boolean) -> Unit,
     ): SwitchRowResult {
-        val row = LinearLayout(context).apply {
+        val row = (if (theme.isSettingsPage) SettingsSwitchRow(context) else LinearLayout(context)).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -132,7 +148,7 @@ object SettingsWidgets {
             } else {
                 applyLargeSwitchStyle(this, theme.accent, theme.textSecondary, theme.accentTrack, theme.trackOff)
             }
-            if (!theme.isOverlay) minHeight = theme.dp(context, 56)
+            if (!theme.isOverlay) minHeight = theme.dp(context, SettingsPalette.SWITCH_MIN_HEIGHT_DP)
             setOnCheckedChangeListener { _, isChecked -> onChanged(isChecked) }
         }
 
@@ -147,16 +163,18 @@ object SettingsWidgets {
             row.addView(switch, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         } else if (theme.isSettingsPage) {
             row.minimumHeight = theme.dp(context, SettingsPalette.ROW_HEIGHT_DP)
-            row.setPaddingRelative(theme.dp(context, SettingsPalette.ROW_INSET_DP), 0,
-                theme.dp(context, SettingsPalette.ROW_INSET_DP), 0)
+            row.gravity = Gravity.TOP
             val textCol = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
             val labelView = TextView(context).apply {
                 text = label
                 textSize = labelSizeSp
+                minimumHeight = theme.dp(context, SettingsPalette.SWITCH_MIN_HEIGHT_DP)
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 setTextColor(theme.textPrimary)
                 applyTextStyle(context, theme, bold = true)
                 SettingsVisuals.experimentalBadge(this)
             }
+            (row as SettingsSwitchRow).titleView = labelView
             val descView = TextView(context).apply {
                 text = description
                 textSize = 14f
@@ -168,8 +186,11 @@ object SettingsWidgets {
             if (description.isNotBlank()) textCol.addView(descView)
             row.addView(textCol, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (appliesAtNextConnection) row.addView(SettingsVisuals.nextConnectionMarker(context, theme))
+            else row.addView(SettingsVisuals.emptySlot(context, theme, SettingsPalette.MARKER_SLOT_DP))
             if (description.isNotBlank()) row.addView(SettingsVisuals.descriptionToggle(context, label, descView, theme))
-            row.addView(switch)
+            else row.addView(SettingsVisuals.emptySlot(context, theme, SettingsPalette.HELP_SIZE_DP))
+            row.addView(switch, LinearLayout.LayoutParams(theme.dp(context, SettingsPalette.END_CONTROL_SLOT_DP),
+                ViewGroup.LayoutParams.WRAP_CONTENT))
             switch.isFocusable = false
             row.isFocusable = true
             row.foreground = android.graphics.drawable.StateListDrawable().apply {

@@ -46,10 +46,21 @@ internal data class SettingsPalette(
         const val SUBITEM_INDENT_DP = 16
         const val SLIDER_VALUE_GAP_DP = 8
         const val HELP_SIZE_DP = 44
+        const val SWITCH_MIN_HEIGHT_DP = 56
+        const val MARKER_SLOT_DP = 28
+        const val END_CONTROL_SLOT_DP = 64
+        const val VALUE_SLOT_DP = 160
+        const val STACKED_VALUE_WIDTH_DP = 480
         const val RAIL_WIDTH_DP = 140
         const val RAIL_GAP_DP = 16
         const val ICON_SIZE_DP = 24
         const val RAIL_ICON_GAP_DP = 8
+        const val RAIL_INSET_DP = 12
+        const val RAIL_ITEM_START_DP = 8
+        const val RAIL_ITEM_END_DP = 12
+        const val RAIL_TEXT_SLACK_DP = 8
+        const val RAIL_TEXT_SP = 16
+        const val RAIL_MIN_TEXT_SP = 12
 
         private val DARK = SettingsPalette(
             gradient = intArrayOf(0xFF4A0F1B.toInt(), 0xFF1A070C.toInt(), 0xFF0A0305.toInt()),

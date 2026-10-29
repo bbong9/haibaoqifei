@@ -253,6 +253,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var settingsSearchRestoreFocus = false
     private var renderedReadiness: SettingsReadiness? = null
     private var renderedPage: String? = null
+    @Volatile private var settingsWindowDiagnostic: String? = null
+    private var settingsWindowCapturePending = false
     private var renderedSettingsCategory: SettingsCategory? = null
     private var renderedSettingsClusterSubpage = false
     private var pendingScrollY: Int? = null
@@ -806,7 +808,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }
             scroll
         }
-        if (page == "settings") attachSettingsBackground(root) else releaseSettingsBackground()
+        if (page == "settings") {
+            if (renderedPage != "settings") settingsWindowCapturePending = true
+            attachSettingsBackground(root)
+            root.doOnLayout {
+                if (settingsWindowCapturePending && settingsBackgroundOwner === root && root.width > 0 && root.height > 0) {
+                    settingsWindowDiagnostic = SettingsWindowDiagnostics.line(root.width, root.height,
+                        interfaceSystemDensityDpi, resources.configuration.fontScale, resources.configuration.densityDpi)
+                    settingsWindowCapturePending = false
+                }
+            }
+        } else {
+            settingsWindowCapturePending = false
+            releaseSettingsBackground()
+        }
         // Keep the background full screen, but all controls inside the camera and
         // visible system/keyboard bounds. Insets are physical pixels, not scaled dp.
         val baseLeft = root.paddingLeft
@@ -950,17 +965,19 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun settingsHeader(compact: Boolean): LinearLayout = row().apply {
-        val controlHeight = dp(if (compact) 44 else 52)
+        val controlWidth = dp(if (compact) 44 else 52)
         val iconOnlySearch = compact || resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         gravity = Gravity.CENTER_VERTICAL
-        addView(headerButton(getString(R.string.back), R.drawable.ic_dp_back, compact, ::navigateBack),
-            LinearLayout.LayoutParams(-2, if (compact) dp(44) else dp(52)))
         val settingsTitle = label(getString(R.string.settings), if (compact) 20 else 26, TEXT, true,
             centreGlyphs = true).apply {
             setPadding(dp(12), 0, dp(12), 0)
             setSingleLine(true)
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
+        val metrics = settingsTitle.paint.fontMetricsInt
+        val controlHeight = maxOf(controlWidth, metrics.bottom - metrics.top + dp(8))
+        addView(headerButton(getString(R.string.back), R.drawable.ic_dp_back, compact, ::navigateBack),
+            LinearLayout.LayoutParams(-2, controlHeight))
         // Reserve the action buttons first; only the title may shrink in a narrow header.
         addView(settingsTitle, LinearLayout.LayoutParams(
             if (settingsSearchExpanded) -2 else 0, controlHeight,
@@ -1002,11 +1019,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 tag = SETTINGS_SEARCH_BUTTON_TAG
                 contentDescription = getString(R.string.settings_search)
             }
-            addView(searchButton, LinearLayout.LayoutParams(if (iconOnlySearch) controlHeight else -2, controlHeight).apply {
+            addView(searchButton, LinearLayout.LayoutParams(if (iconOnlySearch) controlWidth else -2, controlHeight).apply {
                 marginEnd = searchGap
             })
         }
-        addView(appearanceButton(), LinearLayout.LayoutParams(controlHeight, controlHeight))
+        addView(appearanceButton(), LinearLayout.LayoutParams(controlWidth, controlHeight))
     }
 
     private fun appearanceButton(): ImageButton = iconButton(
@@ -1176,8 +1193,15 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         val split = row().apply { gravity = Gravity.TOP }
         // The rail scrolls on its own only when the window is too short for every destination.
-        val availableRailWidth = (resources.configuration.screenWidthDp - SETTINGS_SHELL_INSET_DP * 2 -
-            SettingsPalette.RAIL_GAP_DP - SETTINGS_CONTENT_MIN_WIDTH_DP).coerceAtLeast(SETTINGS_RAIL_MIN_WIDTH_DP)
+        val categories = SettingsInformationArchitecture.visibleCategories(sealEditionCheck(this@DiPlayActivity), settingsCategory)
+        val railText = label("", SettingsPalette.RAIL_TEXT_SP, TEXT, true)
+        val maxTextWidth = categories.maxOfOrNull { railText.paint.measureText(settingsCategoryTitle(it)) } ?: 0f
+        val railInsets = SettingsPalette.RAIL_INSET_DP * 2 + SettingsPalette.RAIL_ITEM_START_DP +
+            SettingsPalette.RAIL_ITEM_END_DP + SettingsPalette.ICON_SIZE_DP + SettingsPalette.RAIL_ICON_GAP_DP +
+            SettingsPalette.RAIL_TEXT_SLACK_DP
+        val measuredRailWidth = kotlin.math.ceil(maxTextWidth.toDouble()).toInt() + dp(railInsets)
+        val windowWidth = dp(resources.configuration.screenWidthDp)
+        val railWidth = maxOf(dp(SettingsPalette.RAIL_WIDTH_DP), measuredRailWidth).coerceAtMost(windowWidth / 3)
         split.addView(ScrollView(this@DiPlayActivity).apply {
             addView(column().apply {
                 setPadding(0, 0, 0, dp(12))
@@ -1185,8 +1209,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             })
             settingsRailScroll = this
         },
-            LinearLayout.LayoutParams(dp(SettingsLayoutPolicy.railWidthDp(resources.configuration.fontScale)
-                .coerceAtMost(availableRailWidth)), -2))
+            LinearLayout.LayoutParams(railWidth, -2))
         split.addView(space(SettingsPalette.RAIL_GAP_DP), LinearLayout.LayoutParams(dp(SettingsPalette.RAIL_GAP_DP), 1))
         split.addView(categoryScroll, LinearLayout.LayoutParams(0, -1, 1f))
         addView(split, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -1194,7 +1217,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun settingsRail(): LinearLayout = column().apply {
         background = rounded(SURFACE, BORDER)
-        setPadding(dp(12), dp(12), dp(12), dp(12))
+        setPadding(dp(SettingsPalette.RAIL_INSET_DP), dp(SettingsPalette.RAIL_INSET_DP),
+            dp(SettingsPalette.RAIL_INSET_DP), dp(SettingsPalette.RAIL_INSET_DP))
         SettingsInformationArchitecture.visibleCategories(
             sealEditionCheck(this@DiPlayActivity),
             settingsCategory,
@@ -1219,7 +1243,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 setColor(if (selected) RAIL_SELECTED else Color.TRANSPARENT)
                 cornerRadius = dp(SettingsPalette.CARD_CORNER_DP).toFloat()
             }
-            setPadding(dp(8), 0, dp(12), 0)
+            setPaddingRelative(dp(SettingsPalette.RAIL_ITEM_START_DP), 0, dp(SettingsPalette.RAIL_ITEM_END_DP), 0)
             addView(ImageView(this@DiPlayActivity).apply {
                 setImageResource(settingsCategoryIcon(category))
                 imageTintList = ColorStateList.valueOf(if (selected) settingsPalette.selectedText else TEXT)
@@ -1227,8 +1251,34 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             }, LinearLayout.LayoutParams(dp(SettingsPalette.ICON_SIZE_DP), dp(SettingsPalette.ICON_SIZE_DP)).apply {
                 marginEnd = dp(SettingsPalette.RAIL_ICON_GAP_DP)
             })
-            addView(label(title, 16, if (selected) settingsPalette.selectedText else TEXT, true,
-                centreGlyphs = usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)),
+            addView(label(title, SettingsPalette.RAIL_TEXT_SP, if (selected) settingsPalette.selectedText else TEXT, true,
+                centreGlyphs = usesChineseGlyphAlignment(resources.configuration.locales[0].language, title)).apply {
+                    setSingleLine(true)
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        setAutoSizeTextTypeUniformWithConfiguration(SettingsPalette.RAIL_MIN_TEXT_SP,
+                            SettingsPalette.RAIL_TEXT_SP, 1, TypedValue.COMPLEX_UNIT_SP)
+                    } else {
+                        addOnLayoutChangeListener { view, left, _, right, _, _, _, _, _ ->
+                            val textView = view as TextView
+                            val available = right - left - textView.compoundPaddingLeft - textView.compoundPaddingRight
+                            if (available > 0) {
+                                val probe = android.text.TextPaint(textView.paint)
+                                val chosen = (SettingsPalette.RAIL_TEXT_SP downTo SettingsPalette.RAIL_MIN_TEXT_SP)
+                                    .firstOrNull { size ->
+                                        probe.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
+                                            size.toFloat(), resources.displayMetrics)
+                                        probe.measureText(title) <= available
+                                    } ?: SettingsPalette.RAIL_MIN_TEXT_SP
+                                val chosenPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
+                                    chosen.toFloat(), resources.displayMetrics)
+                                if (kotlin.math.abs(textView.textSize - chosenPx) > 0.1f) {
+                                    textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, chosen.toFloat())
+                                }
+                            }
+                        }
+                    }
+                },
                 LinearLayout.LayoutParams(0, -1, 1f))
             setOnClickListener {
                 openSettingsCategory(category)
@@ -1291,7 +1341,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun settingsOverview(content: LinearLayout) {
         settingsPageTitle(content, getString(R.string.settings_overview), getString(R.string.settings_overview_subtitle))
         val readiness = card().apply {
-            setPadding(dp(20), dp(16), dp(20), dp(16))
+            setPadding(dp(SettingsPalette.ROW_INSET_DP), dp(16), dp(SettingsPalette.ROW_INSET_DP), dp(16))
         }
         readinessCard = readiness
         renderedReadiness = null
@@ -1453,7 +1503,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun settingsSummaryCard(category: SettingsCategory, summary: String): LinearLayout = card().apply {
         val warning = category == SettingsCategory.ADVANCED
-        setPadding(dp(24), dp(10), dp(24), dp(10))
+        setPadding(dp(SettingsPalette.ROW_INSET_DP), dp(10), dp(SettingsPalette.ROW_INSET_DP), dp(10))
         isClickable = true
         isFocusable = true
         foreground = focusRing(SettingsPalette.CARD_CORNER_DP)
@@ -4171,8 +4221,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             card.addView(overlaySliderRow(getString(title),
                 (if (key == "size") 50..300 else 5..95).toList(), value) { "$it%" }.also {
                 it.onSave = { percent -> ClusterMusicSettings.save(this, key, percent) }
-                val head = it.getChildAt(0) as LinearLayout
-                val value = head.getChildAt(head.childCount - 1)
+                val value = it.valueView
                 value.layoutParams = (value.layoutParams as LinearLayout.LayoutParams).apply {
                     marginStart = dp(SETTINGS_BLOCK_GAP_DP)
                 }
@@ -4238,21 +4287,34 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         /** Fired once when the finger leaves the slider, for saves that need a reconnect. */
         var onCommit: () -> Unit = {}
         val slider: SeekBar
+        val valueView: TextView
+        private val settingsTrailingSlots = mutableListOf<View>()
+        private val settingsLayout = page == "settings"
+        private lateinit var settingsContents: LinearLayout
+        private lateinit var settingsLine: LinearLayout
+        private lateinit var settingsTitle: TextView
+        private var stackedSettingsLayout = false
+
+        fun useExternalSlots() {
+            settingsTrailingSlots.forEach { (it.parent as ViewGroup).removeView(it) }
+            settingsTrailingSlots.clear()
+        }
 
         init {
             searchIndexSink?.add(title)
             orientation = VERTICAL
-            val valueView = label(describe(current), 16, ACCENT, true)
+            valueView = label(describe(current), 16, ACCENT, true)
             val head = row().apply {
                 gravity = Gravity.CENTER_VERTICAL
-                if (page == "settings") setPaddingRelative(dp(SettingsPalette.ROW_INSET_DP), 0,
-                    dp(SettingsPalette.ROW_INSET_DP), 0)
-                else setPadding(0, dp(12), 0, 0)
+                if (page != "settings") setPadding(0, dp(12), 0, 0)
             }
-            head.addView(label(title, 16, TEXT, true), LinearLayout.LayoutParams(0, -2, 1f))
-            if (page == "settings") {
+            val titleView = label(title, 16, TEXT, true)
+            val line = if (settingsLayout) row().also { settingsLine = it } else head
+            line.addView(titleView, LinearLayout.LayoutParams(0, -2, 1f))
+            if (settingsLayout) {
+                settingsTitle = titleView
                 valueView.gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                head.addView(valueView, LinearLayout.LayoutParams(0, -2, .7f).apply {
+                line.addView(valueView, LinearLayout.LayoutParams(dp(SettingsPalette.VALUE_SLOT_DP), -2).apply {
                     marginStart = dp(SettingsPalette.SLIDER_VALUE_GAP_DP)
                 })
             } else head.addView(valueView)
@@ -4272,16 +4334,56 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     override fun onStopTrackingTouch(seekBar: SeekBar?) { onCommit() }
                 })
             }
-            if (page == "settings") {
+            if (settingsLayout) {
                 slider.minimumWidth = 0
                 slider.progressTintList = ColorStateList.valueOf(settingsPalette.accent)
                 slider.thumbTintList = ColorStateList.valueOf(settingsPalette.accent)
                 slider.progressBackgroundTintList = ColorStateList.valueOf(settingsPalette.switchOff)
-                head.addView(slider, head.childCount - 1, LinearLayout.LayoutParams(0, dp(SettingsPalette.ROW_HEIGHT_DP), 1f))
+                line.gravity = Gravity.CENTER_VERTICAL
+                line.addView(slider, line.childCount - 1, LinearLayout.LayoutParams(0, dp(SettingsPalette.ROW_HEIGHT_DP), 1f))
+                settingsContents = column().apply { addView(line, LinearLayout.LayoutParams(-1, -2)) }
+                head.addView(settingsContents, LinearLayout.LayoutParams(0, -2, 1f))
                 head.minimumHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
+                for (width in listOf(SettingsPalette.MARKER_SLOT_DP, SettingsPalette.HELP_SIZE_DP,
+                    SettingsPalette.END_CONTROL_SLOT_DP)) {
+                    SettingsVisuals.emptySlot(context, SettingsTheme.settings(settingsPalette), width).also {
+                        settingsTrailingSlots.add(it)
+                        head.addView(it)
+                    }
+                }
             } else {
                 addView(slider, LinearLayout.LayoutParams(-1, dp(44)))
             }
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            if (settingsLayout && View.MeasureSpec.getMode(widthMeasureSpec) != View.MeasureSpec.UNSPECIFIED) {
+                val slots = SettingsPalette.MARKER_SLOT_DP + SettingsPalette.HELP_SIZE_DP + SettingsPalette.END_CONTROL_SLOT_DP
+                val rowWidth = View.MeasureSpec.getSize(widthMeasureSpec) +
+                    if (settingsTrailingSlots.isEmpty()) dp(slots) else 0
+                val stack = rowWidth + dp(SettingsPalette.ROW_INSET_DP * 2) < dp(SettingsPalette.STACKED_VALUE_WIDTH_DP)
+                if (stack != stackedSettingsLayout) {
+                    if (stack) {
+                        settingsLine.removeView(slider)
+                        settingsLine.orientation = VERTICAL
+                        settingsTitle.layoutParams = LinearLayout.LayoutParams(-1, -2)
+                        valueView.layoutParams = LinearLayout.LayoutParams(-1, -2)
+                        valueView.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                        settingsContents.addView(slider, LinearLayout.LayoutParams(-1, dp(SettingsPalette.ROW_HEIGHT_DP)))
+                    } else {
+                        settingsContents.removeView(slider)
+                        settingsLine.orientation = HORIZONTAL
+                        settingsTitle.layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                        valueView.layoutParams = LinearLayout.LayoutParams(dp(SettingsPalette.VALUE_SLOT_DP), -2).apply {
+                            marginStart = dp(SettingsPalette.SLIDER_VALUE_GAP_DP)
+                        }
+                        valueView.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                        settingsLine.addView(slider, 1, LinearLayout.LayoutParams(0, dp(SettingsPalette.ROW_HEIGHT_DP), 1f))
+                    }
+                    stackedSettingsLayout = stack
+                }
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         }
     }
 
@@ -6272,6 +6374,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         appendLine("DiPlay ${version()} · private beta diagnostic report")
         appendLine(LastConnectionProblem.report(appContext))
         appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
+        settingsWindowDiagnostic?.let { DiagnosticRedactor.redact(it)?.let(::appendLine) }
         appendLine("--- Startup summary (ms) ---")
         StartupTimeline.summarize(StartupTimeline.readLines(appContext)).forEachIndexed { index, summary ->
             DiagnosticRedactor.redact(summary.formatLine(index + 1))?.let { appendLine(it) }
@@ -6926,7 +7029,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
     private fun card() = column().apply {
         background = rounded(SURFACE, BORDER)
-        if (page == "settings") setPadding(0, 0, 0, 0) else setPadding(dp(24), dp(24), dp(24), dp(24))
+        if (page == "settings") {
+            tag = SETTINGS_CARD
+            setPaddingRelative(dp(SettingsPalette.ROW_INSET_DP), 0, dp(SettingsPalette.ROW_INSET_DP), 0)
+        } else setPadding(dp(24), dp(24), dp(24), dp(24))
     }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
     private fun dependentSettingsColumn(visible: Boolean) = column().apply {
@@ -7102,6 +7208,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     ) : Button(context) {
         var action = false
         var settingsRow = false
+        var externalSlots = false
         var contentOffsetY = 0f
         var alignVisibleGlyphs = true
         private val glyphBounds = android.graphics.Rect()
@@ -7138,15 +7245,27 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             canvas.restoreToCount(checkpoint)
         }
 
-        private fun rowLayouts(width: Int): Pair<android.text.StaticLayout, android.text.StaticLayout?> {
+        private data class RowLayouts(
+            val heading: android.text.StaticLayout,
+            val value: android.text.StaticLayout?,
+            val stacked: Boolean,
+        )
+
+        fun hasValue(): Boolean = !action && text.indexOf(VALUE_SEPARATOR) > 0
+
+        private fun rowLayouts(width: Int): RowLayouts {
             val rendered = transformationMethod?.getTransformation(text, this) ?: text
             val split = if (action) -1 else rendered.indexOf(VALUE_SEPARATOR)
             val hasValue = split > 0
-            val available = (width - paddingLeft - paddingRight - if (hasValue)
-                compoundDrawablePadding + dpForRow(SettingsPalette.ICON_SIZE_DP) else 0)
-                .coerceAtLeast(1)
-            val valueWidth = if (hasValue) (available * 0.38f).toInt().coerceAtLeast(1) else 0
-            val titleWidth = (available - valueWidth).coerceAtLeast(1)
+            val slots = dpForRow(SettingsPalette.MARKER_SLOT_DP + SettingsPalette.HELP_SIZE_DP +
+                SettingsPalette.END_CONTROL_SLOT_DP)
+            val rowWidth = width + if (externalSlots) slots else 0
+            val stacked = hasValue && rowWidth + dpForRow(SettingsPalette.ROW_INSET_DP * 2) <
+                dpForRow(SettingsPalette.STACKED_VALUE_WIDTH_DP)
+            val available = (width - paddingLeft - paddingRight - if (externalSlots) 0 else slots).coerceAtLeast(1)
+            val valueWidth = if (!hasValue) 0 else if (stacked) available else
+                minOf(dpForRow(SettingsPalette.VALUE_SLOT_DP), (available * 0.4f).toInt()).coerceAtLeast(1)
+            val titleWidth = if (stacked) available else (available - valueWidth).coerceAtLeast(1)
             val rtl = layoutDirection == View.LAYOUT_DIRECTION_RTL
             val direction = if (rtl) android.text.TextDirectionHeuristics.RTL else android.text.TextDirectionHeuristics.LTR
             fun layout(value: CharSequence, width: Int, alignment: android.text.Layout.Alignment): android.text.StaticLayout =
@@ -7154,8 +7273,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     .setAlignment(alignment).setTextDirection(direction).setIncludePad(includeFontPadding).build()
             val heading = if (hasValue) rendered.subSequence(0, split) else rendered
             val value = if (hasValue) rendered.subSequence(split + VALUE_SEPARATOR.length, rendered.length) else null
-            return layout(heading, titleWidth, android.text.Layout.Alignment.ALIGN_NORMAL) to
-                value?.let { layout(it, valueWidth, android.text.Layout.Alignment.ALIGN_OPPOSITE) }
+            return RowLayouts(layout(heading, titleWidth, android.text.Layout.Alignment.ALIGN_NORMAL),
+                value?.let { layout(it, valueWidth, if (stacked) android.text.Layout.Alignment.ALIGN_NORMAL
+                    else android.text.Layout.Alignment.ALIGN_OPPOSITE) }, stacked)
         }
 
         private fun dpForRow(value: Int) = (resources.displayMetrics.density * value).roundToInt()
@@ -7163,35 +7283,43 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
             if (!settingsRow || View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.EXACTLY) return
-            val (heading, value) = rowLayouts(measuredWidth)
-            val required = maxOf(suggestedMinimumHeight, heading.height + paddingTop + paddingBottom,
-                (value?.height ?: 0) + paddingTop + paddingBottom)
+            val (heading, value, stacked) = rowLayouts(measuredWidth)
+            val textHeight = if (stacked) heading.height + (value?.height ?: 0) else
+                maxOf(heading.height, value?.height ?: 0)
+            val required = maxOf(suggestedMinimumHeight, textHeight + paddingTop + paddingBottom)
             setMeasuredDimension(measuredWidth, View.resolveSize(required, heightMeasureSpec))
         }
 
         private fun drawSettingsRow(canvas: android.graphics.Canvas) {
-            val (heading, value) = rowLayouts(width)
+            val (heading, value, stacked) = rowLayouts(width)
             val rtl = layoutDirection == View.LAYOUT_DIRECTION_RTL
-            val iconWidth = if (value != null) dpForRow(SettingsPalette.ICON_SIZE_DP) + compoundDrawablePadding else 0
+            val slots = if (externalSlots) 0 else dpForRow(SettingsPalette.MARKER_SLOT_DP +
+                SettingsPalette.HELP_SIZE_DP + SettingsPalette.END_CONTROL_SLOT_DP)
             val titleX = if (rtl) width - paddingRight - heading.width else paddingLeft
-            val valueX = if (rtl) paddingLeft + iconWidth else width - paddingRight - iconWidth - (value?.width ?: 0)
+            val valueX = if (stacked) titleX else if (rtl) paddingLeft + slots
+                else width - paddingRight - slots - (value?.width ?: 0)
+            val textTop = if (stacked) (height - heading.height - (value?.height ?: 0)) / 2f
+                else (height - heading.height) / 2f
             val checkpoint = canvas.save()
             paint.color = currentTextColor
-            canvas.translate(titleX.toFloat(), ((height - heading.height) / 2f).coerceAtLeast(0f))
+            canvas.translate(titleX.toFloat(), textTop.coerceAtLeast(0f))
             heading.draw(canvas)
             canvas.restoreToCount(checkpoint)
             if (value != null) {
                 val valueCheckpoint = canvas.save()
                 paint.color = muted
-                canvas.translate(valueX.toFloat(), ((height - value.height) / 2f).coerceAtLeast(0f))
+                val valueTop = if (stacked) textTop + heading.height else (height - value.height) / 2f
+                canvas.translate(valueX.toFloat(), valueTop.coerceAtLeast(0f))
                 value.draw(canvas)
                 canvas.restoreToCount(valueCheckpoint)
                 val icon = compoundDrawablesRelative[2]
-                if (icon != null) {
+                if (icon != null && !externalSlots) {
                     val iconCheckpoint = canvas.save()
                     icon.layoutDirection = layoutDirection
                     val iconSize = dpForRow(SettingsPalette.ICON_SIZE_DP)
-                    val left = if (rtl) paddingLeft else width - paddingRight - iconSize
+                    val endSlot = dpForRow(SettingsPalette.END_CONTROL_SLOT_DP)
+                    val left = if (rtl) paddingLeft + (endSlot - iconSize) / 2
+                        else width - paddingRight - endSlot + (endSlot - iconSize) / 2
                     canvas.translate(left.toFloat(), (height - iconSize) / 2f)
                     icon.setBounds(0, 0, iconSize, iconSize)
                     icon.draw(canvas)
@@ -7240,8 +7368,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun choiceNote(value: String) = label(value, 13, MUTED).apply {
         tag = SETTINGS_DESCRIPTION
         setPadding(
-            dp(SETTINGS_CONTROL_INSET_DP), 0,
-            dp(SETTINGS_CONTROL_INSET_DP), dp(SETTINGS_NOTE_GAP_DP),
+            if (page == "settings") 0 else dp(SETTINGS_CONTROL_INSET_DP), 0,
+            if (page == "settings") 0 else dp(SETTINGS_CONTROL_INSET_DP), dp(SETTINGS_NOTE_GAP_DP),
         )
     }
 
@@ -7286,7 +7414,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             setSize(dp(SettingsPalette.DIVIDER_DP), dp(SettingsPalette.DIVIDER_DP))
         }
         container.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-        container.dividerPadding = dp(SettingsPalette.ROW_INSET_DP)
+        container.dividerPadding = 0
         var index = 0
         while (index < container.childCount) {
             var child = container.getChildAt(index)
@@ -7296,7 +7424,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 child.setTextColor(TEXT)
                 child.minimumHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
                 child.minHeight = dp(SettingsPalette.ROW_HEIGHT_DP)
-                child.setPaddingRelative(dp(SettingsPalette.ROW_INSET_DP), 0, dp(SettingsPalette.ROW_INSET_DP), 0)
+                child.setPaddingRelative(0, 0, 0, 0)
                 val notes = mutableListOf<TextView>()
                 var next = index + 1
                 while (next < container.childCount) {
@@ -7313,15 +7441,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     val wrapper = row().apply {
                         tag = SETTINGS_ROW_WRAPPER
                         gravity = Gravity.CENTER_VERTICAL
+                        original.externalSlots = true
                         addView(original, LinearLayout.LayoutParams(0, -2, 1f))
                         if (nextConnection) addView(SettingsVisuals.nextConnectionMarker(this@DiPlayActivity,
                             SettingsTheme.settings(settingsPalette)))
+                        else addView(SettingsVisuals.emptySlot(this@DiPlayActivity, SettingsTheme.settings(settingsPalette),
+                            SettingsPalette.MARKER_SLOT_DP))
                         if (notes.isNotEmpty()) {
                             val help = SettingsVisuals.DescriptionToggle(this@DiPlayActivity,
                                 original.text.toString().substringBefore(VALUE_SEPARATOR), SettingsTheme.settings(settingsPalette))
                             notes.forEach(help::addDescription)
                             addView(help)
-                        }
+                        } else addView(SettingsVisuals.emptySlot(this@DiPlayActivity, SettingsTheme.settings(settingsPalette),
+                            SettingsPalette.HELP_SIZE_DP))
+                        addView(if (original.hasValue()) ImageView(this@DiPlayActivity).apply {
+                            setImageResource(R.drawable.ic_dp_chevron)
+                            imageTintList = ColorStateList.valueOf(ACCENT)
+                            scaleType = ImageView.ScaleType.CENTER
+                            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                            isFocusable = false
+                            setOnClickListener { original.performClick() }
+                        } else View(this@DiPlayActivity).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO },
+                            LinearLayout.LayoutParams(dp(SettingsPalette.END_CONTROL_SLOT_DP), dp(SettingsPalette.ROW_HEIGHT_DP)))
                     }
                     container.addView(wrapper, index, params)
                     child = wrapper
@@ -7342,11 +7483,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     val wrapper = row().apply {
                         tag = SETTINGS_ROW_WRAPPER
                         gravity = Gravity.CENTER_VERTICAL
+                        original.useExternalSlots()
                         addView(original, LinearLayout.LayoutParams(0, -2, 1f))
+                        addView(SettingsVisuals.emptySlot(this@DiPlayActivity, SettingsTheme.settings(settingsPalette),
+                            SettingsPalette.MARKER_SLOT_DP))
                         val title = descendants(original).filterIsInstance<TextView>().firstOrNull()?.text?.toString().orEmpty()
                         val help = SettingsVisuals.DescriptionToggle(this@DiPlayActivity, title, SettingsTheme.settings(settingsPalette))
                         notes.forEach(help::addDescription)
                         addView(help)
+                        addView(SettingsVisuals.emptySlot(this@DiPlayActivity, SettingsTheme.settings(settingsPalette),
+                            SettingsPalette.END_CONTROL_SLOT_DP))
                     }
                     container.addView(wrapper, index, params)
                     child = wrapper
@@ -7371,7 +7517,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     params.height = ViewGroup.LayoutParams.WRAP_CONTENT
                 }
                 params.topMargin = 0
-                params.bottomMargin = if (child is LinearLayout && child.orientation == LinearLayout.HORIZONTAL &&
+                params.bottomMargin = if (child.tag != SETTINGS_ROW_WRAPPER && child is LinearLayout && child.orientation == LinearLayout.HORIZONTAL &&
                     (0 until child.childCount).any { child.getChildAt(it) is ImageView }) dp(CONTROL_GAP_DP) else 0
                 child.layoutParams = params
             }
@@ -7613,9 +7759,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val SETTINGS_CONTROL_INSET_DP = 16
         /** Gap under an explanatory note, so it never touches the next control. */
         private const val SETTINGS_NOTE_GAP_DP = 12
-        private const val SETTINGS_SHELL_INSET_DP = 32
-        private const val SETTINGS_CONTENT_MIN_WIDTH_DP = 240
-        private const val SETTINGS_RAIL_MIN_WIDTH_DP = 80
+        private const val SETTINGS_CARD = "settings_card"
         private const val SETTINGS_ROW_WRAPPER = "settings_row_wrapper"
         private const val SETTINGS_DESCRIPTION = "settings_description"
     }

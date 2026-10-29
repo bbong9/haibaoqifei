@@ -60,8 +60,13 @@ internal object SettingsVisuals {
         contentDescription = context.getString(R.string.saved_for_your_next_connection)
         if (Build.VERSION.SDK_INT >= 26) tooltipText = contentDescription
         tag = "settings_next_connection"
-        layoutParams = LinearLayout.LayoutParams(theme.dp(context, BADGE_HEIGHT_DP),
+        layoutParams = LinearLayout.LayoutParams(theme.dp(context, SettingsPalette.MARKER_SLOT_DP),
             theme.dp(context, SettingsPalette.ROW_HEIGHT_DP))
+    }
+
+    fun emptySlot(context: Context, theme: SettingsTheme, widthDp: Int): View = View(context).apply {
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        layoutParams = LinearLayout.LayoutParams(theme.dp(context, widthDp), 1)
     }
 
     /** Keep the original localized title for search and accessibility; only its rendering changes. */
