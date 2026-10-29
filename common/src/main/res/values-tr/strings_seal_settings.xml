@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">Telefon, kablosuz ve otomatik bağlantı</string>
+    <string name="settings_seal_auto_connection_description">DiPlay açıldığında seçilen iPhone kaydedilmiş bağlantı ayarlarıyla bağlanır.</string>
+    <string name="settings_seal_ready_saved_connection">Mevcut bağlantı ayarları korunur. Ana ekrandan kablosuz bağlantı başlatabilirsiniz.</string>
+    <string name="settings_seal_wireless_permissions_description">Yakındaki cihazlar iPhone\'unuzu bağlar. Mikrofon Siri\'yi ve aramaları etkinleştirir. Eski Android sürümleri kablosuz kurulum için Konum da gerektirir.</string>
+    <string name="settings_seal_about_description">Android ana üniteleri için bağımsız bir CarPlay alıcısı. Kablosuz bağlantılar, yerel kimlik doğrulamasıyla ana ünitede çalışır. Standart bir iPhone jailbreak, Mac, dongle veya oturum açma olmadan bağlanabilir.\n\nBu önizleme deneysel bir aksesuar kimliği kullanır. Her iPhone ve ana üniteyle uyumluluk test edilmeye devam etmektedir. Apple sertifikalı bir ürün değildir.</string>
+</resources>

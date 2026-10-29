@@ -835,7 +835,7 @@
     <string name="settings_ambient_car_rhythm_description">播放 CarPlay 音乐时，启用车辆原厂的氛围灯音乐律动，颜色和效果使用车辆氛围灯菜单中的设置（需在其中开启音乐律动）。期间 DiPlay 不直接控制灯光。开启时会检查。仅当车机不允许 DiPlay 自行启动律动时，才需要车机网络 ADB。</string>
     <string name="settings_ambient_car_rhythm_unavailable">车辆音乐律动不可用：DiPlay 无法自行启动律动，并且没有网络 ADB 权限或车机音频服务不支持所需调用。未保存任何设置。</string>
     <string name="settings_ambient_car_rhythm_feed">向车辆律动发送音乐数据（较旧的车机）</string>
-    <string name="settings_ambient_car_rhythm_feed_description">在部分车机（如 2023 款汉）上，车辆的律动会启动但灯光保持熄灭，因为车辆不会为 CarPlay 音乐生成自己的频谱。此选项会把正在播放音乐的 16 个频段发送给车辆的灯光控制器，让车辆自身的律动（包括副驾驶一侧的仪表台）随之变化。仅在上方的车辆音乐律动开启时有效，并且需要车辆的网络 ADB。</string>
+    <string name="settings_ambient_car_rhythm_feed_description">在部分车机上，车辆的律动会启动但灯光保持熄灭，因为车辆不会为 CarPlay 音乐生成自己的频谱。此选项会把正在播放音乐的 16 个频段发送给车辆的灯光控制器，让车辆自身的律动（包括副驾驶一侧的仪表台）随之变化。仅在上方的车辆音乐律动开启时有效，并且需要车辆的网络 ADB。</string>
     <string name="settings_interface_size">界面大小</string>
     <string name="settings_interface_size_auto">自动</string>
     <string name="settings_interface_size_hint">DiPlay 自身界面中文字和控件的大小。自动模式会在大尺寸低密度屏幕上放大它们。不影响 CarPlay。</string>

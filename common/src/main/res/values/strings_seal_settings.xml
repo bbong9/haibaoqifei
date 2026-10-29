@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">Phone, wireless and automatic connection</string>
+    <string name="settings_seal_auto_connection_description">When DiPlay opens, connect the selected iPhone using the saved connection settings.</string>
+    <string name="settings_seal_ready_saved_connection">Your existing connection settings are preserved. Start a wireless connection from the home screen.</string>
+    <string name="settings_seal_wireless_permissions_description">Nearby devices connects your iPhone. Microphone enables Siri and calls. Older Android versions also require Location for wireless setup.</string>
+    <string name="settings_seal_about_description">An independent CarPlay receiver for Android head units. Wireless connections run on the head unit, with local authentication. A standard iPhone can connect without a jailbreak, Mac, dongle or sign-in.\n\nThis preview uses an experimental accessory identity. Compatibility with every iPhone and head unit is still being tested. It is not an Apple-certified product.</string>
+</resources>

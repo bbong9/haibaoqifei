@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">電話、ワイヤレス、自動接続</string>
+    <string name="settings_seal_auto_connection_description">DiPlayを開いたとき、保存済みの接続設定で選択したiPhoneに接続します。</string>
+    <string name="settings_seal_ready_saved_connection">現在の接続設定は保持されています。ホーム画面からワイヤレス接続を開始できます。</string>
+    <string name="settings_seal_wireless_permissions_description">「付近のデバイス」はiPhoneとの接続に、マイクはSiriと通話に必要です。古いAndroidでは無線接続に位置情報権限も必要です。</string>
+    <string name="settings_seal_about_description">Android車載端末向けの独立したCarPlayレシーバーです。無線接続と認証は車載端末上で処理します。通常のiPhoneを脱獄せずに接続でき、Mac、ドングル、サインインは不要です。\n\nこのプレビュー版では試験的なアクセサリー識別情報を使用しています。すべてのiPhoneと車載端末との互換性は現在も検証中です。Apple認証製品ではありません。</string>
+</resources>

@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">휴대전화, 무선 및 자동 연결</string>
+    <string name="settings_seal_auto_connection_description">DiPlay를 열 때 저장된 연결 설정으로 선택한 iPhone에 연결합니다.</string>
+    <string name="settings_seal_ready_saved_connection">기존 연결 설정이 유지됩니다. 홈 화면에서 무선 연결을 시작할 수 있습니다.</string>
+    <string name="settings_seal_wireless_permissions_description">주변 기기 권한은 iPhone 연결에 사용됩니다. 마이크 권한은 Siri와 통화에 필요합니다. 이전 Android 버전에서는 무선 설정에 위치 권한도 필요합니다.</string>
+    <string name="settings_seal_about_description">Android 헤드 유닛용 독립형 CarPlay 수신기입니다. 무선 연결은 헤드 유닛에서 실행되며 로컬 인증을 사용합니다. 일반 iPhone은 탈옥, Mac, 동글 또는 로그인 없이 연결할 수 있습니다.\n\n이 미리보기는 실험적인 액세서리 식별 정보를 사용합니다. 모든 iPhone 및 헤드 유닛과의 호환성을 계속 테스트 중입니다. Apple 인증 제품이 아닙니다.</string>
+</resources>

@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">Телефон, беспроводное и автоматическое подключение</string>
+    <string name="settings_seal_auto_connection_description">При открытии DiPlay подключает выбранный iPhone с сохранёнными настройками подключения.</string>
+    <string name="settings_seal_ready_saved_connection">Текущие настройки подключения сохранены. Начните беспроводное подключение с главного экрана.</string>
+    <string name="settings_seal_wireless_permissions_description">«Рядом находящиеся устройства» связывают iPhone. Микрофон нужен для Siri и звонков. Старые версии Android также требуют местоположение для беспроводной настройки.</string>
+    <string name="settings_seal_about_description">Независимый приёмник CarPlay для головных устройств Android. Беспроводные подключения работают на головном устройстве с локальной аутентификацией. Обычный iPhone может подключиться без джейлбрейка, Mac, переходника или входа в учётную запись.\n\nВ этой предварительной версии используется экспериментальная аксессуарная идентичность. Совместимость со всеми iPhone и головными устройствами ещё тестируется. Продукт не сертифицирован Apple.</string>
+</resources>

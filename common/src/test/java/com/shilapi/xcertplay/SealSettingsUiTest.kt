@@ -344,7 +344,8 @@ class SealSettingsUiTest {
         val rootDir = File(requireNotNull(System.getProperty("user.dir")))
         val project = if (rootDir.name == "common") rootDir.parentFile else rootDir
         val directory = File(project, "build/seal-settings-screenshots").apply { mkdirs() }
-        for (category in listOf(SettingsCategory.OVERVIEW, SettingsCategory.DISPLAY, SettingsCategory.NAVIGATION, SettingsCategory.VEHICLE)) {
+        val auditDirectory = File(project, "build/seal-settings-card19").apply { mkdirs() }
+        for (category in SettingsInformationArchitecture.visibleCategories(true, SettingsCategory.OVERVIEW)) {
             openCategory(screen, category)
             layoutRoot(screen)
             val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
@@ -358,6 +359,7 @@ class SealSettingsUiTest {
             } finally {
                 bitmap.recycle()
             }
+            captureCategoryPages(screen, root, auditDirectory, "$layout-${category.name.lowercase()}")
             val focusTitle = when (category) {
                 SettingsCategory.DISPLAY -> R.string.efficient_video
                 SettingsCategory.VEHICLE -> R.string.settings_ambient_title
@@ -388,6 +390,54 @@ class SealSettingsUiTest {
                 focused.recycle()
             }
         }
+    }
+
+    private fun captureCategoryPages(screen: DiPlayActivity, root: View, directory: File, name: String) {
+        val scroll = categoryContent(screen)
+        val visibleTexts = descendants(scroll).filterIsInstance<TextView>()
+            .filter { it.isShown }.toList()
+        val allText = visibleTexts.map { it.text.toString() }.filter { it.isNotBlank() }
+        assertTrue("$name has no visible text", allText.isNotEmpty())
+        val forbidden = Regex("唐|汉|宋|秦|平台\\s*21|DiLink\\s*3", RegexOption.IGNORE_CASE)
+        assertFalse("$name contains another model: ${allText.filter { forbidden.containsMatchIn(it) }}",
+            allText.any { forbidden.containsMatchIn(it) })
+        File(directory, "$name-all.txt").writeText(allText.joinToString("\n", postfix = "\n"))
+
+        val maximum = (scroll.getChildAt(0).height - scroll.height).coerceAtLeast(0)
+        val step = (scroll.height * 4 / 5).coerceAtLeast(1)
+        var position = 0
+        var page = 0
+        while (true) {
+            scroll.scrollTo(0, position)
+            shadowOf(Looper.getMainLooper()).idle()
+            val base = "$name-${page.toString().padStart(3, '0')}"
+            val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            try {
+                val canvas = Canvas(bitmap)
+                if (root === scroll) {
+                    canvas.drawColor(ReflectionHelpers.getField<DiPlayPalette>(screen, "palette").background)
+                    canvas.translate(0f, -scroll.scrollY.toFloat())
+                }
+                root.draw(canvas)
+                File(directory, "$base.png").outputStream().use {
+                    assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            } finally {
+                bitmap.recycle()
+            }
+            val viewport = Rect(0, scroll.scrollY, scroll.width, scroll.scrollY + scroll.height)
+            val pageText = visibleTexts.filter { view ->
+                val bounds = Rect()
+                view.getDrawingRect(bounds)
+                scroll.offsetDescendantRectToMyCoords(view, bounds)
+                Rect.intersects(bounds, viewport)
+            }.map { it.text.toString() }.filter { it.isNotBlank() }
+            File(directory, "$base.txt").writeText(pageText.joinToString("\n", postfix = "\n"))
+            if (position == maximum) break
+            position = (position + step).coerceAtMost(maximum)
+            page++
+        }
+        scroll.scrollTo(0, 0)
     }
 
     private fun openSettings(seal: Boolean = true, savedState: Bundle? = null): DiPlayActivity {

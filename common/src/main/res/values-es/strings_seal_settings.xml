@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">Teléfono, conexión inalámbrica y automática</string>
+    <string name="settings_seal_auto_connection_description">Al abrir DiPlay, conecta el iPhone elegido con los ajustes de conexión guardados.</string>
+    <string name="settings_seal_ready_saved_connection">Se conservan los ajustes de conexión actuales. Inicia una conexión inalámbrica desde la pantalla principal.</string>
+    <string name="settings_seal_wireless_permissions_description">«Dispositivos cercanos» conecta tu iPhone. El micrófono activa Siri y las llamadas. Las versiones antiguas de Android también requieren Ubicación para la configuración inalámbrica.</string>
+    <string name="settings_seal_about_description">Un receptor de CarPlay independiente para unidades principales Android. Las conexiones inalámbricas se ejecutan en la unidad principal, con autenticación local. Un iPhone estándar puede conectarse sin jailbreak, Mac, dongle ni inicio de sesión.\n\nEsta versión preliminar usa una identidad de accesorio experimental. La compatibilidad con cada iPhone y cada unidad principal sigue en pruebas. No es un producto certificado por Apple.</string>
+</resources>

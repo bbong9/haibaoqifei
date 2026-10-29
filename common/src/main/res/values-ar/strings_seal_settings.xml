@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">الهاتف والاتصال اللاسلكي والتلقائي</string>
+    <string name="settings_seal_auto_connection_description">عند فتح DiPlay، يتصل بـ iPhone المحدد باستخدام إعدادات الاتصال المحفوظة.</string>
+    <string name="settings_seal_ready_saved_connection">تم الاحتفاظ بإعدادات الاتصال الحالية. ابدأ اتصالاً لاسلكياً من الشاشة الرئيسية.</string>
+    <string name="settings_seal_wireless_permissions_description">«الأجهزة القريبة» تربط iPhone. الميكروفون يمكّن Siri والمكالمات. تتطلب إصدارات Android الأقدم أيضًا الموقع للإعداد اللاسلكي.</string>
+    <string name="settings_seal_about_description">مستقبل CarPlay مستقل لوحدات قيادة Android. تعمل الاتصالات اللاسلكية على وحدة القيادة مع مصادقة محلية. يمكن لأي iPhone عادي الاتصال دون جيلبريك أو Mac أو جهاز إضافي أو تسجيل دخول.\n\nتستخدم هذه المعاينة هوية ملحق تجريبية. لا تزال التوافقية مع كل iPhone وكل وحدة قيادة قيد الاختبار. هذا المنتج غير معتمد من Apple.</string>
+</resources>

@@ -17,8 +17,8 @@ android {
         applicationId = "com.shihab.diplay.seal"
         minSdk = 25
         targetSdk = 37
-        versionCode = 53
-        versionName = "0.2.22-seal.19"
+        versionCode = 54
+        versionName = "0.2.22-seal.20"
 
     }
 

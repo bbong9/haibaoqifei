@@ -1,0 +1,7 @@
+<resources>
+    <string name="settings_seal_connection_summary">手機、無線及自動連線</string>
+    <string name="settings_seal_auto_connection_description">開啟 DiPlay 時，使用已儲存的連線設定連接選定的 iPhone。</string>
+    <string name="settings_seal_ready_saved_connection">目前的連線設定已保留，可從首頁開始無線連線。</string>
+    <string name="settings_seal_wireless_permissions_description">「附近的裝置」權限用於連線 iPhone；麥克風權限用於 Siri 和通話。較舊版本的 Android 也需要位置權限來設定無線連線。</string>
+    <string name="settings_seal_about_description">專為 Android 車機打造的獨立 CarPlay 接收器。無線連線在車機上執行，並使用本機認證。一般 iPhone 無需越獄、Mac、轉接器或登入即可連線。\n\n此預覽版本使用實驗性配件識別資訊，目前仍在測試與不同 iPhone 和車機的相容性。本產品未經 Apple 認證。</string>
+</resources>
