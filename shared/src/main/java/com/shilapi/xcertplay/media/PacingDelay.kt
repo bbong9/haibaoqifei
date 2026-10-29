@@ -5,9 +5,10 @@ package com.shilapi.xcertplay.media
  *
  * For each frame the decoder releases, the delay it needed is how long after its local time it came out.
  * The delay follows the [percentile] of the last [window] such needs plus [marginNanos], so about that
- * share of frames is ready before its display time; the rest are shown at once. The margin is a refresh
- * plus 4 ms because SurfaceFlinger takes a buffer about one refresh before the vsync it is shown at: on
- * my Tang, frames released less than about 16 ms before that vsync missed it. It starts at
+ * share of frames is ready before its display time; the rest are shown at once. The balanced margin is a
+ * refresh plus 4 ms because SurfaceFlinger takes a buffer about one refresh before the vsync it is shown at: on
+ * my Tang, frames released less than about 16 ms before that vsync missed it. Low latency uses a smaller
+ * margin and falls faster. The delay starts at
  * [initialNanos] and holds it until [refreshEvery] needs are known. A changed goal is approached by at
  * most [risePerFrame] or [fallPerFrame] per frame, so a few milliseconds move a frame by at most one
  * refresh instead of shifting every later frame at once. It rises faster than it falls: frames that miss
@@ -24,6 +25,13 @@ internal class PacingDelay(
     private val risePerFrame: Long = 1_000_000L,
     private val fallPerFrame: Long = 500_000L,
 ) {
+    companion object {
+        fun forLatency(initialNanos: Long, latency: SmoothVideoLatency): PacingDelay = when (latency) {
+            SmoothVideoLatency.BALANCED -> PacingDelay(initialNanos)
+            SmoothVideoLatency.LOW -> PacingDelay(initialNanos, marginNanos = 10_000_000L, fallPerFrame = 2_000_000L)
+        }
+    }
+
     private val needs = LongArray(window)
     private var count = 0
     private var next = 0

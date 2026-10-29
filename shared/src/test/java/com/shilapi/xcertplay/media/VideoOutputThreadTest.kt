@@ -60,7 +60,7 @@ class VideoOutputThreadTest {
         sink.onVideoConfig(MAIN, avcC)
         sink.onVideoFrame(MAIN, idr)
         assertTrue("a decoded frame was rendered", rendered.await(5, TimeUnit.SECONDS))
-        assertTrue(reports.toString(), reports.any { it.startsWith("decoder=") && it.endsWith(" outputThread=true") })
+        assertTrue(reports.toString(), reports.any { it.startsWith("decoder=") && it.endsWith(" outputThread=true latency=balanced") })
 
         val decoder = mainDecoder(sink)
         val output = checkNotNull(decoder.field<Thread?>("outputThread")) { "no output thread" }

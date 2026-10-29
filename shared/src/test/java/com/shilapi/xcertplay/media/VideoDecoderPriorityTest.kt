@@ -94,6 +94,22 @@ class VideoDecoderPriorityTest {
         assertTrue(reports.toString(), reports.any { it.startsWith("decoder=") && it.contains(" priority=-") })
     }
 
+    @Test fun decoderLogIncludesTheSessionLatencyPreset() {
+        for (latency in SmoothVideoLatency.entries) {
+            sink.close()
+            assertTrue(sink.awaitVideoReleased(5_000))
+            reports.clear()
+            sink = AndroidMediaSink(videoPacingDelayMillis = 55, smoothVideoLatency = latency)
+            sink.setVideoDiagnosticHandler(110) { reports += it }
+            sink.setSurface(110, newSurface())
+            sink.onVideoConfig(110, avcC)
+            waitUntil { reports.any { it.startsWith("decoder=") } }
+            assertTrue(reports.toString(), reports.any {
+                it.startsWith("decoder=") && it.endsWith(" latency=${latency.diagnosticValue}")
+            })
+        }
+    }
+
     private fun newSurface(): Surface {
         val texture = SurfaceTexture(0).also { textures += it }
         return Surface(texture).also { surfaces += it }

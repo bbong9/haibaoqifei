@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.media.SmoothVideoLatency
+
 import com.shilapi.xcertplay.media.CarPlayVideoLayout
 import org.junit.Assert.*
 import org.junit.Test
@@ -89,6 +91,15 @@ class CarPlayVideoSurfaceTest {
         assertEquals(140, smoothVideoDelayMillis(30))
         assertEquals(90, smoothVideoDelayMillis(120)) // clamped to the 60 fps the stream tops out at
         assertEquals(140, smoothVideoDelayMillis(0))
+    }
+
+    @Test fun smoothVideoLatencyLevelsHaveTheExpectedStartingDelay() {
+        for ((fps, balanced, low) in listOf(Triple(30, 140, 80), Triple(40, 115, 67), Triple(60, 90, 55))) {
+            assertEquals(balanced, smoothVideoDelayMillis(fps, SmoothVideoLatency.BALANCED))
+            assertEquals(low, smoothVideoDelayMillis(fps, SmoothVideoLatency.LOW))
+        }
+        assertEquals(80, smoothVideoDelayMillis(0, SmoothVideoLatency.LOW))
+        assertEquals(55, smoothVideoDelayMillis(120, SmoothVideoLatency.LOW))
     }
 
     @Test fun replacingTextureDetachesBeforeReleaseAndDoesNotReleaseHolderSurface() {

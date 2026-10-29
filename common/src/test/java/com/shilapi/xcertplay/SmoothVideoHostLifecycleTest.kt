@@ -10,6 +10,7 @@ import android.view.SurfaceHolder
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
+import com.shilapi.xcertplay.media.SmoothVideoLatency
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.MfiTarget
 import java.nio.ByteBuffer
@@ -85,8 +86,39 @@ class SmoothVideoHostLifecycleTest {
         (getField("airPlayCommandExecutor") as ExecutorService).shutdownNow()
         CarPlayBackgroundSession.clear()
         AirPlayPersistence.saveSmoothVideo(activity, false)
+        AirPlayPersistence.saveSmoothVideoLatency(activity, SmoothVideoLatency.BALANCED)
         AirPlayPersistence.saveDirectVideoOutput(activity, false)
         controllerConstruction.close()
+    }
+
+    @Test fun newMediaSinkCapturesTheSelectedLatencyForItsConnection() {
+        setField("fps", 60)
+        setField("smoothVideo", true)
+        val create = CarPlayHostActivity::class.java.getDeclaredMethod("createMediaSink",
+            Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }
+        fun createSink() = (create.invoke(activity, 1920, 990, 1) as AndroidMediaSink).also(ownedSinks::add)
+        fun field(sink: AndroidMediaSink, name: String) = AndroidMediaSink::class.java
+            .getDeclaredField(name).apply { isAccessible = true }.get(sink)
+
+        AirPlayPersistence.saveSmoothVideoLatency(activity, SmoothVideoLatency.BALANCED)
+        val balanced = createSink()
+        AirPlayPersistence.saveSmoothVideoLatency(activity, SmoothVideoLatency.LOW)
+        val low = createSink()
+        assertEquals(90, field(balanced, "videoPacingDelayMillis"))
+        assertEquals(SmoothVideoLatency.BALANCED, field(balanced, "smoothVideoLatency"))
+        assertEquals(55, field(low, "videoPacingDelayMillis"))
+        assertEquals(SmoothVideoLatency.LOW, field(low, "smoothVideoLatency"))
+        assertEquals(55, invoke("smoothVideoInitialDelayMillis"))
+        setField("sink", balanced)
+        assertEquals(90, invoke("smoothVideoInitialDelayMillis"))
+        setField("sink", null)
+        val session = mock(CarPlayController::class.java)
+        CarPlayBackgroundSession.store(session, balanced, 1920, 990, Any(), display) { it() }
+        assertEquals(90, invoke("smoothVideoInitialDelayMillis"))
+        CarPlayBackgroundSession.clear()
+        setField("smoothVideo", false)
+        assertEquals(0, field(createSink(), "videoPacingDelayMillis"))
     }
 
     // (1) The maintainer's sequence: Smooth video turned on, the reconnect stopped at a prerequisite, so

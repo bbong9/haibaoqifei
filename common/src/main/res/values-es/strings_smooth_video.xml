@@ -1,0 +1,6 @@
+<resources>
+    <string name="settings_smooth_video_latency">Latencia de imagen</string>
+    <string name="settings_smooth_video_latency_balanced">Equilibrada</string>
+    <string name="settings_smooth_video_latency_low">Baja latencia</string>
+    <string name="settings_smooth_video_latency_description">Se aplica en la próxima conexión.</string>
+</resources>

@@ -5401,6 +5401,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     ): AndroidMediaSink {
         // Capture this session's log: late decoder shutdown must not write into a new session.
         val diagnosticLog = sessionLog
+        val latency = AirPlayPersistence.loadSmoothVideoLatency(this)
         return AndroidMediaSink(
             surface = null,
             videoWidth = videoWidth,
@@ -5430,7 +5431,8 @@ open class CarPlayHostActivity : ComponentActivity() {
             callVoiceFilter = AirPlayPersistence.loadCallVoiceFilter(this),
             callSpeakerphone = { AirPlayPersistence.loadCallSpeakerphone(this) },
             // Only a SurfaceView honours release timestamps; smooth video always selects one.
-            videoPacingDelayMillis = if (smoothVideo) smoothVideoDelayMillis(fps) else 0,
+            videoPacingDelayMillis = if (smoothVideo) smoothVideoDelayMillis(fps, latency) else 0,
+            smoothVideoLatency = latency,
             mainVideoFrameRate = fps,
             vendorLowLatencyDecoder = AirPlayPersistence.loadLowLatencyDecoder(this),
             mtkDecoderTuningEnabled = AirPlayPersistence.loadMtkDecoderTuning(this),
@@ -6591,6 +6593,11 @@ open class CarPlayHostActivity : ComponentActivity() {
         videoSurfaceProbe = null
     }
 
+    private fun smoothVideoInitialDelayMillis(): Int =
+        (sink ?: CarPlayBackgroundSession.snapshot()?.sink)?.takeIf { it.videoPacingEnabled }
+            ?.videoPacingInitialDelayMillis
+            ?: smoothVideoDelayMillis(fps, AirPlayPersistence.loadSmoothVideoLatency(this))
+
     private fun useFallbackVideoSurface(texture: TextureView, unsafeDecoder: String?) {
         val root = texture.parent as? FrameLayout ?: return
         val index = root.indexOfChild(texture)
@@ -6619,7 +6626,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         root.addView(viewport, index, texture.layoutParams)
         appendLog(if (smoothVideo) {
             "Using SurfaceView video output: smooth video, frames shown at the iPhone's frame time + a delay " +
-                "starting at ${smoothVideoDelayMillis(fps)} ms; picture adjustments unavailable"
+                "starting at ${smoothVideoInitialDelayMillis()} ms; picture adjustments unavailable"
         } else if (directVideoOutput) {
             "Using SurfaceView video output: direct video output, frames shown as soon as they are decoded; " +
                 "picture adjustments unavailable"

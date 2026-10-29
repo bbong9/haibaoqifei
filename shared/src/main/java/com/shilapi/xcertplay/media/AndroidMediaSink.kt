@@ -210,6 +210,7 @@ class AndroidMediaSink(
      * decoded. Only a SurfaceView honours the timestamps, so the host sets it with one.
      */
     private val videoPacingDelayMillis: Int = 0,
+    private val smoothVideoLatency: SmoothVideoLatency = SmoothVideoLatency.BALANCED,
     /** The main screen's frame rate (the frame-rate setting), requested from its decoder as the operating rate; 0 for none. */
     private val mainVideoFrameRate: Int = 0,
     /**
@@ -422,6 +423,9 @@ class AndroidMediaSink(
 
     /** True when this sink paces main-screen frames (smooth video); fixed for its lifetime. */
     val videoPacingEnabled: Boolean get() = videoPacingDelayMillis > 0
+
+    /** The main screen's initial pacing delay, fixed when this sink is created. */
+    val videoPacingInitialDelayMillis: Int get() = videoPacingDelayMillis
 
     /**
      * False until the main screen's first video frame. The screen stream's keepalives never reach the sink,
@@ -712,6 +716,7 @@ class AndroidMediaSink(
         onExit = ::onVideoDecoderExit,
         // Only the main screen goes to the host's SurfaceView; mirrors and the cluster keep their path.
         pacingDelayNanos = if (type == MAIN_SCREEN_TYPE && statsLabel == null) videoPacingDelayMillis * 1_000_000L else 0L,
+        smoothVideoLatency = smoothVideoLatency,
         operatingRate = videoOperatingRate(type, statsLabel, mainVideoFrameRate),
         realtimePriority = videoDecoderPriority(type, statsLabel) == 0,
         vendorLowLatency = vendorLowLatencyDecoder,
@@ -908,6 +913,7 @@ private class VideoDecoder(
     private val report: (String) -> Unit,
     statsLabel: String? = null,
     pacingDelayNanos: Long = 0L,
+    private val smoothVideoLatency: SmoothVideoLatency = SmoothVideoLatency.BALANCED,
     /** Called on the worker as its last step, after it has released its codec. */
     private val onExit: (VideoDecoder) -> Unit = {},
     operatingRate: Int = 0,
@@ -927,7 +933,7 @@ private class VideoDecoder(
     private val mtkDecoderTuningEnabled: Boolean = false,
 ) : Closeable {
     private val pacer = FramePacer()
-    private val pacingDelay = if (pacingDelayNanos > 0) PacingDelay(pacingDelayNanos) else null
+    private val pacingDelay = if (pacingDelayNanos > 0) PacingDelay.forLatency(pacingDelayNanos, smoothVideoLatency) else null
     // Per queued presentation time (decode thread only): when it was queued, and whether it is a paced
     // frame's local time rather than the queue time.
     private val queuedPresentationUs = LongArray(64)
@@ -1267,7 +1273,7 @@ private class VideoDecoder(
             }
             val priority = if (used?.tuned == true) if (realtimePriority) "0" else "1" else "-"
             report("decoder=${configured.codecName} mime=$mime size=${width}x$height priority=$priority" +
-                "$rate$lowLatency$output$atOnceReport$mtk")
+                "$rate$lowLatency$output$atOnceReport$mtk latency=${smoothVideoLatency.diagnosticValue}")
             if (Build.VERSION.SDK_INT >= 29) {
                 runCatching {
                     val info = configured.codec.codecInfo

@@ -14,6 +14,7 @@ import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import com.shilapi.xcertplay.airplay.PairingStore
 import com.shilapi.xcertplay.airplay.SafeAreaCodec
 import com.shilapi.xcertplay.airplay.SafeAreaRect
+import com.shilapi.xcertplay.media.SmoothVideoLatency
 import com.shilapi.xcertplay.orchestration.ManualHotspotBand
 import com.shilapi.xcertplay.orchestration.ManualHotspotSecurity
 import com.shilapi.xcertplay.orchestration.MfiTarget
@@ -84,6 +85,7 @@ object AirPlayPersistence {
     private const val KEY_CALL_VOICE_FILTER = "call_voice_filter"
     private const val KEY_CALL_SPEAKERPHONE = "call_speakerphone"
     private const val KEY_SMOOTH_VIDEO = "smooth_video"
+    private const val KEY_SMOOTH_VIDEO_LATENCY = "smooth_video_latency"
     private const val KEY_MTK_DECODER_TUNING = "mtk_decoder_tuning"
     private const val KEY_DIRECT_VIDEO_OUTPUT = "direct_video_output"
     private const val KEY_LOW_LATENCY_DECODER = "low_latency_decoder"
@@ -748,6 +750,15 @@ object AirPlayPersistence {
 
     fun saveSmoothVideo(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SMOOTH_VIDEO, enabled).apply()
+    }
+
+    fun loadSmoothVideoLatency(context: Context): SmoothVideoLatency = SmoothVideoLatency.fromPreferenceValue(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_SMOOTH_VIDEO_LATENCY, 0),
+    )
+
+    fun saveSmoothVideoLatency(context: Context, latency: SmoothVideoLatency) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_SMOOTH_VIDEO_LATENCY, latency.preferenceValue).apply()
     }
 
     /** MediaTek's legacy low-latency/no-reorder decoder path; opt-in and applied at reconnect. */

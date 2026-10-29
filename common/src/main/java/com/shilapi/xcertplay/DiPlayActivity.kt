@@ -31,6 +31,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -74,6 +75,7 @@ import com.shilapi.xcertplay.media.AmbientMusicController
 import com.shilapi.xcertplay.media.AmbientColorSource
 import com.shilapi.xcertplay.media.AmbientMusicSettings
 import com.shilapi.xcertplay.media.MtkDecoderTuning
+import com.shilapi.xcertplay.media.SmoothVideoLatency
 import com.shilapi.xcertplay.network.CarHotspotConfigRead
 import com.shilapi.xcertplay.network.CarHotspotConfigWrite
 import com.shilapi.xcertplay.network.CarHotspotSavedCredentials
@@ -6425,11 +6427,31 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 markReconnectNeeded()
             }
         }
-        toggle(card, getString(R.string.smooth_video), getString(R.string.smooth_video_description),
-            AirPlayPersistence.loadSmoothVideo(this)) {
+        val smoothEnabled = AirPlayPersistence.loadSmoothVideo(this)
+        val latencyControls = column().apply { visibility = if (smoothEnabled) View.VISIBLE else View.GONE }
+        toggle(card, getString(R.string.smooth_video), getString(R.string.smooth_video_description), smoothEnabled) {
             AirPlayPersistence.saveSmoothVideo(this, it)
+            latencyControls.visibility = if (it) View.VISIBLE else View.GONE
             reconnectIfRunning()
         }
+        if (smoothEnabled || searchIndexSink == null) {
+            val levels = SmoothVideoLatency.entries
+            choice(latencyControls, getString(R.string.settings_smooth_video_latency), listOf(
+                getString(R.string.settings_smooth_video_latency_balanced),
+                getString(R.string.settings_smooth_video_latency_low),
+            ), levels.indexOf(AirPlayPersistence.loadSmoothVideoLatency(this)), reconnects = false) {
+                AirPlayPersistence.saveSmoothVideoLatency(this, levels[it])
+                markReconnectNeeded()
+            }
+            val latencyButton = latencyControls.getChildAt(0) as TextView
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                latencyButton.setAutoSizeTextTypeUniformWithConfiguration(12, 18, 1, TypedValue.COMPLEX_UNIT_SP)
+            } else {
+                latencyButton.textSize = 14f
+            }
+            latencyControls.addView(choiceNote(getString(R.string.settings_smooth_video_latency_description)))
+        }
+        card.addView(latencyControls)
         toggle(card, getString(R.string.settings_direct_video_output),
             getString(R.string.settings_direct_video_output_description),
             AirPlayPersistence.loadDirectVideoOutput(this)) {

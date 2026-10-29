@@ -1,0 +1,6 @@
+<resources>
+    <string name="settings_smooth_video_latency">畫面延遲</string>
+    <string name="settings_smooth_video_latency_balanced">均衡</string>
+    <string name="settings_smooth_video_latency_low">低延遲</string>
+    <string name="settings_smooth_video_latency_description">下次連線時生效。</string>
+</resources>

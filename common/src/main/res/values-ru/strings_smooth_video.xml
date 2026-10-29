@@ -1,0 +1,6 @@
+<resources>
+    <string name="settings_smooth_video_latency">Задержка изображения</string>
+    <string name="settings_smooth_video_latency_balanced">Баланс</string>
+    <string name="settings_smooth_video_latency_low">Низкая</string>
+    <string name="settings_smooth_video_latency_description">Применится при следующем подключении.</string>
+</resources>
