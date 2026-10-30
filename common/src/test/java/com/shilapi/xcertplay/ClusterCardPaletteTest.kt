@@ -37,16 +37,17 @@ class ClusterCardPaletteTest {
         }
     }
 
-    @Test fun daytimeColorsUseWarmPearlWithoutChangingTheNightPalette() {
+    @Test fun daytimeColorsUseLavenderWithoutChangingTheNightPalette() {
         val day = ClusterCardPalette.of(false)
-        assertEquals(Color.rgb(245, 239, 232), day.background)
-        assertEquals(Color.rgb(227, 216, 205), day.border)
+        assertEquals(Color.rgb(196, 191, 242), day.background)
+        assertEquals(Color.rgb(173, 167, 230), day.border)
         assertEquals(Color.rgb(42, 21, 25), day.primary)
-        assertEquals(Color.rgb(107, 90, 96), day.secondary)
-        assertEquals(Color.rgb(116, 101, 107), day.previousLyric)
-        assertEquals(Color.rgb(208, 25, 58), day.lyric)
+        assertEquals(Color.rgb(63, 58, 87), day.secondary)
+        assertEquals(Color.rgb(74, 69, 102), day.previousLyric)
+        assertEquals(Color.rgb(163, 15, 42), day.lyric)
         assertEquals(Color.rgb(255, 69, 97), day.accent)
-        assertEquals(Color.argb(31, 255, 69, 97), day.chip)
+        assertEquals(Color.argb(89, 255, 255, 255), day.chip)
+        assertEquals(255, day.previousLyricAlpha)
         val night = ClusterCardPalette.of(true)
         assertEquals(Color.rgb(26, 7, 12), night.background)
         assertEquals(Color.argb(77, 255, 69, 97), night.border)

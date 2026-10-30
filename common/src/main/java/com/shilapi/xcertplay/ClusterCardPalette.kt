@@ -18,14 +18,14 @@ internal data class ClusterCardPalette(
         const val NIGHT_PREVIOUS_LYRIC_ALPHA = 166 // 65.1%.
 
         private val day = ClusterCardPalette(
-            background = Color.rgb(245, 239, 232),
-            border = Color.rgb(227, 216, 205),
+            background = Color.rgb(196, 191, 242),
+            border = Color.rgb(173, 167, 230),
             primary = Color.rgb(42, 21, 25),
-            secondary = Color.rgb(107, 90, 96),
-            previousLyric = Color.rgb(116, 101, 107),
+            secondary = Color.rgb(63, 58, 87),
+            previousLyric = Color.rgb(74, 69, 102),
             accent = Color.rgb(255, 69, 97),
-            chip = Color.argb(31, 255, 69, 97),
-            lyric = Color.rgb(208, 25, 58),
+            chip = Color.argb(89, 255, 255, 255),
+            lyric = Color.rgb(163, 15, 42),
             previousLyricAlpha = DAY_PREVIOUS_LYRIC_ALPHA,
         )
         private val night = ClusterCardPalette(

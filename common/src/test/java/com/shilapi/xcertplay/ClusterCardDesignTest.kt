@@ -663,7 +663,7 @@ class ClusterCardDesignTest {
             val image = Bitmap.createBitmap(1920, 720, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(image)
             canvas.drawColor(if (night) Color.rgb(29, 34, 41) else Color.rgb(210, 221, 230))
-            canvas.drawRect(1400f, 400f, 1876f, 679f, Paint().apply { color = Color.rgb(131, 123, 141) })
+            canvas.drawRect(1400f, 400f, 1876f, 679f, Paint().apply { color = Color.rgb(185, 179, 238) })
             view.draw(canvas)
             File(directory, "$name.png").outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             image.recycle()
@@ -678,6 +678,7 @@ class ClusterCardDesignTest {
             capture(turn, "turn-${if (night) "night" else "day"}-${if (lane) "lanes" else "no-lanes"}", night)
         }
         turn.setLanes(emptyList()); turn.setNightMode(false)
+        capture(turn, "turn-day-nolanes", false)
         turn.setGuidance(ClusterTurnGuidance(2, 0, 218,
             "A very long road name that must be truncated without cutting the maneuver"))
         capture(turn, "turn-long-road", false)
