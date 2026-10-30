@@ -25,7 +25,7 @@ class ClusterCardPaletteTest {
         for (night in listOf(false, true)) {
             val palette = ClusterCardPalette.of(night)
             val previous = ColorUtils.compositeColors(
-                ColorUtils.setAlphaComponent(palette.secondary, palette.previousLyricAlpha),
+                ColorUtils.setAlphaComponent(palette.previousLyric, palette.previousLyricAlpha),
                 palette.background,
             )
             for ((kind, color) in listOf("primary" to palette.primary, "secondary" to palette.secondary,
@@ -35,5 +35,27 @@ class ClusterCardPaletteTest {
             }
             assertEquals(255, Color.alpha(palette.background))
         }
+    }
+
+    @Test fun daytimeColorsUseWarmPearlWithoutChangingTheNightPalette() {
+        val day = ClusterCardPalette.of(false)
+        assertEquals(Color.rgb(245, 239, 232), day.background)
+        assertEquals(Color.rgb(227, 216, 205), day.border)
+        assertEquals(Color.rgb(42, 21, 25), day.primary)
+        assertEquals(Color.rgb(107, 90, 96), day.secondary)
+        assertEquals(Color.rgb(116, 101, 107), day.previousLyric)
+        assertEquals(Color.rgb(208, 25, 58), day.lyric)
+        assertEquals(Color.rgb(255, 69, 97), day.accent)
+        assertEquals(Color.argb(31, 255, 69, 97), day.chip)
+        val night = ClusterCardPalette.of(true)
+        assertEquals(Color.rgb(26, 7, 12), night.background)
+        assertEquals(Color.argb(77, 255, 69, 97), night.border)
+        assertEquals(Color.WHITE, night.primary)
+        assertEquals(Color.rgb(217, 179, 187), night.secondary)
+        assertEquals(night.secondary, night.previousLyric)
+        assertEquals(Color.rgb(255, 122, 144), night.lyric)
+        assertEquals(Color.rgb(255, 69, 97), night.accent)
+        assertEquals(Color.argb(46, 255, 69, 97), night.chip)
+        assertEquals(166, night.previousLyricAlpha)
     }
 }

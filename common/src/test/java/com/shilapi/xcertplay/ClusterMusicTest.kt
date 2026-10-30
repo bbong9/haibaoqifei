@@ -229,10 +229,13 @@ class ClusterMusicTest {
         controller.pause().stop().destroy()
     }
 
-    @Test fun squareMatchesDefaultSpeedometerHeightAndFitsNarrowProjection() {
-        val speed = com.shilapi.xcertplay.airplay.ClusterSpeedometerOverlay.rect(1280, 480, 82, 30, 50)
-        assertEquals(speed.height.toFloat(), ClusterMusicView.tileSide(1280, 480, 100), 0.01f)
-        assertTrue(ClusterMusicView.tileSide(60, 200, 150) <= 60f)
+    @Test fun defaultCardUsesWindowHeightAndFitsNarrowProjection() {
+        val view = ClusterMusicView(context)
+        view.layout(0, 0, 1280, 480)
+        assertEquals(480f * .388f, view.cardLayout().card.height(), .01f)
+        ClusterMusicSettings.save(context, "size", 150)
+        view.layout(0, 0, 60, 200)
+        assertTrue(view.cardLayout().card.width() <= 60f)
     }
 
     @Test fun missingCoverKeepsLastImageUntilReplacementAndDisconnectClearsIt() {
@@ -307,8 +310,12 @@ class ClusterMusicTest {
         assertEquals(251, ClusterMusicSettings.size(context))
         assertEquals(51, ClusterMusicSettings.x(context))
         assertEquals(74, ClusterMusicSettings.y(context))
-        assertEquals(432f, ClusterMusicView.tileSide(1280, 480, 300), .01f)
-        assertEquals(60f, ClusterMusicView.tileSide(60, 200, 300), .01f)
+        ClusterMusicSettings.save(context, "size", 300)
+        val view = ClusterMusicView(context)
+        view.layout(0, 0, 1280, 480)
+        assertEquals(480f, view.cardLayout().card.height(), .01f)
+        view.layout(0, 0, 60, 200)
+        assertEquals(60f, view.cardLayout().card.width(), .01f)
     }
 
     private fun write(view: View, name: String) {

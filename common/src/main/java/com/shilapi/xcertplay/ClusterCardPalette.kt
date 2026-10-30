@@ -7,20 +7,22 @@ internal data class ClusterCardPalette(
     val border: Int,
     val primary: Int,
     val secondary: Int,
+    val previousLyric: Int,
     val accent: Int,
     val chip: Int,
     val lyric: Int,
     val previousLyricAlpha: Int,
 ) {
     companion object {
-        const val DAY_PREVIOUS_LYRIC_ALPHA = 222 // 87.1%; 65% does not meet AA on white.
+        const val DAY_PREVIOUS_LYRIC_ALPHA = 255
         const val NIGHT_PREVIOUS_LYRIC_ALPHA = 166 // 65.1%.
 
         private val day = ClusterCardPalette(
-            background = Color.rgb(255, 255, 255),
-            border = Color.argb(36, 120, 30, 50),
+            background = Color.rgb(245, 239, 232),
+            border = Color.rgb(227, 216, 205),
             primary = Color.rgb(42, 21, 25),
-            secondary = Color.rgb(122, 90, 98),
+            secondary = Color.rgb(107, 90, 96),
+            previousLyric = Color.rgb(116, 101, 107),
             accent = Color.rgb(255, 69, 97),
             chip = Color.argb(31, 255, 69, 97),
             lyric = Color.rgb(208, 25, 58),
@@ -31,6 +33,7 @@ internal data class ClusterCardPalette(
             border = Color.argb(77, 255, 69, 97),
             primary = Color.WHITE,
             secondary = Color.rgb(217, 179, 187),
+            previousLyric = Color.rgb(217, 179, 187),
             accent = Color.rgb(255, 69, 97),
             chip = Color.argb(46, 255, 69, 97),
             lyric = Color.rgb(255, 122, 144),

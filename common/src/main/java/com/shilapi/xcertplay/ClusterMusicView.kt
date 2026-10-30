@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Handler
@@ -14,6 +15,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
+import android.util.TypedValue
 import android.view.View
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
 import kotlin.math.min
@@ -27,11 +29,9 @@ internal class ClusterMusicView(context: Context) : View(context) {
     private var previousArtwork: Bitmap? = null
     private var previousInfo: CarPlayNowPlaying? = null
     private var previousLyric: String? = null
+    private var previousLyricState: ClusterLyricState? = null
     private var artworkChangedAt = 0L
     private var textChangedAt = 0L
-    private var widthChangedAt = 0L
-    private var widthFrom = COVER_WIDTH
-    private var widthTarget = COVER_WIDTH
     private var visibleUntil = 0L
     private var lastTrackRevision: Long? = null
     private var captionVisible = false
@@ -40,6 +40,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
     private var diagnosticFit = ClusterCardDiagnostics.Fit.NORMAL
     private val expire = Runnable { updateVisibility() }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val artworkPath = Path()
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
@@ -70,13 +71,8 @@ internal class ClusterMusicView(context: Context) : View(context) {
             if (trackChanged || snapshot.lyrics.current != next.lyrics.current) {
                 previousInfo = snapshot.info
                 previousLyric = snapshot.lyrics.current
+                previousLyricState = snapshot.lyrics
                 textChangedAt = now
-            }
-            val newWidth = if (next.lyrics.hasLyrics) LYRICS_WIDTH else COVER_WIDTH
-            if (widthTarget != newWidth) {
-                widthFrom = currentWidth(now)
-                widthTarget = newWidth
-                widthChangedAt = now
             }
             snapshot = next
             if (trackChanged) {
@@ -96,12 +92,11 @@ internal class ClusterMusicView(context: Context) : View(context) {
         previousArtwork = null
         previousInfo = null
         previousLyric = null
+        previousLyricState = null
         lastTrackRevision = null
         captionVisible = false
         emptyReason = ClusterCardDiagnostics.HideReason.NO_TRACK
         diagnosticFit = ClusterCardDiagnostics.Fit.NORMAL
-        widthFrom = COVER_WIDTH
-        widthTarget = COVER_WIDTH
         ClusterCardDiagnostics.remove(this)
         super.onDetachedFromWindow()
     }
@@ -121,6 +116,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
             previousArtwork = null
             previousInfo = null
             previousLyric = null
+            previousLyricState = null
         }
         reportDiagnostics(if (width > 0 && height > 0) cardLayout().fit else ClusterCardDiagnostics.Fit.NORMAL)
         invalidate()
@@ -142,33 +138,26 @@ internal class ClusterMusicView(context: Context) : View(context) {
             lyrics.confirmedAfterMs, snapshot.coverDelayMs, fit, lyrics.trackRevision)
     }
 
-    private fun currentWidth(now: Long): Float =
-        widthFrom + (widthTarget - widthFrom) * progress(now, widthChangedAt)
-
     internal data class CardLayout(val card: RectF, val artwork: RectF, val text: RectF,
         val fit: ClusterCardDiagnostics.Fit)
 
-    internal fun cardLayout(now: Long = SystemClock.elapsedRealtime()): CardLayout {
-        val factor = currentWidth(now)
-        val naturalSide = tileSide(width, height, ClusterMusicSettings.size(context))
-        val minimumSide = minOf(80f, width.toFloat(), height.toFloat())
-        val side = min(naturalSide, maxOf(minimumSide,
-            min(width / factor, height / (1f + CARD_PADDING * 2))))
-        val pad = minOf(side * CARD_PADDING, ((width - side) / 3f).coerceAtLeast(0f),
-            ((height - side) / 2f).coerceAtLeast(0f))
-        val cardWidth = minOf(width.toFloat(), maxOf(side + pad * 3f, side * factor))
-        val cardHeight = side + pad * 2
+    internal fun cardLayout(): CardLayout {
+        val naturalHeight = height * CARD_HEIGHT_FRACTION * ClusterMusicSettings.size(context) / 100f
+        val cardHeight = minOf(naturalHeight, height.toFloat(), width / CARD_ASPECT)
+        val cardWidth = cardHeight * CARD_ASPECT
+        val pad = cardHeight * CARD_PADDING
+        val side = cardHeight * ARTWORK_FRACTION
         val desiredLeft = width * ClusterMusicSettings.x(context) / 100f - side / 2f - pad
         val desiredTop = height * ClusterMusicSettings.y(context) / 100f - cardHeight / 2f
         val left = desiredLeft.coerceIn(0f, (width - cardWidth).coerceAtLeast(0f))
         val top = desiredTop.coerceIn(0f, (height - cardHeight).coerceAtLeast(0f))
         val card = RectF(left, top, left + cardWidth, top + cardHeight)
-        val artwork = RectF(left + pad, top + pad, left + pad + side, top + pad + side)
-        val text = RectF(artwork.right + pad, artwork.top, (card.right - pad).coerceAtLeast(artwork.right + pad), artwork.bottom)
+        val artworkTop = top + (cardHeight - side) / 2f
+        val artwork = RectF(left + pad, artworkTop, left + pad + side, artworkTop + side)
+        val text = RectF(artwork.right + cardHeight * TEXT_GAP, top + pad, card.right - pad, card.bottom - pad)
         val fit = when {
             left != desiredLeft || top != desiredTop -> ClusterCardDiagnostics.Fit.CLAMPED
-            side < naturalSide || cardWidth < side * factor || pad < side * CARD_PADDING ->
-                ClusterCardDiagnostics.Fit.SHRUNK
+            cardHeight < naturalHeight -> ClusterCardDiagnostics.Fit.SHRUNK
             else -> ClusterCardDiagnostics.Fit.NORMAL
         }
         return CardLayout(card, artwork, text, fit)
@@ -184,7 +173,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         val fade = if (permanent || lyrics) 1f else (remaining.toFloat() / FADE_MILLIS).coerceIn(0f, 1f)
         val artProgress = progress(now, artworkChangedAt)
         val textProgress = progress(now, textChangedAt)
-        val layout = cardLayout(now)
+        val layout = cardLayout()
         if (layout.fit != diagnosticFit) reportDiagnostics(layout.fit)
         val palette = ClusterCardPalette.of(night)
         val radius = layout.artwork.height() * .12f
@@ -201,6 +190,10 @@ internal class ClusterMusicView(context: Context) : View(context) {
 
         val art = snapshot.artwork?.takeUnless { it.isRecycled }
         val oldArt = previousArtwork?.takeUnless { it.isRecycled }
+        artworkPath.reset()
+        artworkPath.addRoundRect(layout.artwork, radius, radius, Path.Direction.CW)
+        val artClip = canvas.save()
+        canvas.clipPath(artworkPath)
         paint.color = palette.chip
         paint.alpha = (Color.alpha(palette.chip) * fade).toInt()
         canvas.drawRect(layout.artwork, paint)
@@ -221,103 +214,145 @@ internal class ClusterMusicView(context: Context) : View(context) {
             canvas.drawText("♪", layout.artwork.centerX(), layout.artwork.centerY() -
                 (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)
         }
+        canvas.restoreToCount(artClip)
 
         val clip = canvas.save()
         canvas.clipRect(layout.text)
-        if (lyrics) drawLyrics(canvas, layout.text, palette, fade, textProgress)
-        else drawCoverText(canvas, layout.text, palette, fade, textProgress)
+        if (lyrics) drawLyrics(canvas, layout.text, layout.card.height(), palette, fade, textProgress)
+        else drawCoverText(canvas, layout.text, layout.card.height(), palette, fade, textProgress)
         canvas.restoreToCount(clip)
         if (artProgress >= 1f) previousArtwork = null
-        if (textProgress >= 1f) { previousInfo = null; previousLyric = null }
-        if (artProgress < 1f || textProgress < 1f || progress(now, widthChangedAt) < 1f ||
+        if (textProgress >= 1f) { previousInfo = null; previousLyric = null; previousLyricState = null }
+        if (artProgress < 1f || textProgress < 1f ||
             (!permanent && !lyrics && remaining in 1..FADE_MILLIS)) postInvalidateOnAnimation()
     }
 
-    private fun drawCoverText(canvas: Canvas, bounds: RectF, palette: ClusterCardPalette,
+    private fun drawCoverText(canvas: Canvas, bounds: RectF, cardHeight: Float, palette: ClusterCardPalette,
         fade: Float, textProgress: Float) {
         val current = snapshot.info.title.orEmpty()
         if (previousInfo != null && textProgress < 1f) {
-            drawCoverLines(canvas, bounds, previousInfo?.title.orEmpty(), previousInfo?.artist,
+            drawCoverLines(canvas, bounds, cardHeight, previousInfo?.title.orEmpty(), previousInfo?.artist,
                 palette, fade * (1f - textProgress))
         }
-        drawCoverLines(canvas, bounds, current, snapshot.info.artist, palette, fade * textProgress)
+        drawCoverLines(canvas, bounds, cardHeight, current, snapshot.info.artist, palette, fade * textProgress)
     }
 
-    private fun drawCoverLines(canvas: Canvas, bounds: RectF, title: String, artist: String?,
+    private fun drawCoverLines(canvas: Canvas, bounds: RectF, cardHeight: Float, title: String, artist: String?,
         palette: ClusterCardPalette, alpha: Float) {
         if (alpha <= 0f || bounds.width() <= 0f) return
-        val side = bounds.height()
-        val layout = fittedText(title, bounds.width(), side * .19f, side * .10f, 2, palette.primary, alpha)
-        val detail = artist?.takeIf { it.isNotBlank() }
-        val detailSize = side * .11f
-        val gap = side * .06f
-        val height = layout.height + if (detail != null) detailSize + gap else 0f
-        val y = bounds.centerY() - height / 2f
-        val save = canvas.save()
-        canvas.translate(bounds.left, y)
-        layout.draw(canvas)
-        canvas.restoreToCount(save)
-        if (detail != null) drawSingle(canvas, detail, bounds.left, y + layout.height + gap,
-            bounds.width(), detailSize, palette.secondary, alpha)
+        val layout = layoutText(bounds, cardHeight, title, null, artist, false, palette, alpha)
+        drawMain(canvas, bounds.left, layout)
+        layout.detail?.let { drawSingle(canvas, bounds.left, it) }
     }
 
-    private fun drawLyrics(canvas: Canvas, bounds: RectF, palette: ClusterCardPalette,
+    private fun drawLyrics(canvas: Canvas, bounds: RectF, cardHeight: Float, palette: ClusterCardPalette,
         fade: Float, textProgress: Float) {
         if (bounds.width() <= 0f) return
-        val side = bounds.height()
-        val previous = snapshot.lyrics.previous
-        val detail = snapshot.lyrics.information(snapshot.info).orEmpty()
-        val previousSize = side * .10f
-        val detailSize = side * .10f
-        val gap = side * .035f
-        val current = snapshot.lyrics.current.orEmpty()
-        val layout = fittedText(current, bounds.width(), side * .18f, side * .095f, 2, palette.lyric, fade * textProgress)
-        val topHeight = if (previous != null) previousSize + gap else 0f
-        val bottomHeight = if (detail.isNotEmpty()) detailSize + gap else 0f
-        val start = bounds.centerY() - (topHeight + layout.height + bottomHeight) / 2f
-        if (previous != null) drawSingle(canvas, previous, bounds.left, start, bounds.width(), previousSize,
-            palette.secondary, fade * palette.previousLyricAlpha / 255f)
-        val lyricTop = start + topHeight
         if (previousLyric != null && textProgress < 1f) {
-            val old = fittedText(previousLyric.orEmpty(), bounds.width(), side * .18f, side * .095f,
-                2, palette.lyric, fade * (1f - textProgress))
-            val saved = canvas.save(); canvas.translate(bounds.left, lyricTop); old.draw(canvas); canvas.restoreToCount(saved)
+            val oldState = previousLyricState
+            val old = layoutText(bounds, cardHeight, previousLyric.orEmpty(),
+                oldState?.previous?.takeIf { oldState.hasLyrics },
+                previousInfo?.let { oldState?.information(it) }, true, palette, fade * (1f - textProgress))
+            drawLyricsLayout(canvas, bounds.left, old)
         }
-        val save = canvas.save(); canvas.translate(bounds.left, lyricTop); layout.draw(canvas); canvas.restoreToCount(save)
-        if (detail.isNotEmpty()) drawSingle(canvas, detail, bounds.left, lyricTop + layout.height + gap,
-            bounds.width(), detailSize, palette.secondary, fade)
+        val layout = layoutText(bounds, cardHeight, snapshot.lyrics.current.orEmpty(),
+            snapshot.lyrics.previous, snapshot.lyrics.information(snapshot.info), true, palette, fade * textProgress)
+        drawLyricsLayout(canvas, bounds.left, layout)
     }
 
+    private fun drawLyricsLayout(canvas: Canvas, x: Float, layout: CardTextLayout) {
+        layout.previous?.let { drawSingle(canvas, x, it) }
+        drawMain(canvas, x, layout)
+        layout.detail?.let { drawSingle(canvas, x, it) }
+    }
+
+    internal data class TextLine(val text: String, val paint: TextPaint, val top: Float) {
+        val height: Float get() = paint.descent() - paint.ascent()
+    }
+
+    internal data class CardTextLayout(val main: StaticLayout, val mainTop: Float,
+        val previous: TextLine?, val detail: TextLine?)
+
+    internal fun layoutText(bounds: RectF, cardHeight: Float, current: String, previous: String?, detail: String?,
+        lyrics: Boolean, palette: ClusterCardPalette, alpha: Float): CardTextLayout {
+        val minimum = minimumTextSize()
+        val gap = cardHeight * .03f
+        fun line(text: String?, size: Float, color: Int, lineAlpha: Float): TextLine? {
+            if (text.isNullOrBlank()) return null
+            val linePaint = TextPaint(textPaint).apply {
+                textAlign = Paint.Align.LEFT
+                textSize = maxOf(minimum, size)
+                this.color = color
+                this.alpha = (255 * lineAlpha).toInt().coerceIn(0, 255)
+            }
+            val value = TextUtils.ellipsize(text, linePaint, bounds.width(), TextUtils.TruncateAt.END).toString()
+            return TextLine(value, linePaint, 0f)
+        }
+        var previousLine = if (lyrics) line(previous, cardHeight * .08f, palette.previousLyric,
+            alpha * palette.previousLyricAlpha / 255f) else null
+        var detailLine = line(detail, cardHeight * if (lyrics) .065f else .085f, palette.secondary, alpha)
+        val minMain = maxOf(minimum, cardHeight * if (lyrics) .085f else .095f)
+        val minPaint = TextPaint(textPaint).apply { textSize = minMain }
+        val minHeight = minPaint.descent() - minPaint.ascent() + 1f
+        fun available(): Float = bounds.height() -
+            (previousLine?.let { it.height + gap } ?: 0f) - (detailLine?.let { it.height + gap } ?: 0f)
+        if (available() < minHeight) previousLine = null
+        if (available() < minHeight) detailLine = null
+        val maxMain = maxOf(minimum, cardHeight * if (lyrics) .115f else .14f)
+        val main = fittedText(current, bounds.width(), maxMain, minMain, if (lyrics) 3 else 2,
+            available().coerceAtLeast(0f), if (lyrics) palette.lyric else palette.primary, alpha)
+        val blockHeight = main.height + (previousLine?.let { it.height + gap } ?: 0f) +
+            (detailLine?.let { it.height + gap } ?: 0f)
+        var top = maxOf(bounds.top, bounds.centerY() - blockHeight / 2f)
+        previousLine = previousLine?.copy(top = top)?.also { top += it.height + gap }
+        val mainTop = top
+        top += main.height + gap
+        detailLine = detailLine?.copy(top = top)
+        return CardTextLayout(main, mainTop, previousLine, detailLine)
+    }
+
+    private fun minimumTextSize(): Float =
+        maxOf(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11f, resources.displayMetrics),
+            width * 18f / 1920f)
+
     private fun fittedText(text: String, width: Float, maxSize: Float, minSize: Float,
-        lines: Int, color: Int, alpha: Float): StaticLayout {
-        val paint = TextPaint(textPaint).apply { textAlign = Paint.Align.LEFT; this.color = color; this.alpha = (255 * alpha).toInt() }
+        lines: Int, maxHeight: Float, color: Int, alpha: Float): StaticLayout {
+        val paint = TextPaint(textPaint).apply {
+            textAlign = Paint.Align.LEFT; this.color = color; this.alpha = (255 * alpha).toInt().coerceIn(0, 255)
+        }
         val available = width.toInt().coerceAtLeast(1)
         var size = maxSize
         do {
             paint.textSize = size
             val natural = StaticLayout.Builder.obtain(text, 0, text.length, paint, available).setIncludePad(false).build()
-            if (natural.lineCount <= lines || size <= minSize) break
+            if ((natural.lineCount <= lines && natural.height <= maxHeight) || size <= minSize) break
             size = (size - 1f).coerceAtLeast(minSize)
         } while (true)
+        val metrics = paint.fontMetricsInt
+        val lineHeight = (metrics.descent - metrics.ascent).coerceAtLeast(1)
+        val fittingLines = min(lines, (maxHeight / lineHeight).toInt().coerceAtLeast(1))
         return StaticLayout.Builder.obtain(text, 0, text.length, paint, available)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL).setMaxLines(lines).setEllipsize(TextUtils.TruncateAt.END)
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL).setMaxLines(fittingLines).setEllipsize(TextUtils.TruncateAt.END)
             .setIncludePad(false).build()
     }
 
-    private fun drawSingle(canvas: Canvas, text: String, x: Float, top: Float, width: Float,
-        size: Float, color: Int, alpha: Float) {
-        textPaint.textAlign = Paint.Align.LEFT
-        textPaint.textSize = size
-        textPaint.color = color
-        textPaint.alpha = (255 * alpha).toInt().coerceIn(0, 255)
-        val ellipsized = TextUtils.ellipsize(text, textPaint, width, TextUtils.TruncateAt.END).toString()
-        canvas.drawText(ellipsized, x, top - textPaint.ascent(), textPaint)
+    private fun drawMain(canvas: Canvas, x: Float, layout: CardTextLayout) {
+        val save = canvas.save()
+        canvas.translate(x, layout.mainTop)
+        layout.main.draw(canvas)
+        canvas.restoreToCount(save)
+    }
+
+    private fun drawSingle(canvas: Canvas, x: Float, line: TextLine) {
+        canvas.drawText(line.text, x, line.top - line.paint.ascent(), line.paint)
     }
 
     companion object {
-        private const val COVER_WIDTH = 2.6f
-        private const val LYRICS_WIDTH = 3.4f
-        private const val CARD_PADDING = .06f
+        private const val CARD_ASPECT = 1.7f
+        private const val CARD_HEIGHT_FRACTION = .388f
+        private const val CARD_PADDING = .035f
+        private const val ARTWORK_FRACTION = .72f
+        private const val TEXT_GAP = .05f
 
         // Speedometer also uses this selector, so retain it independently of the card border.
         internal fun coverFrameColor(artwork: Bitmap?): Int {
@@ -338,9 +373,5 @@ internal class ClusterMusicView(context: Context) : View(context) {
         internal fun progress(now: Long, started: Long): Float =
             ((now - started).toFloat() / FADE_MILLIS).coerceIn(0f, 1f)
         const val TEMPORARY_MILLIS = 8_000L
-        fun tileSide(width: Int, height: Int, sizePercent: Int): Float =
-            (height * .30f * sizePercent.coerceIn(50, 300) / 100f)
-                .coerceAtLeast(minOf(80f, width.toFloat(), height.toFloat()))
-                .coerceAtMost(minOf(width.toFloat(), height.toFloat()))
     }
 }
