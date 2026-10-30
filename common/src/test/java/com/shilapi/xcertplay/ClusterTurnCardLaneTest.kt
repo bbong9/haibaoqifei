@@ -34,34 +34,40 @@ class ClusterTurnCardLaneTest {
             setGuidance(guidance)
         }
 
-    @Test fun noLanesPreserveTheOriginalInfoStripTop() {
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun noLanesShowOnlyTheExpectedCapsule() {
         val view = view()
-        // 1920x720 at the historical default layout has card top 159 and height 115.
-        assertEquals(279.75f, view.infoStripTop(), 0.001f)
         assertNull(view.laneRowRect())
+        val expected = ClusterTurnCardOverlay.card(1920, 720, 76, 30, 55)
+        assertEquals(expected, view.cardRect())
+        val image = Bitmap.createBitmap(1920, 720, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(image))
+        val centerX = expected.left + expected.width / 2
+        assertNotEquals(Color.TRANSPARENT, image.getPixel(centerX, expected.top + expected.height - 3))
+        assertEquals(Color.TRANSPARENT, image.getPixel(centerX, expected.top - 3))
+        assertEquals(Color.TRANSPARENT, image.getPixel(centerX, expected.top + expected.height + 3))
+        image.recycle()
     }
 
-    @Test fun fourLanesFitBetweenTheCardAndInfoStrip() {
+    @Test fun fourLanesFitImmediatelyBelowTheCapsule() {
         val view = view()
-        val before = view.infoStripTop()
         view.setLanes(four)
         val card = ClusterTurnCardOverlay.card(1920, 720, 76, 30, 55)
         val row = view.laneRowRect()!!
-        assertEquals(card.top + card.height + card.height * 0.05f, row.top, 0.001f)
+        assertEquals(card.top + card.height + card.height * ClusterTurnCardView.LANE_GAP_FRACTION, row.top, 0.001f)
         assertEquals(card.height * 0.42f, row.height(), 0.001f)
-        assertEquals(row.bottom + card.height * 0.05f, view.infoStripTop(), 0.001f)
-        assertEquals(card.height * (0.42f + 0.05f), view.infoStripTop() - before, 0.001f)
+        assertTrue(row.top >= card.top + card.height)
+        assertTrue(row.bottom <= view.height)
     }
 
-    @Test fun largeCardAtBottomKeepsTheInfoStripBelowTheLanes() {
+    @Test fun largeCardAtBottomKeepsTheLaneStripBelowTheCapsule() {
         val view = view()
         view.setLayout(76, 72, 95)
-        val before = view.infoStripTop()
         val card = ClusterTurnCardOverlay.card(1920, 720, 76, 72, 95)
         view.setLanes(four)
         val row = view.laneRowRect()!!
-        assertEquals(row.bottom + card.height * 0.05f, view.infoStripTop(), 0.001f)
-        assertEquals(card.height * (0.42f + 0.05f), view.infoStripTop() - before, 0.001f)
+        assertEquals(card.top + card.height + card.height * ClusterTurnCardView.LANE_GAP_FRACTION, row.top, 0.001f)
+        assertTrue(row.bottom <= view.height)
     }
 
     @Test fun onlyTheFirstEightLanesAreDrawnAndGuidanceIsRequired() {

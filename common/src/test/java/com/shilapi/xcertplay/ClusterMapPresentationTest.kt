@@ -18,6 +18,18 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class ClusterMapPresentationTest {
+    @Test fun nightUpdatesBothCardsWithoutRecreatingThem() = withPresentation { presentation ->
+        val turn: ClusterTurnCardView = org.robolectric.util.ReflectionHelpers.getField(presentation, "turnCardView")
+        val music: ClusterMusicView = org.robolectric.util.ReflectionHelpers.getField(presentation, "musicCardView")
+        for (night in listOf(true, false)) {
+            presentation.setTurnCardNightMode(night)
+            assertSame(turn, org.robolectric.util.ReflectionHelpers.getField<ClusterTurnCardView>(presentation, "turnCardView"))
+            assertSame(music, org.robolectric.util.ReflectionHelpers.getField<ClusterMusicView>(presentation, "musicCardView"))
+            assertEquals(night, org.robolectric.util.ReflectionHelpers.getField<Boolean>(turn, "night"))
+            assertEquals(night, org.robolectric.util.ReflectionHelpers.getField<Boolean>(music, "night"))
+        }
+    }
+
     @Test fun lanesAreForwardedToThePresentationTurnCard() = withPresentation { presentation ->
         val guidance = com.shilapi.xcertplay.hud.ClusterTurnGuidance(2, 0, 80, "Road")
         val lanes = listOf(com.shilapi.xcertplay.iap2.message.LaneGuidanceLane(0, 2, 90, null))

@@ -113,6 +113,14 @@ internal class CarPlayNightModeController(
         stopListening()
     }
 
+    fun diagnosticSource(): ClusterCardDiagnostics.NightSource = when (mode) {
+        CarPlayNightMode.SYSTEM -> ClusterCardDiagnostics.NightSource.SYSTEM
+        CarPlayNightMode.DAY, CarPlayNightMode.NIGHT -> ClusterCardDiagnostics.NightSource.MANUAL
+        CarPlayNightMode.SCHEDULE -> ClusterCardDiagnostics.NightSource.SCHEDULE
+        CarPlayNightMode.AMBIENT -> if (!light.available || (resumed && !listening))
+            ClusterCardDiagnostics.NightSource.FALLBACK else ClusterCardDiagnostics.NightSource.AMBIENT
+    }
+
     fun systemChanged(night: Boolean) {
         systemNight = night
         val ambientFallback = mode == CarPlayNightMode.AMBIENT &&

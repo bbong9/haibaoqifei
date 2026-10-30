@@ -39,9 +39,9 @@ object ClusterTurnCardOverlay {
         require(panelWidth > 0 && panelHeight > 0)
         val window = visibleWindow(panelWidth, panelHeight)
         val size = snap(sizePercent, sizePercents)
-        // The card keeps its ~2.6:1 banner aspect at any size.
+        // Keep the same width and slider values while halving the banner height.
         val width = (window.width * size / 100).coerceAtLeast(150).coerceAtMost(panelWidth)
-        val height = (width / 2.64f).toInt().coerceAtLeast(58).coerceAtMost((window.height * 0.55f).toInt())
+        val height = (width / 5.28f).toInt().coerceAtLeast(29).coerceAtMost((window.height * 0.55f).toInt().coerceAtLeast(1))
         val x = snap(xPercent, xPercents)
         val y = snap(yPercent, yPercents)
         val left = (panelWidth * x / 100 - width / 2).coerceIn(0, panelWidth - width)

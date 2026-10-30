@@ -6413,6 +6413,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
         DiagnosticRedactor.redact(LaneStripDiagnostics.report(appContext))?.let { appendLine(it) }
         DiagnosticRedactor.redact(LaneStripDiagnostics.guidanceReport())?.let { appendLine(it) }
+        DiagnosticRedactor.redact(ClusterCardDiagnostics.report())?.let { appendLine(it) }
+        DiagnosticRedactor.redact(ClusterCardDiagnostics.musicReport())?.let { appendLine(it) }
+        ClusterCardDiagnostics.turnReport()?.let { DiagnosticRedactor.redact(it) }?.let { appendLine(it) }
         appendLine()
         appendLine("--- Cluster snapshot ---")
         ClusterSnapshot.report(appContext).lineSequence().forEach { line ->

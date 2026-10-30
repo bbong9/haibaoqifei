@@ -74,7 +74,7 @@ internal object CarPlayMediaKeys {
     @Synchronized
     fun attach(context: Context, next: CarPlayController) {
         if (controller !== next) {
-            releaseLocked()
+            releaseLocked(sessionEnded = controller != null)
             artworkOwner = artworkQueue.newSession()
         }
         appContext = context.applicationContext
@@ -88,7 +88,7 @@ internal object CarPlayMediaKeys {
         next.nowPlayingListener = { _ -> onNowPlayingChanged(next) }
         next.artworkListener = { id, bytes -> onArtworkChanged(next, id, bytes) }
         val retained = next.nowPlayingSnapshot()
-        onNowPlayingChanged(next)
+        handleNowPlayingChanged(next, countUpdate = false)
         next.matchingArtworkSnapshot(retained.artworkTransferId)?.let { onArtworkChanged(next, it.id, it.bytes) }
     }
 
@@ -102,7 +102,7 @@ internal object CarPlayMediaKeys {
         expected.artworkListener = null
         controller = null
         GeelyWheelKeys.stop()
-        releaseLocked()
+        releaseLocked(sessionEnded = true)
     }
 
     /** Called when CarPlay music starts or stops; may run on any thread. */
@@ -120,10 +120,13 @@ internal object CarPlayMediaKeys {
     }
 
     /** Publishes the iPhone's retained metadata through Android's system media session. */
-    private fun onNowPlayingChanged(expected: CarPlayController) {
+    private fun onNowPlayingChanged(expected: CarPlayController) = handleNowPlayingChanged(expected, countUpdate = true)
+
+    private fun handleNowPlayingChanged(expected: CarPlayController, countUpdate: Boolean) {
         mainHandler.post {
             synchronized(this) {
                 if (controller !== expected) return@synchronized
+                if (countUpdate) ClusterCardDiagnostics.nowPlayingUpdate()
                 // Resolve retained state at delivery: a queued callback cannot roll a replay back.
                 val update = expected.nowPlayingSnapshot()
                 val previousArtwork = artwork
@@ -372,7 +375,7 @@ internal object CarPlayMediaKeys {
         if (background?.controller === expectedController) background.sink.onMediaAudioFocusChanged(change)
     }
 
-    private fun releaseLocked() {
+    private fun releaseLocked(sessionEnded: Boolean) {
         focusOwner = null
         controller?.let(com.shilapi.xcertplay.media.AmbientMusicController::releasePlaybackOwner)
         artworkOwner = null
@@ -390,7 +393,7 @@ internal object CarPlayMediaKeys {
         nowPlaying = CarPlayNowPlaying()
         artwork = null
         artworkCache.clear()
-        ClusterMusicState.publish(CarPlayNowPlaying(), null)
+        ClusterMusicState.publish(CarPlayNowPlaying(), null, sessionEnded = sessionEnded)
         focusRequest?.let { request -> appContext?.getSystemService(AudioManager::class.java)?.let(request::abandon) }
         focusRequest = null
         focusHeld = false

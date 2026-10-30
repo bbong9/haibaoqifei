@@ -8,6 +8,11 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.text.Layout
+import android.text.SpannableString
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.style.RelativeSizeSpan
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -19,14 +24,12 @@ import com.shilapi.xcertplay.airplay.ClusterTurnCardOverlay
 import com.shilapi.xcertplay.hud.ClusterTurnGuidance
 import com.shilapi.xcertplay.iap2.message.LaneGuidanceLane
 import kotlin.math.min
+import kotlin.math.ceil
 
 /**
  * Instruction card drawn by DiPlay on top of the dashboard map.
  *
- * Visual language follows Apple's turn banners: a dark glass capsule with a hairline stroke,
- * the maneuver glyph in a soft chip on the left, distance and road stacked on the right.
- * Maneuver glyphs are Material Symbols (Apache 2.0), tinted the system blue; the roundabout
- * exit number sits in a small badge on the glyph.
+ * A compact capsule with the maneuver, distance, road and available trip information.
  */
 internal class ClusterTurnCardView(context: Context) : View(context) {
     private var guidance: ClusterTurnGuidance? = null
@@ -36,7 +39,7 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
     private var yPercent = ClusterTurnCardOverlay.DEFAULT_Y_PERCENT
     private var sizePercent = ClusterTurnCardOverlay.DEFAULT_SIZE_PERCENT
 
-    private val accent = Color.rgb(10, 132, 255)
+    private val accent get() = ClusterCardPalette.of(night).accent
     /** Card opacity as percent; 100 keeps the historical fully-opaque look available. */
     private var opacityPercent = 85
     private val glassPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -68,6 +71,7 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
     private val rect = RectF()
     private var glyph: Drawable? = null
     private var glyphTag: Int = -1
+    private var lastDiagnostic: Pair<ClusterCardDiagnostics.TurnVariant, Boolean>? = null
 
     init { applyPalette() }
 
@@ -87,7 +91,6 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         invalidate()
     }
 
-    /** Day: dark glass on a light map; night: lighter translucent panel for the dark map. */
     fun setNightMode(night: Boolean) {
         if (night == this.night) return
         this.night = night
@@ -96,24 +99,17 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
     }
 
     private fun applyPalette() {
-        val alpha = (opacityPercent * 255 / 100).coerceIn(51, 255)
-        if (night) {
-            glassPaint.color = Color.argb(alpha, 12, 14, 18)
-            chipPaint.color = Color.argb((alpha * 0.18f).toInt().coerceAtLeast(12), 255, 255, 255)
-            strokePaint.color = Color.argb((alpha * 0.16f).toInt().coerceAtLeast(10), 255, 255, 255)
-            distancePaint.color = Color.argb(255, 240, 242, 246)
-            roadPaint.color = Color.argb(179, 176, 182, 192)
-            infoPaint.color = Color.argb(224, 226, 228, 236)
-            badgePaint.color = accent
-        } else {
-            glassPaint.color = Color.argb(alpha, 28, 28, 30)
-            chipPaint.color = Color.argb((alpha * 0.18f).toInt().coerceAtLeast(12), 255, 255, 255)
-            strokePaint.color = Color.argb((alpha * 0.15f).toInt().coerceAtLeast(10), 255, 255, 255)
-            distancePaint.color = Color.WHITE
-            roadPaint.color = Color.argb(179, 199, 199, 204)
-            infoPaint.color = Color.argb(224, 235, 235, 240)
-            badgePaint.color = accent
-        }
+        val palette = ClusterCardPalette.of(night)
+        fun withOpacity(color: Int): Int = (color and 0x00ffffff) or
+            ((Color.alpha(color) * opacityPercent / 100) shl 24)
+        glassPaint.color = withOpacity(palette.background)
+        chipPaint.color = withOpacity(palette.chip)
+        strokePaint.color = withOpacity(palette.border)
+        distancePaint.color = palette.primary
+        roadPaint.color = palette.primary
+        infoPaint.color = palette.secondary
+        badgePaint.color = palette.accent
+        badgeTextPaint.color = ClusterCardPalette.of(false).primary
     }
 
     fun setGuidance(next: ClusterTurnGuidance?) {
@@ -122,6 +118,10 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
             return
         }
         guidance = next
+        if (next == null) {
+            lastDiagnostic = null
+            ClusterCardDiagnostics.remove(this)
+        }
         visibility = if (next == null) GONE else VISIBLE
         bringToFront()
         invalidate()
@@ -139,7 +139,8 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
     internal fun laneRowRect(): RectF? {
         if (guidance == null || lanes.isEmpty() || width <= 0 || height <= 0) return null
         val card = ClusterTurnCardOverlay.card(width, height, xPercent, yPercent, sizePercent)
-        val rowHeight = card.height * 0.42f
+        val top = card.top + card.height + card.height * LANE_GAP_FRACTION
+        val rowHeight = min(card.height * LANE_HEIGHT_FRACTION, (height - top).coerceAtLeast(0f))
         val desired = rowHeight * (lanes.size * 0.8f + (lanes.size - 1) * 0.08f)
         // The card is positioned in panel coordinates, so clamp against the panel, not the card.
         val margin = min(4, (width - 1) / 2)
@@ -148,16 +149,16 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         val stripWidth = desired.toInt().coerceAtLeast(1).coerceAtMost(maxStrip)
         val stripLeft = (card.left + card.width / 2f - stripWidth / 2f).toInt()
             .coerceIn(margin, width - stripWidth - margin)
-        val top = card.top + card.height + card.height * 0.05f
         return RectF(stripLeft.toFloat(), top, (stripLeft + stripWidth).toFloat(), top + rowHeight)
     }
 
-    internal fun infoStripTop(): Float {
-        val card = ClusterTurnCardOverlay.card(width, height, xPercent, yPercent, sizePercent)
-        val infoHeight = (card.height * 0.40f).coerceAtLeast(34f)
-        val gap = card.height * 0.05f
-        return laneRowRect()?.let { it.bottom + gap }
-            ?: (card.top + card.height + gap).coerceAtMost(height - infoHeight)
+    internal fun cardRect(): ClusterTurnCardOverlay.CardRect =
+        ClusterTurnCardOverlay.card(width, height, xPercent, yPercent, sizePercent)
+
+    override fun onDetachedFromWindow() {
+        lastDiagnostic = null
+        ClusterCardDiagnostics.remove(this)
+        super.onDetachedFromWindow()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -174,13 +175,13 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         val h = card.height.toFloat()
         val w = card.width.toFloat()
 
-        val radius = h * 0.30f
+        val radius = h / 2f
         rect.set(card.left.toFloat(), card.top.toFloat(), card.left + w, card.top + h)
         canvas.drawRoundRect(rect, radius, radius, glassPaint)
         canvas.drawRoundRect(rect, radius, radius, strokePaint)
 
-        val chip = h * 0.76f
-        val chipLeft = card.left + h * 0.12f
+        val chip = min(h * 0.76f, w * 0.22f)
+        val chipLeft = card.left + min(h * 0.12f, w * 0.04f)
         val chipTop = card.top + (h - chip) / 2f
         rect.set(chipLeft, chipTop, chipLeft + chip, chipTop + chip)
         canvas.drawRoundRect(rect, chip * 0.26f, chip * 0.26f, chipPaint)
@@ -188,50 +189,81 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         val exit = next.roundaboutExit.takeIf { it in 1..9 }
         drawGlyph(canvas, next, chipLeft, chipTop, chip, exit)
 
-        val textLeft = chipLeft + chip + h * 0.14f
-        val textWidth = card.left + w - h * 0.10f - textLeft
-        if (textWidth <= 0f) return
-        distancePaint.textSize = h * 0.30f
-        roadPaint.textSize = h * 0.17f
-        canvas.drawText(
-            ellipsize(distanceLabel(next.distanceMeters), textWidth, distancePaint),
-            textLeft, card.top + h * 0.44f, distancePaint,
-        )
-        val road = roadLabel(next)
-        if (road.isNotEmpty()) {
-            canvas.drawText(
-                ellipsize(road, textWidth, roadPaint),
-                textLeft, card.top + h * 0.72f, roadPaint,
-            )
-        }
+        val textVariant = drawCapsuleText(canvas, next, card, chipLeft + chip)
         laneRowRect()?.let { drawLaneRow(canvas, it) }
-        drawInfoStrip(canvas, next, card.left, w.toInt(), h.toInt())
+        val variant = when {
+            lanes.isNotEmpty() -> ClusterCardDiagnostics.TurnVariant.LANES
+            next.icon == 11 || next.icon == 12 || next.icon == 17 || next.icon == 18 ||
+                next.roundaboutExit in 1..9 -> ClusterCardDiagnostics.TurnVariant.ROUNDABOUT
+            else -> textVariant
+        }
+        if (lastDiagnostic?.first != variant || lastDiagnostic?.second != night) {
+            lastDiagnostic = variant to night
+            ClusterCardDiagnostics.turn(this, variant, night)
+        }
     }
 
-    /** The arrival/duration/distance pill that hangs under the card, like the stock nav bar. */
-    private fun drawInfoStrip(canvas: Canvas, next: ClusterTurnGuidance, left: Int, width: Int, cardHeight: Int) {
+    private fun drawCapsuleText(canvas: Canvas, next: ClusterTurnGuidance,
+        card: ClusterTurnCardOverlay.CardRect, chipRight: Float): ClusterCardDiagnostics.TurnVariant {
+        val h = card.height.toFloat()
+        val gap = h * 0.12f
+        val start = chipRight + gap
+        val end = card.left + card.width - h * 0.15f
+        val available = (end - start).coerceAtLeast(0f)
+        val distance = distanceLabel(next.distanceMeters)
+        val styled = SpannableString(distance)
+        val firstDigit = distance.indexOfFirst { it.isDigit() }
+        val lastDigit = distance.indexOfLast { it.isDigit() }
+        if (firstDigit >= 0) {
+            if (firstDigit > 0) styled.setSpan(RelativeSizeSpan(.65f), 0, firstDigit, 0)
+            if (lastDigit + 1 < distance.length) styled.setSpan(RelativeSizeSpan(.65f), lastDigit + 1, distance.length, 0)
+        }
+        val distanceTextPaint = TextPaint(distancePaint).apply { textSize = h * 0.39f }
+        val naturalWidth = Layout.getDesiredWidth(styled, distanceTextPaint)
+        if (naturalWidth > available && available > 0f) distanceTextPaint.textSize *= available / naturalWidth
+        val distanceWidth = Layout.getDesiredWidth(styled, distanceTextPaint).coerceAtMost(available)
+        val centerY = card.top + h / 2f
+        fun baseline(paint: Paint) = centerY - (paint.ascent() + paint.descent()) / 2f
+        if (available > 0f) {
+            val distanceLayout = StaticLayout.Builder.obtain(styled, 0, styled.length, distanceTextPaint,
+                ceil(distanceWidth.toDouble()).toInt().coerceAtLeast(1)).setIncludePad(false).build()
+            val save = canvas.save()
+            canvas.translate(start, centerY - distanceLayout.height / 2f)
+            distanceLayout.draw(canvas)
+            canvas.restoreToCount(save)
+        }
+        val roadStart = start + distanceWidth + gap
+        var right = end
+        infoPaint.textSize = h * 0.24f
+        roadPaint.textSize = h * 0.27f
+        val roadLabel = roadLabel(next)
+        val fullRoadWidth = roadPaint.measureText(roadLabel)
+        val minimumRoadWidth = if (roadLabel.isEmpty()) 0f else roadPaint.measureText("…")
         val parts = infoParts(next)
-        if (parts.isEmpty()) return
-        val h = (cardHeight * 0.40f).coerceAtLeast(34f)
-        val top = infoStripTop()
-        infoPaint.textSize = h * 0.42f
-        val separator = "   ·   "
-        val text = parts.joinToString(separator)
-        val textWidth = paintMeasure(text)
-        // Wider than the card is fine: the strip centers on the card and may reach the panel edges.
-        // left is an absolute panel coordinate, so every clamp below uses the panel width, never
-        // the card width — clamping against the card width is what threw the strip to panel-left.
-        val maxStrip = this.width - (dp(8f) * 2).toInt()
-        val stripWidth = maxOf(width, (textWidth + h * 0.9f).toInt()).coerceAtMost(maxStrip)
-        val stripLeft = (left + width / 2f - stripWidth / 2f).toInt()
-            .coerceIn(4, (this.width - stripWidth - 4).coerceAtLeast(4))
-        rect.set(stripLeft.toFloat(), top.toFloat(), (stripLeft + stripWidth).toFloat(), top + h)
-        canvas.drawRoundRect(rect, h / 2f, h / 2f, glassPaint)
-        canvas.drawRoundRect(rect, h / 2f, h / 2f, strokePaint)
-        val draw = if (textWidth <= stripWidth - h * 0.6f) text else ellipsize(text, stripWidth - h * 0.6f, infoPaint)
-        val drawWidth = paintMeasure(draw)
-        val centerX = stripLeft + stripWidth / 2f
-        canvas.drawText(draw, centerX - drawWidth / 2f, top + h * 0.69f, infoPaint)
+        val remainingIndex = if (next.remainingMeters?.let { it > 0 } == true)
+            if (next.arrivalEpochSeconds?.let { it > 0 } == true) 1 else 0 else -1
+        var remainingShown = false
+        // Omit optional trip details before shortening the road name.
+        for ((index, entry) in parts.withIndex()) {
+            val (part, arrival) = entry
+            val partWidth = infoPaint.measureText(part)
+            val reservedRoad = if (arrival) minimumRoadWidth else fullRoadWidth
+            if (right - partWidth - gap >= roadStart + reservedRoad) {
+                canvas.drawText(part, right - partWidth, baseline(infoPaint), infoPaint)
+                right -= partWidth + gap
+                if (index == remainingIndex) remainingShown = true
+            }
+        }
+        val room = (right - roadStart).coerceAtLeast(0f)
+        if (room >= roadPaint.measureText("…")) {
+            val road = ellipsize(roadLabel, room, roadPaint)
+            if (road.isNotEmpty()) canvas.drawText(road, roadStart, baseline(roadPaint), roadPaint)
+        }
+        return when {
+            roadLabel.isNotEmpty() && fullRoadWidth > room -> ClusterCardDiagnostics.TurnVariant.TRUNCATED_ROAD
+            !remainingShown -> ClusterCardDiagnostics.TurnVariant.NO_REMAINING
+            else -> ClusterCardDiagnostics.TurnVariant.FULL
+        }
     }
 
     private fun drawLaneRow(canvas: Canvas, row: RectF) {
@@ -297,33 +329,31 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         lanePath.moveTo(baseX - unitY * head * 0.65f, baseY + unitX * head * 0.65f)
         lanePath.lineTo(tipX, tipY)
         lanePath.lineTo(baseX + unitY * head * 0.65f, baseY - unitX * head * 0.65f)
-        lanePaint.color = distancePaint.color
+        lanePaint.color = if (emphasized) accent else distancePaint.color
         lanePaint.alpha = if (emphasized) 255 else (255 * 0.35f).toInt()
         lanePaint.strokeWidth = laneWidth * 0.12f
         canvas.drawPath(lanePath, lanePaint)
     }
 
-    private fun paintMeasure(text: String): Float = infoPaint.measureText(text)
-
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
 
-    private fun infoParts(next: ClusterTurnGuidance): List<String> {
-        val parts = mutableListOf<String>()
+    private fun infoParts(next: ClusterTurnGuidance): List<Pair<String, Boolean>> {
+        val parts = mutableListOf<Pair<String, Boolean>>()
         next.arrivalEpochSeconds?.takeIf { it > 0 }?.let { epoch ->
             val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epoch * 1000L))
-            parts += context.getString(R.string.turn_card_info_arrival, time)
+            parts += context.getString(R.string.turn_card_info_arrival, time) to true
+        }
+        next.remainingMeters?.takeIf { it > 0 }?.let { meters ->
+            parts += context.getString(R.string.turn_card_info_km, meters / 1000.0) to false
         }
         next.remainingSeconds?.takeIf { it > 0 }?.let { total ->
             val hours = total / 3600
             val minutes = (total % 3600) / 60
-            parts += if (hours > 0) {
+            parts += (if (hours > 0) {
                 context.getString(R.string.turn_card_info_duration_hm, hours.toInt(), minutes.toInt())
             } else {
                 context.getString(R.string.turn_card_info_duration_m, minutes.toInt())
-            }
-        }
-        next.remainingMeters?.takeIf { it > 0 }?.let { meters ->
-            parts += context.getString(R.string.turn_card_info_km, meters / 1000.0)
+            }) to false
         }
         return parts
     }
@@ -388,5 +418,10 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         var end = text.length
         while (end > 0 && paint.measureText(text.take(end) + ellipsis) > maxWidth) end--
         return if (end == 0) ellipsis else text.take(end) + ellipsis
+    }
+
+    companion object {
+        internal const val LANE_GAP_FRACTION = 0.05f
+        internal const val LANE_HEIGHT_FRACTION = 0.42f
     }
 }

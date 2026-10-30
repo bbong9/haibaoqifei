@@ -23,6 +23,7 @@ class AdbClusterActivity : Activity() {
     private var surface: Surface? = null
     private var videoTexture: ClusterVideoTexture? = null
     private var turnCard: ClusterTurnCardView? = null
+    private var musicCard: ClusterMusicView? = null
     private var safeAreaPreview: SafeAreaEditorView? = null
     internal var snapshotExecutor: (android.content.Context, String, () -> Unit) -> Unit = ClusterSnapshot::captureAsync
     private val snapshotHandler = Handler(Looper.getMainLooper())
@@ -78,7 +79,8 @@ class AdbClusterActivity : Activity() {
         videoRegion.addView(waiting, FrameLayout.LayoutParams(-1, -1))
         turnCard = ClusterTurnCardView(this).apply { visibility = View.GONE }
         root.addView(turnCard, FrameLayout.LayoutParams(-1, -1))
-        root.addView(ClusterMusicView(this), FrameLayout.LayoutParams(-1, -1))
+        musicCard = ClusterMusicView(this)
+        root.addView(musicCard, FrameLayout.LayoutParams(-1, -1))
         root.addView(ClusterSpeedometerView(this), FrameLayout.LayoutParams(-1, -1))
         safeAreaPreview = SafeAreaEditorView(this).apply {
             visibility = View.GONE
@@ -108,6 +110,7 @@ class AdbClusterActivity : Activity() {
         turnCard?.setLayout(ClusterActivityOutput.cardX, ClusterActivityOutput.cardY, ClusterActivityOutput.cardSize)
         turnCard?.setOpacity(ClusterActivityOutput.cardOpacity)
         turnCard?.setNightMode(ClusterActivityOutput.cardNight)
+        musicCard?.setNightMode(ClusterActivityOutput.cardNight)
         turnCard?.setGuidance(if (ClusterActivityOutput.streamActive) ClusterActivityOutput.guidance else null)
         turnCard?.setLanes(if (AirPlayPersistence.loadClusterLaneStrip(this)) ClusterActivityOutput.lanes else emptyList())
         updateSafeAreaPreview()

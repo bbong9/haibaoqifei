@@ -19,6 +19,32 @@ import org.mockito.Mockito.verify
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class ClusterActivityOutputTest {
+    @Test fun adbNightUpdatesBothCardsWithoutRecreatingThem() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        AirPlayPersistence.saveAdbClusterEnabled(app, true)
+        val owner = Any()
+        ClusterActivityOutput.bind(owner, 4) { }
+        val token = "01234567-89ab-cdef-0123-456789abcdef"
+        ClusterActivityOutput::class.java.getDeclaredField("launchToken")
+            .apply { isAccessible = true }.set(ClusterActivityOutput, token)
+        val intent = android.content.Intent(app, AdbClusterActivity::class.java)
+            .putExtra("cluster_launch_token", token)
+        val controller = org.robolectric.Robolectric.buildActivity(AdbClusterActivity::class.java, intent).create()
+        val activity = controller.get()
+        try {
+            val turn = org.robolectric.util.ReflectionHelpers.getField<ClusterTurnCardView>(activity, "turnCard")
+            val music = org.robolectric.util.ReflectionHelpers.getField<ClusterMusicView>(activity, "musicCard")
+            for (night in listOf(true, false)) {
+                ClusterActivityOutput.setTurnCard(null, 76, 30, 55, 85, night)
+                activity.updateTurnCard()
+                assertSame(turn, org.robolectric.util.ReflectionHelpers.getField<ClusterTurnCardView>(activity, "turnCard"))
+                assertSame(music, org.robolectric.util.ReflectionHelpers.getField<ClusterMusicView>(activity, "musicCard"))
+                assertEquals(night, org.robolectric.util.ReflectionHelpers.getField<Boolean>(turn, "night"))
+                assertEquals(night, org.robolectric.util.ReflectionHelpers.getField<Boolean>(music, "night"))
+            }
+        } finally { controller.destroy(); ClusterActivityOutput.stop(owner) }
+    }
+
     @Test
     @LooperMode(LooperMode.Mode.PAUSED)
     fun laneUpdatesArePostedToMainDeduplicatedAndClearedWhenGuidanceEnds() {

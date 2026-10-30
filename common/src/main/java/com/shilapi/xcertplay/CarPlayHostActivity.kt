@@ -480,6 +480,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     private val routeGuidanceListener: (RouteGuidanceDiagnostics.Snapshot) -> Unit = {
         AsyncDiagnosticLog.append(sessionLog, it.logLine())
     }
+    private val clusterCardDiagnosticListener: (String) -> Unit = { appendLog(it) }
     private val clusterLanesChanged: (List<LaneGuidanceLane>) -> Unit = { lanes ->
         appendLog(LaneStripDiagnostics.change(lanes))
         val displayed = if (AirPlayPersistence.loadClusterLaneStrip(this)) lanes else emptyList()
@@ -943,6 +944,11 @@ open class CarPlayHostActivity : ComponentActivity() {
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
         initializeSessionLog()
+        ClusterCardDiagnostics.listener = clusterCardDiagnosticListener
+        appendLog(ClusterCardDiagnostics.report())
+        appendLog(ClusterCardDiagnostics.musicReport())
+        ClusterCardDiagnostics.turnReport()?.let(::appendLog)
+        ClusterCardDiagnostics.startSummaries(mainHandler)
         CarPlayGlance.routeGuidanceListener = routeGuidanceListener
         lastConfiguration = Configuration(resources.configuration)
         darkMode = savedInstanceState?.getBoolean("carplay_night_active")
@@ -1586,17 +1592,13 @@ open class CarPlayHostActivity : ComponentActivity() {
             else AirPlayPersistence.loadClusterTurnCardOverlayYPercent(this)
         val sizePercent = if (smallWindow) AirPlayPersistence.loadClusterSmallWindowCardSizePercent(this)
             else AirPlayPersistence.loadClusterTurnCardOverlaySizePercent(this)
-        val cardNight = when (AirPlayPersistence.loadClusterTurnCardTheme(this)) {
-            1 -> false
-            2 -> true
-            else -> darkMode
-        }
-        val smallCardNight = when (AirPlayPersistence.loadClusterSmallWindowCardTheme(this)) {
-            1 -> false
-            2 -> true
-            else -> cardNight
-        }
+        val cardTheme = AirPlayPersistence.loadClusterTurnCardTheme(this)
+        val smallTheme = AirPlayPersistence.loadClusterSmallWindowCardTheme(this)
+        val cardNight = ClusterCardNight.resolve(cardTheme, darkMode)
+        val smallCardNight = ClusterCardNight.resolve(smallTheme, cardNight)
         val effectiveNight = if (smallWindow) smallCardNight else cardNight
+        ClusterCardDiagnostics.appearance(effectiveNight, if (smallWindow) smallTheme else cardTheme,
+            nightModeController.diagnosticSource())
         val effectiveOpacity = if (smallWindow) AirPlayPersistence.loadClusterSmallWindowCardOpacityPercent(this)
         else AirPlayPersistence.loadClusterTurnCardOpacityPercent(this)
         ClusterActivityOutput.setTurnCard(if (overlay) clusterTurnGuidance else null,
@@ -2103,6 +2105,10 @@ open class CarPlayHostActivity : ComponentActivity() {
         dismissClusterPresentation()
         if (CarPlayGlance.laneListener === clusterLaneListener) CarPlayGlance.laneListener = null
         if (CarPlayGlance.routeGuidanceListener === routeGuidanceListener) CarPlayGlance.routeGuidanceListener = null
+        if (ClusterCardDiagnostics.listener === clusterCardDiagnosticListener) {
+            ClusterCardDiagnostics.stopSummaries(mainHandler)
+            ClusterCardDiagnostics.listener = null
+        }
         if (ClusterActivityOutput.onLanesChanged === clusterLanesChanged) ClusterActivityOutput.onLanesChanged = null
         mainHandler.removeCallbacks(applyDisplaySize)
         mainHandler.removeCallbacks(expireOldLogLines)
