@@ -61,6 +61,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         }
         stopState = ClusterMusicState.observe { next ->
             val now = SystemClock.elapsedRealtime()
+            val awaitingInfo = snapshot.lyrics.active && !hasDisplayableContent(snapshot)
             emptyReason = if (!next.lyrics.active && next.sessionEnded) ClusterCardDiagnostics.HideReason.DISCONNECT
                 else ClusterCardDiagnostics.HideReason.NO_TRACK
             if (snapshot.artwork !== next.artwork) {
@@ -78,6 +79,8 @@ internal class ClusterMusicView(context: Context) : View(context) {
             if (trackChanged) {
                 lastTrackRevision = next.lyrics.trackRevision
                 visibleUntil = next.lyrics.startedAt + ClusterMusicSettings.temporaryMillis(context)
+            } else if (awaitingInfo && hasDisplayableContent(next)) {
+                visibleUntil = now + ClusterMusicSettings.temporaryMillis(context)
             }
             updateVisibility()
         }
@@ -106,7 +109,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         val remaining = visibleUntil - SystemClock.elapsedRealtime()
         val permanent = ClusterMusicSettings.permanent(context)
         val lyrics = snapshot.lyrics.hasLyrics
-        captionVisible = ClusterMusicSettings.enabled(context) && snapshot.lyrics.active &&
+        captionVisible = ClusterMusicSettings.enabled(context) && snapshot.lyrics.active && hasDisplayableContent(snapshot) &&
             (permanent || lyrics || remaining > 0)
         visibility = if (captionVisible) VISIBLE else GONE
         if (visibility == VISIBLE && !permanent && !lyrics && remaining > 0) {
@@ -122,6 +125,10 @@ internal class ClusterMusicView(context: Context) : View(context) {
         invalidate()
     }
 
+    private fun hasDisplayableContent(state: ClusterMusicState.Snapshot): Boolean =
+        !state.info.title.isNullOrBlank() || !state.info.artist.isNullOrBlank() ||
+            !state.info.album.isNullOrBlank() || state.lyrics.hasLyrics || state.artwork?.isRecycled == false
+
     private fun reportDiagnostics(fit: ClusterCardDiagnostics.Fit) {
         diagnosticFit = fit
         val lyrics = snapshot.lyrics
@@ -130,6 +137,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         val reason = when {
             !ClusterMusicSettings.enabled(context) -> ClusterCardDiagnostics.HideReason.DISABLED
             !lyrics.active -> emptyReason
+            !hasDisplayableContent(snapshot) -> ClusterCardDiagnostics.HideReason.NO_INFO
             visibility != VISIBLE -> ClusterCardDiagnostics.HideReason.EXPIRED
             else -> ClusterCardDiagnostics.HideReason.NONE
         }
@@ -194,8 +202,8 @@ internal class ClusterMusicView(context: Context) : View(context) {
         artworkPath.addRoundRect(layout.artwork, radius, radius, Path.Direction.CW)
         val artClip = canvas.save()
         canvas.clipPath(artworkPath)
-        paint.color = palette.chip
-        paint.alpha = (Color.alpha(palette.chip) * fade).toInt()
+        paint.color = palette.coverPlaceholder
+        paint.alpha = (Color.alpha(palette.coverPlaceholder) * fade).toInt()
         canvas.drawRect(layout.artwork, paint)
         if (oldArt != null && artProgress < 1f) {
             paint.color = Color.WHITE
@@ -209,7 +217,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         } else if (oldArt == null || artProgress >= 1f) {
             textPaint.textAlign = Paint.Align.CENTER
             textPaint.textSize = layout.artwork.height() * .40f
-            textPaint.color = palette.secondary
+            textPaint.color = palette.coverPlaceholderText
             textPaint.alpha = (255 * fade).toInt()
             canvas.drawText("♪", layout.artwork.centerX(), layout.artwork.centerY() -
                 (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)

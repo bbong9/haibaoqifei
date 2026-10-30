@@ -37,7 +37,7 @@ class ClusterCardPaletteTest {
         }
     }
 
-    @Test fun daytimeColorsUseLavenderWithoutChangingTheNightPalette() {
+    @Test fun daytimeColorsUseLavenderAndNightColorsUseIndigo() {
         val day = ClusterCardPalette.of(false)
         assertEquals(Color.rgb(196, 191, 242), day.background)
         assertEquals(Color.rgb(173, 167, 230), day.border)
@@ -48,15 +48,20 @@ class ClusterCardPaletteTest {
         assertEquals(Color.rgb(255, 69, 97), day.accent)
         assertEquals(Color.argb(89, 255, 255, 255), day.chip)
         assertEquals(255, day.previousLyricAlpha)
+        assertEquals(day.chip, day.coverPlaceholder)
+        assertEquals(day.secondary, day.coverPlaceholderText)
         val night = ClusterCardPalette.of(true)
-        assertEquals(Color.rgb(26, 7, 12), night.background)
-        assertEquals(Color.argb(77, 255, 69, 97), night.border)
+        assertEquals(Color.rgb(75, 71, 168), night.background)
+        assertEquals(Color.rgb(105, 101, 198), night.border)
         assertEquals(Color.WHITE, night.primary)
-        assertEquals(Color.rgb(217, 179, 187), night.secondary)
-        assertEquals(night.secondary, night.previousLyric)
-        assertEquals(Color.rgb(255, 122, 144), night.lyric)
-        assertEquals(Color.rgb(255, 69, 97), night.accent)
-        assertEquals(Color.argb(46, 255, 69, 97), night.chip)
-        assertEquals(166, night.previousLyricAlpha)
+        assertEquals(Color.rgb(224, 222, 250), night.secondary)
+        assertEquals(Color.rgb(201, 197, 242), night.previousLyric)
+        assertEquals(Color.rgb(255, 208, 218), night.lyric)
+        assertEquals(Color.rgb(255, 140, 160), night.accent)
+        assertEquals(Color.argb(46, 255, 255, 255), night.chip)
+        assertEquals(255, night.previousLyricAlpha)
+        assertEquals(Color.argb(36, 255, 255, 255), night.coverPlaceholder)
+        assertEquals(Color.WHITE, night.coverPlaceholderText)
+        assertTrue(ColorUtils.calculateContrast(night.accent, night.background) >= 3.0)
     }
 }

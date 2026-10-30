@@ -12,10 +12,12 @@ internal data class ClusterCardPalette(
     val chip: Int,
     val lyric: Int,
     val previousLyricAlpha: Int,
+    val coverPlaceholder: Int = chip,
+    val coverPlaceholderText: Int = secondary,
 ) {
     companion object {
         const val DAY_PREVIOUS_LYRIC_ALPHA = 255
-        const val NIGHT_PREVIOUS_LYRIC_ALPHA = 166 // 65.1%.
+        const val NIGHT_PREVIOUS_LYRIC_ALPHA = 255
 
         private val day = ClusterCardPalette(
             background = Color.rgb(196, 191, 242),
@@ -29,15 +31,17 @@ internal data class ClusterCardPalette(
             previousLyricAlpha = DAY_PREVIOUS_LYRIC_ALPHA,
         )
         private val night = ClusterCardPalette(
-            background = Color.rgb(26, 7, 12),
-            border = Color.argb(77, 255, 69, 97),
+            background = Color.rgb(75, 71, 168),
+            border = Color.rgb(105, 101, 198),
             primary = Color.WHITE,
-            secondary = Color.rgb(217, 179, 187),
-            previousLyric = Color.rgb(217, 179, 187),
-            accent = Color.rgb(255, 69, 97),
-            chip = Color.argb(46, 255, 69, 97),
-            lyric = Color.rgb(255, 122, 144),
+            secondary = Color.rgb(224, 222, 250),
+            previousLyric = Color.rgb(201, 197, 242),
+            accent = Color.rgb(255, 140, 160),
+            chip = Color.argb(46, 255, 255, 255),
+            lyric = Color.rgb(255, 208, 218),
             previousLyricAlpha = NIGHT_PREVIOUS_LYRIC_ALPHA,
+            coverPlaceholder = Color.argb(36, 255, 255, 255),
+            coverPlaceholderText = Color.WHITE,
         )
 
         fun of(night: Boolean): ClusterCardPalette = if (night) this.night else day

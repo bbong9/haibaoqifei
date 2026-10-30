@@ -109,6 +109,7 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         roadPaint.color = palette.primary
         infoPaint.color = palette.secondary
         badgePaint.color = palette.accent
+        glyph?.setTint(palette.accent)
         badgeTextPaint.color = ClusterCardPalette.of(false).primary
     }
 

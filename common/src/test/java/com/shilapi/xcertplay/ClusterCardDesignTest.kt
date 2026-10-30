@@ -313,6 +313,137 @@ class ClusterCardDesignTest {
         }
     }
 
+    @Test fun emptyActiveMetadataWaitsForTitleOrCoverBeforeShowingAndReportsNoInfo() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
+        val view = ClusterMusicView(controller.get())
+        controller.get().setContentView(view); size(view)
+        ClusterMusicSettings.saveEnabled(context, true)
+        ClusterMusicSettings.saveTemporarySeconds(context, 3)
+        val lines = mutableListOf<String>()
+        ClusterCardDiagnostics.listener = { lines += it }
+        val empty = CarPlayNowPlaying(sourceApp = "private player", artworkTransferId = 7)
+        val art = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+        try {
+            ClusterMusicState.publish(empty, null); idle()
+            assertEquals(View.GONE, view.visibility)
+            val report = ClusterCardDiagnostics.musicReport()
+            assertTrue(report.contains("cardVisible=none hideReason=noInfo"))
+            assertEquals(report, DiagnosticRedactor.redact(report))
+            assertTrue(lines.any { it.contains("hideReason=noInfo") })
+            assertTrue(lines.none { it.contains("private player") })
+            waitFor(4_000)
+            val beforeTitle = SystemClock.elapsedRealtime()
+            ClusterMusicState.publish(empty.copy(title = "Song"), null); idle()
+            assertEquals(View.VISIBLE, view.visibility)
+            val titleDeadline = org.robolectric.util.ReflectionHelpers.getField<Long>(view, "visibleUntil")
+            assertTrue(titleDeadline in (beforeTitle + 3_000L)..(SystemClock.elapsedRealtime() + 3_000L))
+            waitFor((titleDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            assertEquals(View.GONE, view.visibility)
+
+            ClusterMusicState.publish(CarPlayNowPlaying(), null); idle()
+            ClusterMusicState.publish(empty, null); idle()
+            assertEquals(View.GONE, view.visibility)
+            waitFor(4_000)
+            val beforeCover = SystemClock.elapsedRealtime()
+            ClusterMusicState.publish(empty, art); idle()
+            assertEquals(View.VISIBLE, view.visibility)
+            val coverDeadline = org.robolectric.util.ReflectionHelpers.getField<Long>(view, "visibleUntil")
+            assertTrue(coverDeadline in (beforeCover + 3_000L)..(SystemClock.elapsedRealtime() + 3_000L))
+            waitFor((coverDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            assertEquals(View.GONE, view.visibility)
+        } finally {
+            ClusterCardDiagnostics.listener = null
+            controller.pause().stop().destroy()
+            art.recycle()
+        }
+    }
+
+    @Test fun artistAlbumAndCoverAloneDoNotCountAsEmptyMetadata() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
+        val view = ClusterMusicView(controller.get())
+        controller.get().setContentView(view); size(view)
+        ClusterMusicSettings.saveEnabled(context, true)
+        ClusterMusicSettings.savePermanent(context, true)
+        val art = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+        try {
+            val cases = listOf(
+                CarPlayNowPlaying(artist = "Singer") to null,
+                CarPlayNowPlaying(album = "Album") to null,
+                CarPlayNowPlaying(artworkTransferId = 7) to art,
+            )
+            for ((info, cover) in cases) {
+                ClusterMusicState.publish(CarPlayNowPlaying(), null); idle()
+                ClusterMusicState.publish(info, cover); idle()
+                assertEquals(View.VISIBLE, view.visibility)
+                assertTrue(ClusterCardDiagnostics.musicReport().contains("hideReason=none"))
+            }
+        } finally {
+            controller.pause().stop().destroy()
+            art.recycle()
+        }
+    }
+
+    @Test fun missingCoverUsesSeparateNightPlaceholderAndLeavesDayUnchanged() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
+        val view = ClusterMusicView(controller.get())
+        controller.get().setContentView(view); size(view)
+        ClusterMusicSettings.saveEnabled(context, true)
+        ClusterMusicSettings.savePermanent(context, true)
+        try {
+            ClusterMusicState.publish(CarPlayNowPlaying(title = "Song"), null); idle()
+            waitFor(500)
+            for (night in listOf(false, true)) {
+                view.setNightMode(night)
+                val image = Bitmap.createBitmap(1920, 720, Bitmap.Config.ARGB_8888)
+                try {
+                    view.draw(Canvas(image))
+                    val palette = ClusterCardPalette.of(night)
+                    val artwork = view.cardLayout().artwork
+                    val background = if (night) Color.argb(36, 255, 255, 255) else palette.chip
+                    val expected = androidx.core.graphics.ColorUtils.compositeColors(background, palette.background)
+                    val actual = image.getPixel((artwork.left + artwork.width() * .2f).toInt(),
+                        (artwork.top + artwork.height() * .2f).toInt())
+                    for (channel in listOf(Color::red, Color::green, Color::blue)) {
+                        assertTrue("night=$night expected=$expected actual=$actual",
+                            kotlin.math.abs(channel(expected) - channel(actual)) <= 1)
+                    }
+                    val glyph = if (night) palette.primary else palette.secondary
+                    var glyphPixels = 0
+                    for (y in artwork.top.toInt() until artwork.bottom.toInt()) {
+                        for (x in artwork.left.toInt() until artwork.right.toInt()) {
+                            if (image.getPixel(x, y) == glyph) glyphPixels++
+                        }
+                    }
+                    assertTrue("night=$night glyphPixels=$glyphPixels", glyphPixels > 0)
+                } finally { image.recycle() }
+            }
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun maneuverGlyphRetintsWhenDayNightChangesWithoutChangingTheIcon() {
+        val view = ClusterTurnCardView(context)
+        size(view)
+        view.setOpacity(100)
+        view.setGuidance(ClusterTurnGuidance(2, 0, 218, "Road"))
+        val image = Bitmap.createBitmap(1920, 720, Bitmap.Config.ARGB_8888)
+        try {
+            for (night in listOf(false, true, false)) {
+                view.setNightMode(night)
+                image.eraseColor(Color.TRANSPARENT)
+                view.draw(Canvas(image))
+                val card = view.cardRect()
+                val target = ClusterCardPalette.of(night).accent
+                var pixels = 0
+                for (y in card.top until card.top + card.height) {
+                    for (x in card.left until card.left + card.width) {
+                        if (image.getPixel(x, y) == target) pixels++
+                    }
+                }
+                assertTrue("night=$night accentPixels=$pixels", pixels > 0)
+            }
+        } finally { ClusterCardDiagnostics.remove(view); image.recycle() }
+    }
+
     @Test fun diagnosticsMeasureLateCoverWithoutCountingRetainedOldCover() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup().visible()
         val view = ClusterMusicView(controller.get())
@@ -663,7 +794,9 @@ class ClusterCardDesignTest {
             val image = Bitmap.createBitmap(1920, 720, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(image)
             canvas.drawColor(if (night) Color.rgb(29, 34, 41) else Color.rgb(210, 221, 230))
-            canvas.drawRect(1400f, 400f, 1876f, 679f, Paint().apply { color = Color.rgb(185, 179, 238) })
+            canvas.drawRect(1400f, 400f, 1876f, 679f, Paint().apply {
+                color = if (night) Color.rgb(75, 71, 168) else Color.rgb(185, 179, 238)
+            })
             view.draw(canvas)
             File(directory, "$name.png").outputStream().use { assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             image.recycle()
@@ -677,7 +810,9 @@ class ClusterCardDesignTest {
             turn.setNightMode(night); turn.setLanes(if (lane) lanes else emptyList())
             capture(turn, "turn-${if (night) "night" else "day"}-${if (lane) "lanes" else "no-lanes"}", night)
         }
-        turn.setLanes(emptyList()); turn.setNightMode(false)
+        turn.setLanes(emptyList()); turn.setNightMode(true)
+        capture(turn, "turn-night-nolanes", true)
+        turn.setNightMode(false)
         capture(turn, "turn-day-nolanes", false)
         turn.setGuidance(ClusterTurnGuidance(2, 0, 218,
             "A very long road name that must be truncated without cutting the maneuver"))
@@ -711,6 +846,10 @@ class ClusterCardDesignTest {
                 music.setNightMode(night); waitFor(500)
                 capture(music, "music-${if (lyrics) "lyrics" else "cover"}-${if (night) "night" else "day"}-${if (long) "long" else "short"}", night)
             }
+            ClusterMusicState.publish(CarPlayNowPlaying(), null); idle()
+            ClusterMusicState.publish(CarPlayNowPlaying(title = "Song", artist = "Singer"), null); idle()
+            music.setNightMode(true); waitFor(500)
+            capture(music, "music-night-placeholder", true)
         } finally { controller.pause().stop().destroy(); art.recycle() }
     }
 }

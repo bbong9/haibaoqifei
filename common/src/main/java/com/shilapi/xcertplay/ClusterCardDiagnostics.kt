@@ -8,7 +8,7 @@ internal object ClusterCardDiagnostics {
     enum class MusicMode { LYRICS, COVER, NONE }
     enum class NightSource { MANUAL, SCHEDULE, AMBIENT, SYSTEM, FALLBACK }
     enum class HideReason(val value: String) {
-        NONE("none"), EXPIRED("expired"), DISABLED("disabled"), NO_TRACK("noTrack"),
+        NONE("none"), EXPIRED("expired"), DISABLED("disabled"), NO_TRACK("noTrack"), NO_INFO("noInfo"),
         DISCONNECT("disconnect"), TRACK_CHANGE("trackChange"),
     }
     enum class Fit { NORMAL, SHRUNK, CLAMPED }
