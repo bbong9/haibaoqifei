@@ -52,6 +52,11 @@ class SessionLogFileLatencyTest {
 
     private fun firstLineOf(file: File) = file.useLines { it.first() }
 
+    private fun payload(line: String): String {
+        assertTrue(line, line.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}  .*")))
+        return line.substring(25)
+    }
+
     @Test fun callerLatencyPerLineStaysFarBelowOneDiskOpenPerCall() {
         val folder = Files.createTempDirectory("diplay-latency").toFile()
         try {
@@ -131,7 +136,7 @@ class SessionLogFileLatencyTest {
                 log.append("12:00:00.000  tail")
                 log.flushed()
             }
-            val lines = file.readLines()
+            val lines = file.readLines().map(::payload)
             assertEquals(listOf("header") + (0 until 300).map { "12:00:00.000  line $it peer=[ip]" } + "12:00:00.000  tail", lines)
         } finally { folder.deleteRecursively() }
     }
@@ -151,6 +156,29 @@ class SessionLogFileLatencyTest {
         } finally { folder.deleteRecursively() }
     }
 
+    @Test fun standaloneAndSessionWritesShareTheSameRotationLock() {
+        val folder = Files.createTempDirectory("diplay-shared-rotation").toFile()
+        try {
+            val file = folder.resolve("diplay.log")
+            file.writeText("x".repeat(SessionLogFile.MAX_BYTES.toInt() + 1))
+            SessionLogFile(file).use { log ->
+                val start = CountDownLatch(1)
+                val other = Thread {
+                    start.await()
+                    SessionLogFile.appendStandalone(file, "USER_MARK kind=video")
+                }
+                other.start()
+                start.countDown()
+                log.appendNow("Car audio: adapter state=on")
+                other.join(2_000)
+                assertFalse(other.isAlive)
+                assertTrue(folder.resolve("previous.log").length() > SessionLogFile.MAX_BYTES)
+                assertEquals(setOf("USER_MARK kind=video", "Car audio: adapter state=on"), file.readLines().map(::payload).toSet())
+                assertFalse(folder.resolve("previous-2.log").exists())
+            }
+        } finally { folder.deleteRecursively() }
+    }
+
     @Test fun droppedTraceLinesNeverEvictLegitimateQueuedLines() {
         val folder = Files.createTempDirectory("diplay-trace").toFile()
         try {
@@ -165,7 +193,7 @@ class SessionLogFileLatencyTest {
             stall.join()
             log.flushed()
             log.close()
-            assertEquals(listOf("header", "first") + legit, folder.resolve("diplay.log").readLines())
+            assertEquals(listOf("header", "first") + legit, folder.resolve("diplay.log").readLines().map(::payload))
         } finally { folder.deleteRecursively() }
     }
 
@@ -180,7 +208,7 @@ class SessionLogFileLatencyTest {
             stall.join()
             log.flushed()
             log.close()
-            val lines = folder.resolve("diplay.log").readLines()
+            val lines = folder.resolve("diplay.log").readLines().map(::payload)
             val markers = lines.filter { it.contains("lines dropped") }
             assertEquals(lines.toString().take(200), 1, markers.size)
             val dropped = Regex("(\\d+) lines dropped").find(markers.single())!!.groupValues[1].toInt()
@@ -216,7 +244,7 @@ class SessionLogFileLatencyTest {
             log.close()
             stall.join()
             log.flushed()
-            assertEquals(listOf("header", "one", "Activity destroyed"), folder.resolve("diplay.log").readLines())
+            assertEquals(listOf("header", "one", "Activity destroyed"), folder.resolve("diplay.log").readLines().map(::payload))
         } finally { folder.deleteRecursively() }
     }
 }

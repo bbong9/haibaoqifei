@@ -1023,4 +1023,9 @@
     <string name="settings_seal_performance_group">الدقة ومعدل الإطارات</string>
     <string name="settings_seal_video_group">إخراج الفيديو</string>
     <string name="settings_description_for">شرح %1$s</string>
+    <string name="settings_mark_problem">تسجيل مشكلة الآن</string>
+    <string name="settings_mark_audio">انقطع الصوت</string>
+    <string name="settings_mark_video">توقفت الصورة</string>
+    <string name="settings_mark_link">انقطع الاتصال</string>
+    <string name="settings_mark_other">أخرى</string>
 </resources>

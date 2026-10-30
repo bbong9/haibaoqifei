@@ -130,9 +130,7 @@ import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
 import java.io.File
-import java.text.SimpleDateFormat
 import java.util.ArrayDeque
-import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -944,6 +942,8 @@ open class CarPlayHostActivity : ComponentActivity() {
         getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.registerDisplayListener(clusterDisplayListener, mainHandler)
         initializeSessionLog()
+        DiagnosticHeartbeat.start(applicationContext, mainHandler)
+        DiagnosticHeartbeat.attach(this, { sink }, { currentSurface?.isValid == true })
         ClusterCardDiagnostics.listener = clusterCardDiagnosticListener
         appendLog(ClusterCardDiagnostics.report())
         appendLog(ClusterCardDiagnostics.musicReport())
@@ -1277,6 +1277,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        DiagnosticHeartbeat.state(this, "paused")
         isActivityStarted = true
         logThemeState(ThemeModeDiagnostics.Source.START, resources.configuration)
         mainHandler.removeCallbacks(pollConfiguration)
@@ -1294,6 +1295,7 @@ open class CarPlayHostActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        DiagnosticHeartbeat.state(this, "resumed")
         runSlowRetryNow("resume")
         runCatching { StartupTimeline.event(this, "HOST_RESUME") }
         if (SealPerformanceProfile.enabled(this) && usbAttachments == null) {
@@ -1945,6 +1947,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        DiagnosticHeartbeat.state(this, "paused")
         runCatching { StartupTimeline.event(this, "HOST_PAUSE") }
         usbAttachments?.close()
         usbAttachments = null
@@ -1957,6 +1960,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        DiagnosticHeartbeat.state(this, "stopped")
         runCatching { StartupTimeline.event(this, "HOST_STOP") }
         fpsCounter?.stop()
         closePicturePanel()
@@ -2062,6 +2066,7 @@ open class CarPlayHostActivity : ComponentActivity() {
             return
         }
         CarPlayScreen.destroyed(this)
+        DiagnosticHeartbeat.detach(this)
         cancelSlowRetry()
         runCatching { unregisterReceiver(bluetoothOnReceiver) }
         runCatching { unregisterReceiver(bluetoothConnectedReceiver) }
@@ -2118,7 +2123,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         fallbackVideoView = null
         fallbackVideoBounds = null
         sessionLog?.append("Activity destroyed")
-        sessionLog?.close()
+        sessionLog?.let { SessionDiagnosticLog.unbind(it); it.close() }
         sessionLog = null
         super.onDestroy()
     }
@@ -5223,26 +5228,7 @@ open class CarPlayHostActivity : ComponentActivity() {
     /** Car Bluetooth audio: shows whether the iPhone keeps A2DP/HFP with the car now and once CarPlay runs. */
     private fun logCarBluetoothAudio() {
         appendLog("Car Bluetooth audio: on; CarPlay audio not offered")
-        val adapter = runCatching { getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter ?: android.bluetooth.BluetoothAdapter.getDefaultAdapter() }.getOrNull()
-            ?: return appendLog("Car Bluetooth audio: no Bluetooth adapter")
-        fun probe(moment: String) {
-            for ((name, profile) in listOf("A2DP" to android.bluetooth.BluetoothProfile.A2DP,
-                    "HFP" to android.bluetooth.BluetoothProfile.HEADSET)) {
-                runCatching {
-                    adapter.getProfileProxy(applicationContext, object : android.bluetooth.BluetoothProfile.ServiceListener {
-                        override fun onServiceConnected(id: Int, proxy: android.bluetooth.BluetoothProfile) {
-                            val devices = runCatching { proxy.connectedDevices.map { it.name ?: "?" } }
-                                .getOrElse { listOf("unreadable:${it.javaClass.simpleName}") }
-                            appendLog("Car Bluetooth audio: $moment $name connected=$devices")
-                            adapter.closeProfileProxy(id, proxy)
-                        }
-                        override fun onServiceDisconnected(id: Int) = Unit
-                    }, profile)
-                }.onFailure { appendLog("Car Bluetooth audio: $moment $name unavailable ${it.javaClass.simpleName}") }
-            }
-        }
-        probe("start")
-        mainHandler.postDelayed({ if (!isDestroyed) probe("after30s") }, 30_000L)
+        DiagnosticHeartbeat.probe()
     }
 
     private fun loadAirPlayIcon(): AirPlayIcon {
@@ -5480,7 +5466,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                         installIphoneCornerMask(session, pending.second.first, pending.second.second)
                     } else clearIphoneCornerMask()
                     CarPlayBackgroundSession.active = true
-                    LastConnectionProblem.clear(this@CarPlayHostActivity)
+                    LastConnectionProblem.clearConnection(this@CarPlayHostActivity)
                     showConnectionHelp(null)
                     callPopupSessionReady = true
                     updateCallPopupGuard()
@@ -5566,6 +5552,14 @@ open class CarPlayHostActivity : ComponentActivity() {
             override val wantsTrace: Boolean get() = false
 
             override fun onDebugLog(message: String) {
+                if (controllerGeneration == restartGeneration) {
+                    when {
+                        message.startsWith("Video: decoder failed") ->
+                            LastConnectionProblem.record(this@CarPlayHostActivity, LastConnectionProblem.Kind.DECODER_FAILED)
+                        message == "Wireless problem: kind=rfcommEofBeforeSession" ->
+                            LastConnectionProblem.record(this@CarPlayHostActivity, LastConnectionProblem.Kind.RFCOMM_EOF_BEFORE_SESSION)
+                    }
+                }
                 if (DiagnosticRedactor.redact(message) == null) return
                 if (message.startsWith(CarPlayController.CONNECTION_DIAGNOSTIC_PREFIX + " ")) {
                     // Retain old-controller teardown evidence without accepting its UI/session state.
@@ -5600,6 +5594,7 @@ open class CarPlayHostActivity : ComponentActivity() {
                 })
         }
         if (controllerGeneration != restartGeneration) return@report
+        if (status is CarPlayStatus.Failed) LastConnectionProblem.record(this, LastConnectionProblem.Kind.HOST_FAILED)
         if (status is CarPlayStatus.RunningControl || status is CarPlayStatus.RunningWireless) {
             controlRunningCount++
             lossSinceControlRunning = false
@@ -5622,7 +5617,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         if (!startupRetryStopped || status !is CarPlayStatus.Failed) {
             if (knownCause != null) setConnectionStage(ConnectionFailureGuidance.stage(knownCause))
             else setConnectionStage(description, englishDescription)
-            LastConnectionProblem.follow(this, status)
+            LastConnectionProblem.follow(this, status, recordDiagnostic = false)
         }
         connectionInstructionsView?.text = connectionInstructions(status)
         // Keep the actionable tip readable while automatic retries are in progress.
@@ -7012,20 +7007,21 @@ open class CarPlayHostActivity : ComponentActivity() {
         sessionLog?.append(formattedLogLine(message, System.currentTimeMillis()))
     }
 
-    private fun formattedLogLine(message: String, nowMillis: Long): String =
-        "${SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(nowMillis))}  $message"
+    private fun formattedLogLine(message: String, nowMillis: Long): String = DiagnosticLogTime.line(message, nowMillis)
 
     private fun initializeSessionLog() {
         val logFile = File(File(filesDir, "logs"), "diplay.log")
         val activeLog = SessionLogFile(logFile)
         runCatching {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            @Suppress("DEPRECATION")
+            val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
             activeLog.reset(
-                "DiPlay log started " +
-                    "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())} " +
-                    "pid=${Process.myPid()} path=${logFile.absolutePath}",
+                "DiPlay log started pid=${Process.myPid()} version=${info.versionName ?: "unknown"}/$code",
             )
         }
         sessionLog = activeLog
+        SessionDiagnosticLog.bind(activeLog)
     }
 
     private fun refreshLogView(nowMillis: Long) {

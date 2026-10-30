@@ -1682,6 +1682,7 @@ class CarPlayController(
                             sessionActive = activeSession != null,
                         )
                         if (!handoffInProgress) {
+                            debugLog("Wireless problem: kind=rfcommEofBeforeSession")
                             throw IOException(
                                 "Wireless CarPlay control channel closed before tunnel iAP2 ready",
                             )

@@ -402,6 +402,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DiagnosticHeartbeat.start(applicationContext, handler)
         SealPerformanceProfile.migrateIfNeeded(this)
         runCatching {
             StartupTimeline.event(this, "UI_CREATE", "action" to intent.action,
@@ -2003,6 +2004,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 saveReportToDownloads()
             }.apply { isEnabled = !exportInProgress }
             card.addView(exportButton, matchButton(10, 60))
+            card.addView(button(getString(R.string.settings_mark_problem), false) { markProblem() }, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
             card.addView(button(getString(R.string.settings_report_on_phone), false) { openBackup(SettingsCategory.DIAGNOSTICS) }, matchButton(10, 60))
             val destination = getString(R.string.reports_save_to_downloads_diplay)
@@ -6305,6 +6307,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun reportFileName() = "DiPlay-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
 
+    private fun markProblem() {
+        val kinds = LastConnectionProblem.Mark.entries
+        val choices = arrayOf(getString(R.string.settings_mark_audio), getString(R.string.settings_mark_video),
+            getString(R.string.settings_mark_link), getString(R.string.settings_mark_other))
+        appDialogBuilder().setTitle(getString(R.string.settings_mark_problem)).setItems(choices) { _, index ->
+            val kind = kinds[index]
+            LastConnectionProblem.mark(applicationContext, kind)
+            SessionDiagnosticLog.append(applicationContext, "USER_MARK kind=${kind.value}")
+        }.setNegativeButton(getString(R.string.cancel), null).show()
+    }
+
     private fun saveReportToDownloads() {
         if (exportInProgress) return
         if (DiagnosticExportStore.needsStoragePermission(this)) {
@@ -6371,9 +6384,25 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     /** The text of a diagnostic report. It reads the session logs, so call it off the main thread. */
     private fun diagnosticReportText(appContext: Context): String = buildString {
+        val generatedAt = System.currentTimeMillis()
+        StartupTimeline.awaitIdle(1_000)
+        SessionDiagnosticLog.awaitIdle(1_000)
+        val logSections = DiagnosticLogSections.read(appContext)
+        ProcessExitDiagnostics.recordProblems(appContext)
         appendLine("DiPlay ${version()} · private beta diagnostic report")
         appendLine(LastConnectionProblem.report(appContext))
         appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
+        appendLine("Generated: ${DiagnosticLogTime.format(generatedAt)} tz=${DiagnosticLogTime.offset(generatedAt)}")
+        appendLine("--- Recent problems ---")
+        LastConnectionProblem.recentProblems(appContext).asReversed().forEach {
+            appendLine("${DiagnosticLogTime.format(it.atMillis)} kind=${it.kind}")
+        }
+        appendLine("--- Recent user marks ---")
+        LastConnectionProblem.recentMarks(appContext).asReversed().forEach {
+            appendLine("${DiagnosticLogTime.format(it.atMillis)} kind=${it.kind}")
+        }
+        appendLine("--- Log directory ---")
+        DiagnosticLogSections.chronological(logSections).forEach { appendLine(it.directoryEntry()) }
         settingsWindowDiagnostic?.let { DiagnosticRedactor.redact(it)?.let(::appendLine) }
         appendLine("--- Startup summary (ms) ---")
         StartupTimeline.summarize(StartupTimeline.readLines(appContext)).forEachIndexed { index, summary ->
@@ -6459,15 +6488,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             "connectWhenOpened=${DiPlayPreferences.autoConnect(appContext)}")
         appendLine()
         appendLine("--- Startup timeline (up= is milliseconds since boot) ---")
-        runCatching {
-            for (name in SessionLogFile.REPORT_NAMES) {
-                val timelineName = if (name == "diplay.log") "timeline.log" else name
-                val file = File(appContext.filesDir, "logs/startup/$timelineName")
-                if (file.isFile) {
-                    appendLine("--- startup/$timelineName ---")
-                    file.useLines { lines -> lines.forEach { line -> DiagnosticRedactor.redact(line)?.let { appendLine(it) } } }
-                }
-            }
+        logSections.filter { it.label.startsWith("startup/") }.forEach { section ->
+            appendLine(section.heading())
+            section.lines.forEach { line -> DiagnosticRedactor.redact(line)?.let { appendLine(it) } }
         }
         appendLine()
         appendLine("Car hotspot control: autoEnable=${CarHotspotSettings.enabled(appContext)} " +
@@ -6485,12 +6508,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         appendLine("--- Last crash recorded by DiPlay ---")
         appendLine(CrashRecord.report(appContext))
         appendLine()
-        for (name in SessionLogFile.REPORT_NAMES) {
-            val file = File(appContext.filesDir, "logs/$name")
-            if (file.isFile) {
-                appendLine("--- $name ---")
-                file.useLines { lines -> lines.forEach { line -> DiagnosticRedactor.redact(line)?.let { appendLine(it) } } }
-            }
+        logSections.filterNot { it.label.startsWith("startup/") }.forEach { section ->
+            appendLine(section.heading())
+            section.lines.forEach { line -> DiagnosticRedactor.redact(line)?.let { appendLine(it) } }
         }
     }
 
@@ -6513,7 +6533,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     private fun reportHead(report: String): String {
         val firstLog = SessionLogFile.REPORT_NAMES
-            .map { name -> "--- $name ---" }
+            .map { name -> "--- $name " }
             .mapNotNull { marker ->
                 if (report.startsWith(marker)) 0 else report.indexOf("\n$marker").takeIf { it >= 0 }?.plus(1)
             }

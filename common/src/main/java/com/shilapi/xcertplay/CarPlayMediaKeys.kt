@@ -66,6 +66,7 @@ internal object CarPlayMediaKeys {
     private var appContext: Context? = null
     private var mediaAudioActive = false
     private var nowPlaying = CarPlayNowPlaying()
+    @Volatile var diagnosticPlaybackListener: ((Boolean?) -> Unit)? = null
     private var elapsedUpdatedAt = 0L
     private var artwork: Bitmap? = null
     private val artworkCache = LinkedHashMap<Int, Bitmap?>()
@@ -100,6 +101,7 @@ internal object CarPlayMediaKeys {
         expected.playbackListener = null
         expected.nowPlayingListener = null
         expected.artworkListener = null
+        runCatching { diagnosticPlaybackListener?.invoke(null) }
         controller = null
         GeelyWheelKeys.stop()
         releaseLocked(sessionEnded = true)
@@ -112,6 +114,9 @@ internal object CarPlayMediaKeys {
 
     /** The iPhone started or stopped playing; may run on any thread. */
     private fun onIphonePlaying(expected: CarPlayController, playing: Boolean) {
+        synchronized(this) {
+            if (controller === expected) runCatching { diagnosticPlaybackListener?.invoke(playing) }
+        }
         if (playing) mainHandler.post {
             synchronized(this) {
                 if (controller === expected) regainFocusLocked(onIphonePlaybackResume = true)

@@ -173,6 +173,11 @@ internal object StartupTimeline {
         runCatching { if (file.isFile) file.readLines() else emptyList() }.getOrDefault(emptyList())
     }
 
+    internal fun awaitIdle(timeoutMillis: Long): Boolean {
+        if (!AsyncDiagnosticLog.awaitIdle(timeoutMillis)) return false
+        return synchronized(this) { target }?.awaitIdle(timeoutMillis) ?: true
+    }
+
     internal fun renderLastSummary(context: Context, summary: StartupAttemptSummary?): String {
         if (summary == null) return context.getString(R.string.settings_startup_no_record)
         val slowest = summary.slowest

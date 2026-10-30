@@ -141,6 +141,7 @@ class StartupTimelineTest {
         val timeline = File(context.filesDir, "logs/startup/timeline.log")
         assertTrue(timeline.isFile)
         val lines = timeline.readLines()
+        assertTrue(lines.toString(), lines.all { DiagnosticLogTime.timestamp(it) != null })
         assertEquals(1, lines.count { it.contains(" PROCESS_START ") })
         assertTrue(lines.first().contains(" PROCESS_START "))
         assertTrue(lines.any { it.contains(" UI_CREATE ") })

@@ -122,8 +122,10 @@ class HomeLastConnectionProblemTest {
         val lines = reportLines()
         assertTrue(lines[0], lines[0].startsWith("DiPlay ") && lines[0].endsWith(" · private beta diagnostic report"))
         assertTrue(lines[1], lines[1].matches(Regex(
+            "Last problem: \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} kind=hostFailed")))
+        assertTrue(lines[2], lines[2].matches(Regex(
             "Last problem: Car hotspot is off \\(cause:CAR_HOTSPOT_OFF\\) at \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} [+-]\\d{4}")))
-        assertTrue(lines[2], lines[2].startsWith("Android "))
+        assertTrue(lines[3], lines[3].startsWith("Android "))
         LastConnectionProblem.clear(context)
         assertEquals("Last problem: none recorded", reportLines()[1])
     }

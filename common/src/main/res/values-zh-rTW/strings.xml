@@ -1034,4 +1034,9 @@
     <string name="settings_seal_performance_group">解析度與畫面更新率</string>
     <string name="settings_seal_video_group">視訊輸出</string>
     <string name="settings_description_for">%1$s的說明</string>
+    <string name="settings_mark_problem">標記此刻發生問題</string>
+    <string name="settings_mark_audio">聲音中斷</string>
+    <string name="settings_mark_video">畫面卡住</string>
+    <string name="settings_mark_link">連線中斷</string>
+    <string name="settings_mark_other">其他</string>
 </resources>

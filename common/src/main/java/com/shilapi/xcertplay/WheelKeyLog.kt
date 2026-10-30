@@ -29,6 +29,11 @@ internal object WheelKeyLog {
     private var presses = 0
     private var kept = 0
     private var textKeys = 0
+    private var lastPressMillis: Long? = null
+
+    @Synchronized
+    fun heartbeat(nowMillis: Long): Pair<Int, Long> = (presses + textKeys) to
+        (lastPressMillis?.let { ((nowMillis - it).coerceAtLeast(0)) / 1000 } ?: -1L)
 
     @Synchronized
     fun bound(nowMillis: Long = System.currentTimeMillis()) {
@@ -43,6 +48,7 @@ internal object WheelKeyLog {
     @Synchronized
     fun press(code: Int, scan: Int, device: Int, kept: Boolean, detail: String?, text: Boolean,
         nowMillis: Long = System.currentTimeMillis()) {
+        lastPressMillis = nowMillis
         if (text) {
             textKeys++
             return
@@ -104,5 +110,6 @@ internal object WheelKeyLog {
         presses = 0
         kept = 0
         textKeys = 0
+        lastPressMillis = null
     }
 }

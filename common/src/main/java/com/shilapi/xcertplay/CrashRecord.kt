@@ -5,6 +5,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import java.io.File
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -74,6 +76,7 @@ internal object CrashRecord {
 class CrashRecordInstaller : ContentProvider() {
     override fun onCreate(): Boolean {
         context?.let(CrashRecord::install)
+        context?.let { runCatching { DiagnosticHeartbeat.start(it, Handler(Looper.getMainLooper())) } }
         return true
     }
 

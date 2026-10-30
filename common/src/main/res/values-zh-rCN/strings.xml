@@ -1034,4 +1034,9 @@
     <string name="settings_seal_performance_group">分辨率与帧率</string>
     <string name="settings_seal_video_group">视频输出</string>
     <string name="settings_description_for">%1$s的说明</string>
+    <string name="settings_mark_problem">标记此刻出了问题</string>
+    <string name="settings_mark_audio">声音断了</string>
+    <string name="settings_mark_video">画面卡了</string>
+    <string name="settings_mark_link">连接断了</string>
+    <string name="settings_mark_other">其他</string>
 </resources>

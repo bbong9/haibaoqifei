@@ -1064,4 +1064,9 @@
     <string name="settings_seal_performance_group">Risoluzione e frequenza</string>
     <string name="settings_seal_video_group">Uscita video</string>
     <string name="settings_description_for">Descrizione di %1$s</string>
+    <string name="settings_mark_problem">Segna un problema ora</string>
+    <string name="settings_mark_audio">Audio interrotto</string>
+    <string name="settings_mark_video">Immagine bloccata</string>
+    <string name="settings_mark_link">Connessione interrotta</string>
+    <string name="settings_mark_other">Altro</string>
 </resources>

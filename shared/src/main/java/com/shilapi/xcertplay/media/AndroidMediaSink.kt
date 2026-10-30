@@ -438,6 +438,10 @@ class AndroidMediaSink(
     /** Running totals of the main screen's decoder for a live FPS counter; null while it has none. */
     fun liveVideoCounters(): LiveVideoCounters? = videoDecoders[MAIN_SCREEN_TYPE]?.liveCounters()
 
+    fun liveVideoCounters(type: Int): LiveVideoCounters? = videoDecoders[type]?.liveCounters()
+
+    fun isScreenStreamActive(type: Int): Boolean = synchronized(screenStateLock) { type in activeScreenTypes }
+
     fun refreshPicture(type: Int) {
         videoDecoders[type]?.refreshPicture()
     }

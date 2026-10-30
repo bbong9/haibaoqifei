@@ -1062,4 +1062,9 @@
     <string name="settings_seal_performance_group">Çözünürlük ve kare hızı</string>
     <string name="settings_seal_video_group">Video çıkışı</string>
     <string name="settings_description_for">%1$s açıklaması</string>
+    <string name="settings_mark_problem">Şu andaki sorunu işaretle</string>
+    <string name="settings_mark_audio">Ses kesildi</string>
+    <string name="settings_mark_video">Görüntü dondu</string>
+    <string name="settings_mark_link">Bağlantı kesildi</string>
+    <string name="settings_mark_other">Diğer</string>
 </resources>

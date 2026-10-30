@@ -974,4 +974,9 @@
     <string name="settings_seal_performance_group">Разрешение и частота кадров</string>
     <string name="settings_seal_video_group">Вывод видео</string>
     <string name="settings_description_for">Описание: %1$s</string>
+    <string name="settings_mark_problem">Отметить проблему сейчас</string>
+    <string name="settings_mark_audio">Пропал звук</string>
+    <string name="settings_mark_video">Изображение зависло</string>
+    <string name="settings_mark_link">Соединение прервалось</string>
+    <string name="settings_mark_other">Другое</string>
 </resources>

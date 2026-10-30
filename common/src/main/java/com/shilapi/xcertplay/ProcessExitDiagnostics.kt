@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 
@@ -17,6 +18,18 @@ internal object ProcessExitDiagnostics {
         val pssKiB: Long,
         val rssKiB: Long,
     )
+
+    fun recordProblems(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val manager = context.getSystemService(ActivityManager::class.java) ?: return
+        runCatching {
+            manager.getHistoricalProcessExitReasons(context.packageName, 0, MAX_RECORDS)
+                .filter { it.timestamp in 1..System.currentTimeMillis() &&
+                    (it.reason == ApplicationExitInfo.REASON_LOW_MEMORY ||
+                        it.reason == ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE) }
+                .forEach { LastConnectionProblem.record(context, LastConnectionProblem.Kind.PROCESS_KILLED, it.timestamp) }
+        }
+    }
 
     fun report(context: Context): String {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return UNSUPPORTED
