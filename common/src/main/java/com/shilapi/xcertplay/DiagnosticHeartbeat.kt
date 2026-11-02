@@ -29,6 +29,7 @@ internal object SessionDiagnosticLog {
         }.getOrDefault("unknown")
         idlePath = path
         idleHeader = "DiPlay log started pid=${Process.myPid()} version=$version"
+        SessionLogFile.setRotationHeader(File(path), idleHeader)
         idleHeaderWritten = active?.file?.absolutePath == path
     }
     @Synchronized fun bind(target: SessionLogFile) {
@@ -91,9 +92,8 @@ internal class VideoStallTracker {
         return null
     }
 
-    fun shouldRecordProblem(receivedFps: Double, activity: String, surface: String): Boolean {
-        if (!reported || problemReported ||
-            (receivedFps >= 5.0 && (activity != "resumed" || surface != "valid"))) return false
+    fun shouldRecordProblem(activity: String, surface: String): Boolean {
+        if (!reported || problemReported || activity != "resumed" || surface != "valid") return false
         problemReported = true
         return true
     }
@@ -156,7 +156,7 @@ internal object DiagnosticHeartbeat {
                 stall.sample(main.startMs, now, main.received, main.shown, activity, surfaceState)?.let {
                     SessionDiagnosticLog.append(app, it)
                 }
-                if (stall.shouldRecordProblem(main.received, activity, surfaceState)) {
+                if (stall.shouldRecordProblem(activity, surfaceState)) {
                     LastConnectionProblem.record(app, LastConnectionProblem.Kind.VIDEO_STALL)
                 }
             }
@@ -187,7 +187,7 @@ internal object DiagnosticHeartbeat {
         this.context = app
         this.handler = handler
         SessionDiagnosticLog.configure(app)
-        audio = CarAudioDiagnostics(app, handler) { SessionDiagnosticLog.append(app, it) }.also { it.start() }
+        audio = CarAudioDiagnostics(app) { SessionDiagnosticLog.append(app, it) }.also { it.start() }
         CarPlayMediaKeys.diagnosticPlaybackListener = { playing -> handler.post { audio?.playbackChanged(playing) } }
         lastHeartbeat = SystemClock.elapsedRealtime()
         handler.postDelayed(tick, SAMPLE_MS)
@@ -205,9 +205,5 @@ internal object DiagnosticHeartbeat {
         sink = null
         surface = null
         activity = "stopped"
-    }
-    fun probe() {
-        audio?.probe("start")
-        handler?.postDelayed({ audio?.probe("after30s") }, 30_000L)
     }
 }

@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
 import android.text.format.DateUtils
@@ -59,7 +60,10 @@ internal object LastConnectionProblem {
     private const val PROBLEM_COALESCE_MILLIS = 60_000L
 
     fun follow(context: Context, status: CarPlayStatus, recordDiagnostic: Boolean = true) {
-        if (recordDiagnostic && status is CarPlayStatus.Failed) record(context, Kind.HOST_FAILED)
+        if (recordDiagnostic && status is CarPlayStatus.Failed &&
+            (context !is Activity || (!context.isFinishing && !context.isDestroyed))) {
+            record(context, Kind.HOST_FAILED)
+        }
         val problem = when (status) {
             is CarPlayStatus.Failed -> status.knownCause?.let(ConnectionProblem::Cause)
                 ?: status.startupFailure?.let(ConnectionProblem::Startup)

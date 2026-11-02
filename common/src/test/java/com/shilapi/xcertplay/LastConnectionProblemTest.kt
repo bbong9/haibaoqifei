@@ -139,6 +139,40 @@ class LastConnectionProblemTest {
         assertEquals(context.getString(R.string.car_hotspot_is_off), remembered())
     }
 
+    @Test fun failureAfterFinishingOrDestructionDoesNotRecordAHostProblem() {
+        val failure = CarPlayStatus.Failed("timeout", startupFailure = WirelessStartupFailure.FIRST_TCP_TIMEOUT)
+        val finishing = host().apply {
+            ReflectionHelpers.setField(this, "menuOpen", true)
+            finish()
+        }
+        assertTrue(finishing.isFinishing)
+        finishing.report(failure)
+        assertTrue(LastConnectionProblem.recentProblems(context).isEmpty())
+        LastConnectionProblem.follow(finishing, failure)
+        assertTrue(LastConnectionProblem.recentProblems(context).isEmpty())
+
+        val destroyed = host().apply {
+            ReflectionHelpers.setField(this, "menuOpen", true)
+            ReflectionHelpers.setField(this, "mDestroyed", true)
+        }
+        assertTrue(destroyed.isDestroyed)
+        destroyed.report(failure)
+        assertTrue(LastConnectionProblem.recentProblems(context).isEmpty())
+        LastConnectionProblem.follow(destroyed, failure)
+        assertTrue(LastConnectionProblem.recentProblems(context).isEmpty())
+    }
+
+    @Test fun liveStartupTimeoutRecordsOneHostProblemAndKeepsTheOriginalCause() {
+        val host = host()
+        host.report(CarPlayStatus.Failed("timeout", startupFailure = WirelessStartupFailure.FIRST_TCP_TIMEOUT))
+        assertEquals("hostFailed", LastConnectionProblem.recentProblems(context).single().kind)
+        assertEquals(ConnectionProblem.Startup(WirelessStartupFailure.FIRST_TCP_TIMEOUT),
+            LastConnectionProblem.load(context)?.problem)
+        val report = LastConnectionProblem.report(context)
+        assertTrue(report, report.lines().first().contains("kind=hostFailed"))
+        assertTrue(report, report.contains("(startup:FIRST_TCP_TIMEOUT)"))
+    }
+
     @Test fun aSessionThatStartsForgetsTheProblem() {
         val host = host()
         host.report(notPaired)

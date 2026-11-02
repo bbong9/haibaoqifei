@@ -100,7 +100,7 @@ class DiagnosticEnhancementTest {
 
         val lines = mutableListOf<String>()
         val context = RuntimeEnvironment.getApplication()
-        val audio = CarAudioDiagnostics(context, Handler(Looper.getMainLooper()), lines::add)
+        val audio = CarAudioDiagnostics(context, lines::add)
         val receiver = ReflectionHelpers.getField<BroadcastReceiver>(audio, "receiver")
         fun emit(action: String, state: Int, previous: Int = -1) = receiver.onReceive(context, Intent(action)
             .putExtra(BluetoothProfile.EXTRA_STATE, state).putExtra(BluetoothProfile.EXTRA_PREVIOUS_STATE, previous)
@@ -109,11 +109,13 @@ class DiagnosticEnhancementTest {
         emit(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED, BluetoothProfile.STATE_CONNECTED, BluetoothProfile.STATE_CONNECTING)
         emit(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED, BluetoothA2dp.STATE_PLAYING)
         emit(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED, BluetoothProfile.STATE_DISCONNECTED)
+        emit(BluetoothAdapter.ACTION_STATE_CHANGED, BluetoothAdapter.STATE_TURNING_OFF)
         assertEquals("Car audio: adapter state=on", lines[0])
         assertEquals("Car audio: a2dp state=connected prev=connecting", lines[2])
         assertEquals("Car audio: a2dp playing=playing", lines[4])
         assertEquals("Car audio: hfp state=disconnected", lines[6])
-        assertEquals(4, lines.count { it.startsWith("Car audio: route ") })
+        assertEquals("Car audio: adapter state=turningOff", lines[8])
+        assertEquals(5, lines.count { it.startsWith("Car audio: route ") })
         audio.playbackChanged(true); audio.playbackChanged(true); audio.playbackChanged(false)
         assertEquals(listOf("Now playing: state=playing", "Now playing: state=paused"), lines.takeLast(2))
         assertSafe(lines)
@@ -135,20 +137,28 @@ class DiagnosticEnhancementTest {
         assertSafe(listOf(line, first, ended))
     }
 
-    @Test fun probeAlwaysReportsBothMomentsEvenWithoutAnAdapter() {
+    @Test fun carBluetoothAudioKeepsItsNoticeWithoutSchedulingAProbe() {
         val app = RuntimeEnvironment.getApplication()
-        val noBluetooth = object : ContextWrapper(app) {
-            override fun getSystemService(name: String): Any? =
-                if (name == Context.BLUETOOTH_SERVICE) null else super.getSystemService(name)
+        DiagnosticHeartbeat.start(app, Handler(Looper.getMainLooper()))
+        val host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        val file = temp.newFile("audio.log")
+        val log = SessionLogFile(file)
+        ReflectionHelpers.setField(host, "sessionLog", log)
+        try {
+            ReflectionHelpers.callInstanceMethod<Unit>(host, "logCarBluetoothAudio")
+            shadowOf(Looper.getMainLooper()).idleFor(35, TimeUnit.SECONDS)
+            assertTrue(log.awaitIdle(2_000))
+            assertTrue(SessionDiagnosticLog.awaitIdle(2_000))
+            val lines = file.readLines()
+            assertEquals(1, lines.count { it.endsWith("Car Bluetooth audio: on; CarPlay audio not offered") })
+            val diagnosticFile = File(app.filesDir, "logs/diplay.log")
+            assertFalse(diagnosticFile.takeIf { it.isFile }?.readText().orEmpty().contains("Car audio: probe"))
+            assertSafe(lines)
+        } finally {
+            log.close()
+            ReflectionHelpers.getField<Handler>(DiagnosticHeartbeat, "handler")
+                .removeCallbacks(ReflectionHelpers.getField(DiagnosticHeartbeat, "tick"))
         }
-        val lines = mutableListOf<String>()
-        val audio = CarAudioDiagnostics(noBluetooth, Handler(Looper.getMainLooper()), lines::add)
-        audio.probe("start")
-        audio.probe("after30s")
-        assertEquals(listOf("Car audio: probe moment=start a2dpConnected=-1 hfpConnected=-1",
-            "Car audio: probe moment=after30s a2dpConnected=-1 hfpConnected=-1"), lines.filter { it.startsWith("Car audio: probe") })
-        assertEquals(2, lines.count { it.startsWith("Car audio: route ") })
-        assertSafe(lines)
     }
 
     @Test fun realHeartbeatWritesWhenThereIsNoSession() {
@@ -175,7 +185,7 @@ class DiagnosticEnhancementTest {
         assertNotNull(ReflectionHelpers.getField<Handler>(DiagnosticHeartbeat, "handler"))
     }
 
-    @Test fun realSamplingRecordsAStallOnceThenItsRecoveryAndProblem() {
+    @Test fun realBackgroundSamplingLogsAStallOnceThenItsRecovery() {
         val app = RuntimeEnvironment.getApplication()
         LastConnectionProblem.clear(app)
         CarPlayBackgroundSession.clear()
@@ -196,7 +206,7 @@ class DiagnosticEnhancementTest {
             assertEquals(events.toString(), 2, events.size)
             assertTrue(events[0], events[0].contains("stream=main fps=0 shownFps=0 durationS=10 activity=stopped surface=none"))
             assertTrue(events[1], events[1].contains("Video stall: ended durationS=15"))
-            assertEquals("videoStall", LastConnectionProblem.recentProblems(app).single().kind)
+            assertTrue(LastConnectionProblem.recentProblems(app).isEmpty())
             assertSafe(events)
         } finally {
             DiagnosticHeartbeat.detach(owner)
@@ -213,8 +223,8 @@ class DiagnosticEnhancementTest {
         DiagnosticHeartbeat.start(app, Handler(Looper.getMainLooper()))
         val sink = mock(AndroidMediaSink::class.java)
         val owner = Any()
-        DiagnosticHeartbeat.attach(owner, { sink }, { false })
-        DiagnosticHeartbeat.state(owner, "stopped")
+        DiagnosticHeartbeat.attach(owner, { sink }, { true })
+        DiagnosticHeartbeat.state(owner, "resumed")
         CarPlayBackgroundSession.active = true
         try {
             shadowOf(Looper.getMainLooper()).idleFor(15, TimeUnit.SECONDS)
@@ -264,7 +274,7 @@ class DiagnosticEnhancementTest {
             )
             shadowOf(Looper.getMainLooper()).idleFor(15, TimeUnit.SECONDS)
             assertTrue(SessionDiagnosticLog.awaitIdle(2_000))
-            assertEquals("videoStall", LastConnectionProblem.recentProblems(app).single().kind)
+            assertTrue(LastConnectionProblem.recentProblems(app).isEmpty())
             assertEquals(1, File(app.filesDir, "logs/diplay.log").readLines().count { it.contains("Video stall:") })
         } finally {
             DiagnosticHeartbeat.detach(owner)
@@ -275,26 +285,32 @@ class DiagnosticEnhancementTest {
         }
     }
 
-    @Test fun backgroundLowReceiveIsLoggedAndRecordedAsAProblem() {
+    @Test fun backgroundLowReceiveIsLoggedButNotRecordedAsAProblem() {
         val app = RuntimeEnvironment.getApplication()
         LastConnectionProblem.clear(app)
         CarPlayBackgroundSession.clear()
         DiagnosticHeartbeat.start(app, Handler(Looper.getMainLooper()))
         val sink = mock(AndroidMediaSink::class.java)
         `when`(sink.liveVideoCounters(110)).thenReturn(
-            LiveVideoCounters(0, 0, 0, 0), LiveVideoCounters(10, 0, 0, 0), LiveVideoCounters(20, 0, 0, 0),
+            LiveVideoCounters(0, 0, 0, 0), LiveVideoCounters(5, 0, 0, 0),
+            LiveVideoCounters(10, 0, 0, 0), LiveVideoCounters(15, 0, 0, 0),
         )
         val owner = Any()
         DiagnosticHeartbeat.attach(owner, { sink }, { false })
         DiagnosticHeartbeat.state(owner, "paused")
         CarPlayBackgroundSession.active = true
         try {
-            shadowOf(Looper.getMainLooper()).idleFor(17, TimeUnit.SECONDS)
+            shadowOf(Looper.getMainLooper()).idleFor(20, TimeUnit.SECONDS)
             assertTrue(SessionDiagnosticLog.awaitIdle(2_000))
             val events = File(app.filesDir, "logs/diplay.log").readLines().filter { it.contains("Video stall:") }
             assertEquals(events.toString(), 1, events.size)
-            assertTrue(events.single(), events.single().contains("fps=2 shownFps=0 durationS=10 activity=paused surface=none"))
-            assertEquals("videoStall", LastConnectionProblem.recentProblems(app).single().kind)
+            assertTrue(events.single(), events.single().contains("fps=1 shownFps=0 durationS=10 activity=paused surface=none"))
+            assertTrue(LastConnectionProblem.recentProblems(app).isEmpty())
+            assertSafe(events)
+            println("CARD28_BACKGROUND_BEGIN")
+            println(events.single())
+            println(LastConnectionProblem.report(app))
+            println("CARD28_BACKGROUND_END")
         } finally {
             DiagnosticHeartbeat.detach(owner)
             CarPlayBackgroundSession.clear()
@@ -302,6 +318,83 @@ class DiagnosticEnhancementTest {
             ReflectionHelpers.getField<Handler>(DiagnosticHeartbeat, "handler")
                 .removeCallbacks(ReflectionHelpers.getField(DiagnosticHeartbeat, "tick"))
         }
+    }
+
+    @Test fun foregroundZeroFramesAreLoggedAndRecordedAsAProblem() {
+        val app = RuntimeEnvironment.getApplication()
+        LastConnectionProblem.clear(app)
+        CarPlayBackgroundSession.clear()
+        DiagnosticHeartbeat.start(app, Handler(Looper.getMainLooper()))
+        val sink = mock(AndroidMediaSink::class.java)
+        `when`(sink.liveVideoCounters(110)).thenReturn(LiveVideoCounters(0, 0, 0, 0))
+        val owner = Any()
+        DiagnosticHeartbeat.attach(owner, { sink }, { true })
+        DiagnosticHeartbeat.state(owner, "resumed")
+        CarPlayBackgroundSession.active = true
+        try {
+            shadowOf(Looper.getMainLooper()).idleFor(17, TimeUnit.SECONDS)
+            assertTrue(SessionDiagnosticLog.awaitIdle(2_000))
+            val events = File(app.filesDir, "logs/diplay.log").readLines().filter { it.contains("Video stall:") }
+            assertEquals(events.toString(), 1, events.size)
+            assertTrue(events.single(), events.single().contains("fps=0 shownFps=0 durationS=10 activity=resumed surface=valid"))
+            assertEquals("videoStall", LastConnectionProblem.recentProblems(app).single().kind)
+            assertSafe(events)
+            println("CARD28_FOREGROUND_BEGIN")
+            println(events.single())
+            println(LastConnectionProblem.report(app))
+            println("CARD28_FOREGROUND_END")
+        } finally {
+            DiagnosticHeartbeat.detach(owner)
+            CarPlayBackgroundSession.clear()
+            LastConnectionProblem.clear(app)
+            ReflectionHelpers.getField<Handler>(DiagnosticHeartbeat, "handler")
+                .removeCallbacks(ReflectionHelpers.getField(DiagnosticHeartbeat, "tick"))
+        }
+    }
+
+    @Test fun backgroundStallBecomesOneProblemOnlyAfterReturningToAValidForeground() {
+        val app = RuntimeEnvironment.getApplication()
+        LastConnectionProblem.clear(app)
+        CarPlayBackgroundSession.clear()
+        DiagnosticHeartbeat.start(app, Handler(Looper.getMainLooper()))
+        val sink = mock(AndroidMediaSink::class.java)
+        `when`(sink.liveVideoCounters(110)).thenReturn(LiveVideoCounters(0, 0, 0, 0))
+        val owner = Any()
+        var valid = false
+        DiagnosticHeartbeat.attach(owner, { sink }, { valid })
+        DiagnosticHeartbeat.state(owner, "stopped")
+        CarPlayBackgroundSession.active = true
+        try {
+            shadowOf(Looper.getMainLooper()).idleFor(20, TimeUnit.SECONDS)
+            assertTrue(LastConnectionProblem.recentProblems(app).isEmpty())
+            DiagnosticHeartbeat.state(owner, "resumed")
+            shadowOf(Looper.getMainLooper()).idleFor(5, TimeUnit.SECONDS)
+            assertTrue(LastConnectionProblem.recentProblems(app).isEmpty())
+            valid = true
+            shadowOf(Looper.getMainLooper()).idleFor(10, TimeUnit.SECONDS)
+            assertEquals("videoStall", LastConnectionProblem.recentProblems(app).single().kind)
+            assertTrue(SessionDiagnosticLog.awaitIdle(2_000))
+            val events = File(app.filesDir, "logs/diplay.log").readLines().filter { it.contains("Video stall:") }
+            assertEquals(events.toString(), 1, events.size)
+            assertTrue(events.single(), events.single().contains("activity=stopped surface=none"))
+        } finally {
+            DiagnosticHeartbeat.detach(owner)
+            CarPlayBackgroundSession.clear()
+            LastConnectionProblem.clear(app)
+            ReflectionHelpers.getField<Handler>(DiagnosticHeartbeat, "handler")
+                .removeCallbacks(ReflectionHelpers.getField(DiagnosticHeartbeat, "tick"))
+        }
+    }
+
+    @Test fun stallTrackerReportsAProblemOnlyOnceAfterForegroundAndSurfaceAreValid() {
+        val stall = VideoStallTracker()
+        assertNull(stall.sample(0, 5_000, 1.0, 0.0, "paused", "none"))
+        assertNotNull(stall.sample(5_000, 10_000, 1.0, 0.0, "paused", "none"))
+        assertFalse(stall.shouldRecordProblem("paused", "none"))
+        assertFalse(stall.shouldRecordProblem("stopped", "valid"))
+        assertFalse(stall.shouldRecordProblem("resumed", "none"))
+        assertTrue(stall.shouldRecordProblem("resumed", "valid"))
+        assertFalse(stall.shouldRecordProblem("resumed", "valid"))
     }
 
     @Test fun foregroundDisplayStallWithValidSurfaceIsRecordedAsAProblem() {

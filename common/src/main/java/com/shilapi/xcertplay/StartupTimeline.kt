@@ -67,6 +67,8 @@ internal object StartupTimeline {
                 val log = SessionLogFile(File(app.filesDir, "logs/startup/timeline.log").apply {
                     parentFile?.mkdirs()
                 })
+                SessionLogFile.setRotationHeader(log.file,
+                    "Startup timeline continued pid=${Process.myPid()} version=${info.versionName ?: "none"}/$code")
                 AsyncDiagnosticLog.append(
                     log,
                     formatLine(

@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import java.io.Closeable
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /** Bounded, private diagnostics. Each write is redacted before touching storage. */
 internal class SessionLogFile(val file: File) : Closeable {
@@ -15,6 +16,7 @@ internal class SessionLogFile(val file: File) : Closeable {
     fun reset(header: String) = synchronized(lock) {
         if (!closed) {
             file.parentFile?.mkdirs()
+            setRotationHeader(file, header)
             rotate()
             file.writeText("")
             write(header)
@@ -52,10 +54,14 @@ internal class SessionLogFile(val file: File) : Closeable {
     }
     companion object {
         private val fileLocks = mutableMapOf<String, Any>()
+        private val rotationHeaders = ConcurrentHashMap<String, String>()
         private fun fileLock(file: File): Any = synchronized(fileLocks) {
             fileLocks.getOrPut(file.absolutePath) { Any() }
         }
         internal fun appendStandalone(file: File, line: String) = synchronized(fileLock(file)) { writeFile(file, line) }
+        internal fun setRotationHeader(file: File, header: String) = synchronized(fileLock(file)) {
+            rotationHeaders[file.absolutePath] = header
+        }
 
         private fun writeFile(file: File, line: String) {
             val safe = DiagnosticRedactor.redact(DiagnosticLogTime.line(line)) ?: return
@@ -65,6 +71,11 @@ internal class SessionLogFile(val file: File) : Closeable {
                 if (file.length() > MAX_BYTES) {
                     rotateFile(file)
                     file.writeText("")
+                    rotationHeaders[file.absolutePath]?.let { header ->
+                        DiagnosticRedactor.redact(DiagnosticLogTime.line(header))?.let {
+                            file.appendBytes((it + "\n").toByteArray())
+                        }
+                    }
                 }
                 file.appendBytes(bytes)
             }

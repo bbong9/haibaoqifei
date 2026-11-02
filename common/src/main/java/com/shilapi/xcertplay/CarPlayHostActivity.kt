@@ -5225,10 +5225,8 @@ open class CarPlayHostActivity : ComponentActivity() {
         )
     }
 
-    /** Car Bluetooth audio: shows whether the iPhone keeps A2DP/HFP with the car now and once CarPlay runs. */
     private fun logCarBluetoothAudio() {
         appendLog("Car Bluetooth audio: on; CarPlay audio not offered")
-        DiagnosticHeartbeat.probe()
     }
 
     private fun loadAirPlayIcon(): AirPlayIcon {
@@ -5594,7 +5592,9 @@ open class CarPlayHostActivity : ComponentActivity() {
                 })
         }
         if (controllerGeneration != restartGeneration) return@report
-        if (status is CarPlayStatus.Failed) LastConnectionProblem.record(this, LastConnectionProblem.Kind.HOST_FAILED)
+        if (status is CarPlayStatus.Failed && !isFinishing && !isDestroyed) {
+            LastConnectionProblem.record(this, LastConnectionProblem.Kind.HOST_FAILED)
+        }
         if (status is CarPlayStatus.RunningControl || status is CarPlayStatus.RunningWireless) {
             controlRunningCount++
             lossSinceControlRunning = false

@@ -11,12 +11,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.os.Build
-import android.os.Handler
 
 /** The receiver consumes state codes only, never BluetoothDevice extras. */
 internal class CarAudioDiagnostics(
     private val context: Context,
-    private val handler: Handler,
     private val log: (String) -> Unit,
 ) {
     var adapterState = "unknown"; private set
@@ -79,40 +77,6 @@ internal class CarAudioDiagnostics(
         log("Now playing: state=$state")
     }
 
-    fun probe(moment: String) {
-        require(moment == "start" || moment == "after30s")
-        val current = adapter
-        var a2dp = -1
-        var hfp = -1
-        var remaining = 2
-        var written = false
-        fun finish() {
-            if (written) return
-            written = true
-            log("Car audio: probe moment=$moment a2dpConnected=$a2dp hfpConnected=$hfp")
-            log(route())
-        }
-        fun completed(profile: Int, count: Int) {
-            if (profile == BluetoothProfile.A2DP) a2dp = count else hfp = count
-            remaining--
-            if (remaining == 0) finish()
-        }
-        for (profile in listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET)) {
-            val requested = current != null && runCatching {
-                current.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
-                    override fun onServiceConnected(id: Int, proxy: BluetoothProfile) {
-                        val count = runCatching { proxy.connectedDevices.size }.getOrDefault(-1)
-                        runCatching { current.closeProfileProxy(id, proxy) }
-                        handler.post { if (!written) completed(profile, count) }
-                    }
-                    override fun onServiceDisconnected(id: Int) = Unit
-                }, profile)
-            }.getOrDefault(false)
-            if (!requested) completed(profile, -1)
-        }
-        if (!written) handler.postDelayed({ finish() }, PROBE_TIMEOUT_MS)
-    }
-
     @Suppress("DEPRECATION")
     private fun route(): String {
         val audio = context.getSystemService(AudioManager::class.java)
@@ -123,7 +87,6 @@ internal class CarAudioDiagnostics(
     }
 
     companion object {
-        private const val PROBE_TIMEOUT_MS = 2_000L
         fun adapterState(state: Int): String = when (state) {
             BluetoothAdapter.STATE_ON -> "on"
             BluetoothAdapter.STATE_OFF -> "off"
