@@ -2190,6 +2190,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             toggle(card, getString(R.string.settings_car_bluetooth_audio), getString(R.string.settings_car_bluetooth_audio_description),
                 AirPlayPersistence.loadCarBluetoothAudio(this)) {
                 AirPlayPersistence.saveCarBluetoothAudio(this, it)
+                runCatching {
+                    SessionDiagnosticLog.append(applicationContext,
+                        "Car audio: setting carAudio=${if (it) "bluetooth" else "carplay"}")
+                }
                 reconnectIfRunning()
             }
         }

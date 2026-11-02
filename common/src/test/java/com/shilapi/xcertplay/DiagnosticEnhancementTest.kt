@@ -123,7 +123,7 @@ class DiagnosticEnhancementTest {
 
     @Test fun heartbeatAndVideoStallAreBoundedAndDeduplicated() {
         val line = HeartbeatSnapshot("stopped", "none", -1, -1, "none", "off", "unknown", "unknown",
-            "disconnected", "unknown", 0, -1).line()
+            "disconnected", "unknown", "carplay", 0, -1).line()
         assertTrue(line.contains("session=none"))
         val stall = VideoStallTracker()
         assertNull(stall.sample(0, 5000, 4.0, 0.0, "stopped", "none"))
@@ -515,7 +515,7 @@ class DiagnosticEnhancementTest {
         SessionLogFile(File(logs, "diplay.log")).use { log ->
             log.appendNow("2026-10-30 12:00:00.000  DiPlay log started pid=42 version=0.2.22-seal.28/62")
             log.appendNow("2026-10-30 12:01:00.000  " + HeartbeatSnapshot("stopped", "none", -1, -1,
-                "none", "on", "connected", "playing", "disconnected", "paused", 3, 12).line())
+                "none", "on", "connected", "playing", "disconnected", "paused", "carplay", 3, 12).line())
             log.appendNow("2026-10-30 12:01:01.000  Car audio: a2dp state=connected prev=connecting")
             log.appendNow("2026-10-30 12:01:02.000  USER_MARK kind=video")
         }

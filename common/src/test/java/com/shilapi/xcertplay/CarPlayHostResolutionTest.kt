@@ -8,7 +8,9 @@ import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -22,6 +24,7 @@ import java.util.concurrent.ExecutorService
 @Config(sdk = [29])
 @LooperMode(LooperMode.Mode.PAUSED)
 class CarPlayHostResolutionTest {
+    @get:Rule val temp = TemporaryFolder()
     private lateinit var activity: CarPlayHostActivity
 
     @Before fun setUp() {
@@ -101,6 +104,28 @@ class CarPlayHostResolutionTest {
         assertEquals(1920, display.widthPixels)
         assertEquals(990, display.heightPixels)
         assertEquals(100, get("displayScalePercent"))
+    }
+
+    @Test fun sessionAudioNoticeMatchesBothConfiguredOutputModes() {
+        val file = temp.newFile("diplay.log")
+        val log = SessionLogFile(file)
+        set("sessionLog", log)
+        try {
+            for (enabled in listOf(false, true)) {
+                AirPlayPersistence.saveCarBluetoothAudio(activity, enabled)
+                assertEquals(enabled, config(100).disableAudioOutput)
+            }
+            assertTrue(log.awaitIdle(2_000))
+            val notices = file.readLines().filter { it.contains("Car Bluetooth audio:") }
+            assertEquals(2, notices.size)
+            assertTrue(notices[0], notices[0].endsWith("Car Bluetooth audio: off; CarPlay audio offered"))
+            assertTrue(notices[1], notices[1].endsWith("Car Bluetooth audio: on; CarPlay audio not offered"))
+            notices.forEach { assertEquals(it, DiagnosticRedactor.redact(it)) }
+        } finally {
+            log.close()
+            set("sessionLog", null)
+            AirPlayPersistence.saveCarBluetoothAudio(activity, false)
+        }
     }
 
     @Test fun supersamplingDoesNotSilentlyFallBackToASoftwareDecoder() {

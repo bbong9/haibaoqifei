@@ -58,11 +58,11 @@ internal object SessionDiagnosticLog {
 internal data class HeartbeatSnapshot(
     val activity: String, val session: String, val mainFps: Int, val clusterFps: Int,
     val surface: String, val btAdapter: String, val a2dp: String, val a2dpPlaying: String,
-    val hfp: String, val playback: String, val wheelKeys: Int, val lastWheelKeyAgeS: Long,
+    val hfp: String, val playback: String, val carAudio: String, val wheelKeys: Int, val lastWheelKeyAgeS: Long,
 ) {
     fun line(): String = "Heartbeat: activity=$activity session=$session mainFps=$mainFps clusterFps=$clusterFps " +
         "surface=$surface btAdapter=$btAdapter a2dp=$a2dp a2dpPlaying=$a2dpPlaying hfp=$hfp " +
-        "playback=$playback wheelKeys=$wheelKeys lastWheelKeyAgeS=$lastWheelKeyAgeS"
+        "playback=$playback carAudio=$carAudio wheelKeys=$wheelKeys lastWheelKeyAgeS=$lastWheelKeyAgeS"
 }
 
 internal class VideoStallTracker {
@@ -163,9 +163,12 @@ internal object DiagnosticHeartbeat {
             if (now - lastHeartbeat >= HEARTBEAT_MS) {
                 val car = audio ?: return
                 val (keys, age) = WheelKeyLog.heartbeat(System.currentTimeMillis())
+                val carAudio = runCatching {
+                    if (AirPlayPersistence.loadCarBluetoothAudio(app)) "bluetooth" else "carplay"
+                }.getOrDefault("unknown")
                 SessionDiagnosticLog.append(app, HeartbeatSnapshot(activity, if (active) "active" else "none", mainFps,
                     clusterFps, if (valid) "valid" else "none", car.adapterState, car.a2dpState, car.a2dpPlaying,
-                    car.hfpState, car.playback, keys, age).line())
+                    car.hfpState, car.playback, carAudio, keys, age).line())
                 lastHeartbeat = now
             }
             handler?.postDelayed(this, SAMPLE_MS)
