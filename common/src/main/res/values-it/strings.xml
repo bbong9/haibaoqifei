@@ -765,6 +765,7 @@
     <string name="main_buffered_audio_description">Le app che lo supportano, come Apple Music, inviano fino a circa due minuti di musica in anticipo, così brevi interruzioni del Wi-Fi non si sentono. Le altre app mantengono lo stream normale. Riconnette CarPlay.</string>
     <string name="settings_car_bluetooth_audio">Audio di CarPlay tramite il Bluetooth dell’auto (sperimentale)</string>
     <string name="settings_car_bluetooth_audio_description">DiPlay non offre all’iPhone alcun audio CarPlay, così musica, navigazione e chiamate dovrebbero passare dalla connessione Bluetooth dell’iPhone con l’auto. Tieni l’iPhone associato all’auto e scegli Bluetooth come sorgente audio dell’auto. Se il suono viene riprodotto invece sull’iPhone, disattiva questa opzione. Riconnette CarPlay.</string>
+    <string name="settings_car_bluetooth_audio_hint">Quando questa opzione è attiva, app musicali come QQ Music potrebbero segnalare che l’uscita non è CarPlay. Puoi ignorare il messaggio. Disattivala per riprodurre l’audio tramite CarPlay e il messaggio scomparirà.</string>
     <string name="call_echo_cancellation">Cancellazione dell’eco nelle chiamate (sperimentale)</string>
     <string name="call_echo_cancellation_description">Cerca di ridurre l’eco dell’altoparlante inviato all’interlocutore durante le chiamate CarPlay. I risultati dipendono dalla head unit. Si applica alla prossima connessione CarPlay.</string>
     <string name="call_voice_filter">Voci più chiare nelle chiamate (sperimentale)</string>

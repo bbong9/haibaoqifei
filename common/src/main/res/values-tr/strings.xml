@@ -751,6 +751,7 @@
     <string name="main_buffered_audio_description">Apple Music gibi destekleyen uygulamalar yaklaşık iki dakikaya kadar müziği önceden gönderir, böylece kısa süreli Wi-Fi kopmaları duyulmaz. Diğer uygulamalar normal akışı sürdürür. CarPlay\'i yeniden bağlar.</string>
     <string name="settings_car_bluetooth_audio">Aracın Bluetooth\'u üzerinden CarPlay sesi (deneysel)</string>
     <string name="settings_car_bluetooth_audio_description">DiPlay, iPhone\'a CarPlay sesi sunmaz; böylece müzik, navigasyon ve aramalar iPhone\'un araçla olan Bluetooth bağlantısı üzerinden gider. iPhone\'u araçla eşleştirilmiş halde tutun ve aracın ses kaynağı olarak Bluetooth\'u seçin. Ses bunun yerine iPhone\'da çalarsa bunu kapatın. CarPlay\'i yeniden bağlar.</string>
+    <string name="settings_car_bluetooth_audio_hint">Bu seçenek açıkken QQ Music gibi müzik uygulamaları çıkışın CarPlay olmadığını söyleyebilir. Bu uyarıyı yok sayabilirsiniz. Sesi CarPlay üzerinden çalmak için seçeneği kapatın; uyarı kaybolur.</string>
     <string name="call_echo_cancellation">Arama yankı engelleme (deneysel)</string>
     <string name="call_echo_cancellation_description">CarPlay aramaları sırasında karşı tarafa gönderilen hoparlör yankısını azaltmaya çalışır. Sonuçlar ana üniteye bağlıdır. Bir sonraki CarPlay bağlantısında geçerli olur.</string>
     <string name="call_voice_filter">Daha net arama sesleri (deneysel)</string>

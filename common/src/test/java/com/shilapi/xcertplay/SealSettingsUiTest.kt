@@ -165,6 +165,42 @@ class SealSettingsUiTest {
         assertEquals(MfiTarget.LOCAL, AirPlayPersistence.loadMfiTarget(context))
     }
 
+    @Test fun carBluetoothAudioLivesOnceInAudioAndItsSearchResultOpensAudio() {
+        context.getSharedPreferences("xcertplay_airplay", 0).edit().remove("car_bluetooth_audio").commit()
+        assertFalse(AirPlayPersistence.loadCarBluetoothAudio(context))
+        for (seal in listOf(true, false)) {
+            AirPlayPersistence.saveCarBluetoothAudio(context, true)
+            val screen = openSettings(seal = seal)
+            val title = screen.getString(R.string.settings_car_bluetooth_audio)
+            openCategory(screen, SettingsCategory.AUDIO)
+            val content = categoryContent(screen)
+            val switches = descendants(content).filterIsInstance<Switch>()
+                .filter { it.contentDescription == title }.toList()
+            assertEquals("seal=$seal", 1, switches.size)
+            assertTrue(switches.single().isChecked)
+            switches.single().isChecked = false
+            assertFalse(AirPlayPersistence.loadCarBluetoothAudio(context))
+            val labels = descendants(content).filterIsInstance<TextView>().map { it.text.toString() }.toList()
+            val bufferIndex = labels.indexOfFirst { it.startsWith(screen.getString(R.string.settings_music_buffer_wireless)) }
+            assertTrue("seal=$seal", bufferIndex >= 0 && bufferIndex < labels.indexOf(title))
+            assertTrue(labels.contains(screen.getString(R.string.settings_car_bluetooth_audio_description) + "\n" +
+                screen.getString(R.string.settings_car_bluetooth_audio_hint)))
+
+            val results = search(screen, R.string.settings_car_bluetooth_audio).filter { it.title == title }
+            assertEquals("seal=$seal", 1, results.size)
+            assertEquals(SettingsCategory.AUDIO, results.single().category)
+            openCategory(screen, if (seal) SettingsCategory.DISPLAY else SettingsCategory.ADVANCED)
+            assertMissing(screen, R.string.settings_car_bluetooth_audio)
+            val result = results.single()
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "openSearchResult",
+                ReflectionHelpers.ClassParameter(result.javaClass, result))
+            assertEquals(SettingsCategory.AUDIO, currentCategory(screen))
+            assertEquals(1, descendants(categoryContent(screen)).filterIsInstance<Switch>()
+                .count { it.contentDescription == title })
+            screen.finish()
+        }
+    }
+
     @Test fun sealMovesAmbientAndPopupToVehicleWithoutReconnect() {
         val screen = openSettings()
         openCategory(screen, SettingsCategory.VEHICLE)
@@ -481,6 +517,14 @@ class SealSettingsUiTest {
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
+    fun carAudioCompactLargeFontScreenshot() = captureCarAudioSetting("compact-zh")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w1280dp-h800dp")
+    fun carAudioExpandedLargeFontScreenshot() = captureCarAudioSetting("expanded-zh")
+
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [29], qualifiers = "zh-rCN-w480dp-h800dp")
     fun clusterCompactLargeFontScreenshot() = captureClusterSettings("compact-zh")
 
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -588,6 +632,56 @@ class SealSettingsUiTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(sdk = [29], qualifiers = "ar-w1280dp-h800dp")
     fun card21ArabicExpandedScreenshots() = captureCard21("ar", "expanded", true)
+
+    private fun captureCarAudioSetting(name: String) {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val screen = openSettings()
+        openCategory(screen, SettingsCategory.AUDIO)
+        val scroll = categoryContent(screen)
+        val title = screen.getString(R.string.settings_car_bluetooth_audio)
+        val toggle = descendants(scroll).filterIsInstance<Switch>().single { it.contentDescription == title }
+        val row = toggle.parent as ViewGroup
+        val help = descendants(row).single {
+            it.contentDescription == screen.getString(R.string.settings_description_for, title)
+        }
+        help.performClick()
+        layoutRoot(screen)
+        val description = descendants(row).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_car_bluetooth_audio_description) + "\n" +
+                screen.getString(R.string.settings_car_bluetooth_audio_hint)
+        }
+        assertTrue(description.isShown)
+        assertTrue(row.height >= toggle.height && toggle.right <= row.width)
+        val textLayout = requireNotNull(description.layout)
+        for (line in 0 until textLayout.lineCount) assertEquals(0, textLayout.getEllipsisCount(line))
+        val bounds = Rect()
+        row.getDrawingRect(bounds)
+        scroll.offsetDescendantRectToMyCoords(row, bounds)
+        scroll.scrollTo(0, (bounds.bottom - scroll.height).coerceAtLeast(0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue("$name: row is clipped", bounds.top >= scroll.scrollY && bounds.bottom <= scroll.scrollY + scroll.height)
+        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        try {
+            val canvas = Canvas(bitmap)
+            if (root === scroll) {
+                val background = root.background
+                background?.setBounds(0, 0, root.width, root.height)
+                background?.draw(canvas)
+                root.background = null
+                canvas.translate(0f, -scroll.scrollY.toFloat())
+                try { root.draw(canvas) } finally { root.background = background }
+            } else {
+                root.draw(canvas)
+            }
+            val base = File(requireNotNull(System.getProperty("user.dir")))
+            val project = if (base.name == "common") base.parentFile else base
+            val directory = File(project, "build/seal-settings-card30").apply { mkdirs() }
+            File(directory, "$name.png").outputStream().use {
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { bitmap.recycle() }
+    }
 
     private fun captureCard21(language: String, layout: String, rtlOnly: Boolean) {
         RuntimeEnvironment.setFontScale(1.3f)

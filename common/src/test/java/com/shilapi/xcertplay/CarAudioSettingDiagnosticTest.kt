@@ -50,7 +50,7 @@ class CarAudioSettingDiagnosticTest {
             Intent(app, DiPlayActivity::class.java).putExtra("page", "settings"))
         val screen = controller.get().apply { sealEditionCheck = { false } }
         controller.setup()
-        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.ADVANCED)
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
         val setting = descendants(screen.window.decorView).filterIsInstance<Switch>()
             .single { it.contentDescription == screen.getString(R.string.settings_car_bluetooth_audio) }

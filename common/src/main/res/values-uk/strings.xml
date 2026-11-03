@@ -700,6 +700,7 @@
     <string name="main_buffered_audio_description">Застосунки, які це підтримують (наприклад, Apple Music), надсилають музику приблизно на дві хвилини наперед, тож короткі провали Wi-Fi не чути. Інші застосунки працюють як раніше. Перепідключає CarPlay.</string>
     <string name="settings_car_bluetooth_audio">Звук CarPlay через Bluetooth автомобіля (експериментально)</string>
     <string name="settings_car_bluetooth_audio_description">DiPlay не пропонує iPhone звук CarPlay, тому музика, навігація та дзвінки мають іти через Bluetooth-з’єднання iPhone з автомобілем. Залиште iPhone сполученим з автомобілем і виберіть Bluetooth джерелом звуку в автомобілі. Якщо звук іде з iPhone, вимкніть цей параметр. Перепідключає CarPlay.</string>
+    <string name="settings_car_bluetooth_audio_hint">Коли цей параметр увімкнено, музичні програми, як-от QQ Music, можуть повідомляти, що звук виводиться не через CarPlay. Це повідомлення можна ігнорувати. Вимкніть параметр, щоб звук ішов через CarPlay і повідомлення зникло.</string>
     <string name="call_echo_cancellation">Придушення луни у дзвінках (експериментально)</string>
     <string name="call_echo_cancellation_description">Намагається зменшити луну динаміків, яку чує співрозмовник під час дзвінків CarPlay. Результат залежить від головного пристрою. Застосовується під час наступного підключення CarPlay.</string>
     <string name="call_voice_filter">Чіткіші голоси у дзвінках (експериментально)</string>

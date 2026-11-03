@@ -2187,15 +2187,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 AirPlayPersistence.saveCallAtCallRate(this, it)
                 markReconnectNeeded()
             }
-            toggle(card, getString(R.string.settings_car_bluetooth_audio), getString(R.string.settings_car_bluetooth_audio_description),
-                AirPlayPersistence.loadCarBluetoothAudio(this)) {
-                AirPlayPersistence.saveCarBluetoothAudio(this, it)
-                runCatching {
-                    SessionDiagnosticLog.append(applicationContext,
-                        "Car audio: setting carAudio=${if (it) "bluetooth" else "carplay"}")
-                }
-                reconnectIfRunning()
-            }
         }
         filteredSection(content, SettingsSection.CAR_BUTTON,
             getString(R.string.car_button_in_carplay), R.drawable.ic_dp_car) { card -> carButtonCard = card; carButtonControls(card) }
@@ -2224,6 +2215,17 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
             })
             musicBufferChoice(card, wireless = true)
+            toggle(card, getString(R.string.settings_car_bluetooth_audio),
+                getString(R.string.settings_car_bluetooth_audio_description) + "\n" +
+                    getString(R.string.settings_car_bluetooth_audio_hint),
+                AirPlayPersistence.loadCarBluetoothAudio(this)) {
+                AirPlayPersistence.saveCarBluetoothAudio(this, it)
+                runCatching {
+                    SessionDiagnosticLog.append(applicationContext,
+                        "Car audio: setting carAudio=${if (it) "bluetooth" else "carplay"}")
+                }
+                reconnectIfRunning()
+            }
             if (!sealHides(SealHiddenControl.WIRED_MUSIC_BUFFER)) {
                 musicBufferChoice(card, wireless = false)
             }
