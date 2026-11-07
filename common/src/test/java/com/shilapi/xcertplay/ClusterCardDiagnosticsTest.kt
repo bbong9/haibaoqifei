@@ -119,4 +119,27 @@ class ClusterCardDiagnosticsTest {
             ClusterCardDiagnostics.remove(second)
         }
     }
+
+    @Test fun progressReportsOnlyShownOrHiddenAndTriggersAChange() {
+        val lines = mutableListOf<String>()
+        val owner = Any()
+        ClusterCardDiagnostics.listener = { lines += it }
+        fun update(progress: ClusterCardDiagnostics.Progress) {
+            ClusterCardDiagnostics.music(owner, ClusterCardDiagnostics.MusicMode.COVER, 0, 0,
+                ClusterLyricState.Field.NONE, ClusterCardDiagnostics.HideReason.NONE, -1, -1,
+                ClusterCardDiagnostics.Fit.NORMAL, progress = progress)
+        }
+        try {
+            update(ClusterCardDiagnostics.Progress.SHOWN)
+            assertTrue(lines.last().contains("progress=shown"))
+            assertEquals(lines.last(), DiagnosticRedactor.redact(lines.last()))
+            lines.clear()
+            update(ClusterCardDiagnostics.Progress.HIDDEN)
+            assertTrue(lines.single().contains("progress=hidden"))
+            assertEquals(lines.single(), DiagnosticRedactor.redact(lines.single()))
+        } finally {
+            ClusterCardDiagnostics.listener = null
+            ClusterCardDiagnostics.remove(owner)
+        }
+    }
 }

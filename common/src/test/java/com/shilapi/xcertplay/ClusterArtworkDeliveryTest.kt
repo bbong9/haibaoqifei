@@ -90,4 +90,28 @@ class ClusterArtworkDeliveryTest {
         ClusterMusicSettings.saveEnabled(context, false)
         assertEquals(false, call("albumRecoveryEnabled"))
     }
+
+    @Test fun playbackOnlyUpdatesReachClusterWithoutChangingMediaMetadata() {
+        val song = CarPlayNowPlaying(title = "A", artworkTransferId = 7,
+            durationMillis = 180_000, elapsedMillis = 10_000, playing = true)
+        val art = seed(song)
+        val updates = mutableListOf<ClusterMusicState.Snapshot>()
+        val stop = ClusterMusicState.observe { updates += it }
+        try {
+            val seek = song.copy(elapsedMillis = 45_000)
+            assertFalse(CarPlayMediaKeys.metadataChanged(song, seek))
+            `when`(controller.nowPlayingSnapshot()).thenReturn(seek)
+            call("onNowPlayingChanged", controller); idle()
+            assertEquals(45_000L, updates.last().positionMillis(updates.last().elapsedAt))
+            assertSame(art, updates.last().artwork)
+
+            val paused = seek.copy(playing = false)
+            assertFalse(CarPlayMediaKeys.metadataChanged(seek, paused))
+            `when`(controller.nowPlayingSnapshot()).thenReturn(paused)
+            call("onNowPlayingChanged", controller); idle()
+            assertFalse(updates.last().info.playing)
+            assertEquals(updates.last().positionMillis(updates.last().elapsedAt),
+                updates.last().positionMillis(updates.last().elapsedAt + 10_000))
+        } finally { stop() }
+    }
 }

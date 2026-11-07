@@ -10,7 +10,36 @@ import com.shilapi.xcertplay.media.CarPlayNowPlaying
 internal object ClusterMusicState {
     data class Snapshot(val info: CarPlayNowPlaying = CarPlayNowPlaying(), val artwork: Bitmap? = null,
         val changedAt: Long = 0L, val revision: Long = 0L, val lyrics: ClusterLyricState = ClusterLyricState(),
-        val coverDelayMs: Long = -1L, val sessionEnded: Boolean = false)
+        val coverDelayMs: Long = -1L, val sessionEnded: Boolean = false,
+        val elapsedAt: Long = 0L, val elapsedPosition: Long? = null) {
+        val hasProgress: Boolean get() = info.durationMillis?.let { it > 0L } == true &&
+            info.elapsedMillis != null && elapsedPosition != null
+
+        fun positionMillis(now: Long): Long? {
+            val duration = info.durationMillis?.takeIf { it > 0L } ?: return null
+            if (info.elapsedMillis == null) return null
+            return estimatedPosition(now)?.coerceIn(0L, duration)
+        }
+
+        private fun estimatedPosition(now: Long): Long? {
+            val base = elapsedPosition?.coerceAtLeast(0L) ?: return null
+            val delta = if (info.playing && now > elapsedAt) now - elapsedAt else 0L
+            return base + delta.coerceAtMost(Long.MAX_VALUE - base)
+        }
+
+        fun withPlayback(next: CarPlayNowPlaying, newTrack: Boolean, now: Long): Pair<Long?, Long> {
+            val elapsedChanged = info.elapsedMillis != next.elapsedMillis
+            val playingChanged = info.playing != next.playing
+            if (!elapsedChanged && !playingChanged && !newTrack) return elapsedPosition to elapsedAt
+            val position = when {
+                next.elapsedMillis == null -> null
+                elapsedChanged -> next.elapsedMillis
+                newTrack -> 0L
+                else -> estimatedPosition(now) ?: next.elapsedMillis
+            }
+            return position to now
+        }
+    }
     private val main = Handler(Looper.getMainLooper())
     private val listeners = mutableSetOf<(Snapshot) -> Unit>()
     private var state = Snapshot()
@@ -25,6 +54,10 @@ internal object ClusterMusicState {
             val lyrics = state.lyrics.update(state.info, info, now)
             val retained = if (lyrics.active) artwork ?: state.artwork?.takeUnless { it.isRecycled } else null
             val newTrack = lyrics.trackRevision != state.lyrics.trackRevision
+            // A title can contain lyrics, so a title-only change does not restart playback progress.
+            val playbackTrackChanged = state.info.album != info.album || state.info.artist != info.artist ||
+                state.info.durationMillis != info.durationMillis || state.info.artworkTransferId != info.artworkTransferId
+            val (elapsedPosition, elapsedAt) = state.withPlayback(info, playbackTrackChanged, now)
             if (!newTrack && lyrics.active && lyrics.current != null && lyrics.current != state.lyrics.current) {
                 ClusterCardDiagnostics.lineChange()
             }
@@ -39,7 +72,8 @@ internal object ClusterMusicState {
                 else -> state.coverDelayMs
             }
             state = Snapshot(info, retained, if (changed) now else state.changedAt,
-                state.revision + if (changed) 1 else 0, lyrics, coverDelay, sessionEnded && !lyrics.active)
+                state.revision + if (changed) 1 else 0, lyrics, coverDelay, sessionEnded && !lyrics.active,
+                elapsedAt, elapsedPosition)
             listeners.toList().forEach { it(state) }
         }
     }

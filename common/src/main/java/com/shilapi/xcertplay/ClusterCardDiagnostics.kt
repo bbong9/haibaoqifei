@@ -6,6 +6,7 @@ import java.util.Locale
 /** Only enums and numeric measurements enter this object; media and route text stay outside it. */
 internal object ClusterCardDiagnostics {
     enum class MusicMode { LYRICS, COVER, NONE }
+    enum class Progress { SHOWN, HIDDEN }
     enum class NightSource { MANUAL, SCHEDULE, AMBIENT, SYSTEM, FALLBACK }
     enum class HideReason(val value: String) {
         NONE("none"), EXPIRED("expired"), DISABLED("disabled"), NO_TRACK("noTrack"), NO_INFO("noInfo"),
@@ -26,6 +27,7 @@ internal object ClusterCardDiagnostics {
         val coverDelayMs: Long = -1,
         val fit: Fit = Fit.NORMAL,
         val trackRevision: Long = 0,
+        val progress: Progress = Progress.HIDDEN,
     )
     private data class Turn(val variant: TurnVariant, val night: Boolean)
     private val views = LinkedHashMap<Any, Music>()
@@ -56,10 +58,10 @@ internal object ClusterCardDiagnostics {
 
     fun music(owner: Any, mode: MusicMode, lyricLines: Int, titleChanges: Int,
         lyricField: ClusterLyricState.Field, hideReason: HideReason, confirmedAfterMs: Long,
-        coverDelayMs: Long, fit: Fit, trackRevision: Long = 0) {
+        coverDelayMs: Long, fit: Fit, trackRevision: Long = 0, progress: Progress = Progress.HIDDEN) {
         views[owner] = Music(mode, lyricLines.coerceIn(0, 2), titleChanges.coerceAtLeast(0),
             lyricField, hideReason, confirmedAfterMs.coerceAtLeast(-1), coverDelayMs.coerceAtLeast(-1), fit,
-            trackRevision)
+            trackRevision, progress)
         changed()
     }
 
@@ -99,7 +101,8 @@ internal object ClusterCardDiagnostics {
         return "Cluster music: cardVisible=${music.mode.name.lowercase(Locale.ROOT)} " +
             "hideReason=${music.hideReason.value} lyricConfirmedAfterMs=${music.confirmedAfterMs} " +
             "coverDelayMs=${music.coverDelayMs} nowPlayingUpdates=$nowPlayingUpdates " +
-            "lineChanges=$lineChanges fit=${music.fit.name.lowercase(Locale.ROOT)}"
+            "lineChanges=$lineChanges fit=${music.fit.name.lowercase(Locale.ROOT)} " +
+            "progress=${music.progress.name.lowercase(Locale.ROOT)}"
     }
 
     fun turnReport(): String? = turns.values.lastOrNull()?.let {
@@ -135,7 +138,7 @@ internal object ClusterCardDiagnostics {
             listener?.invoke(report())
         }
         val musicKey = listOf(music.mode, music.hideReason, music.fit, music.trackRevision,
-            music.confirmedAfterMs, music.coverDelayMs)
+            music.confirmedAfterMs, music.coverDelayMs, music.progress)
         if (musicKey != lastMusicKey) {
             lastMusicKey = musicKey
             listener?.invoke(musicReport())

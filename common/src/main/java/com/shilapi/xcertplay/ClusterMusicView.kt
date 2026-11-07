@@ -18,6 +18,7 @@ import android.text.TextUtils
 import android.util.TypedValue
 import android.view.View
 import com.shilapi.xcertplay.media.CarPlayNowPlaying
+import java.util.Locale
 import kotlin.math.min
 
 /** A local overlay; playback metadata and artwork remain owned by the shared media cache. */
@@ -39,11 +40,22 @@ internal class ClusterMusicView(context: Context) : View(context) {
     private var emptyReason = ClusterCardDiagnostics.HideReason.NO_TRACK
     private var diagnosticFit = ClusterCardDiagnostics.Fit.NORMAL
     private val expire = Runnable { updateVisibility() }
+    private var progressTickScheduled = false
+    private val progressTick = object : Runnable {
+        override fun run() {
+            progressTickScheduled = false
+            if (shouldRefreshProgress()) {
+                invalidate()
+                updateProgressTick()
+            }
+        }
+    }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val artworkPath = Path()
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
+    private val progressTextPaint = TextPaint(textPaint)
 
     init { visibility = GONE; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
 
@@ -90,6 +102,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         stopState?.invoke(); stopState = null
         stopSettings?.invoke(); stopSettings = null
         main.removeCallbacksAndMessages(null)
+        progressTickScheduled = false
         visibility = GONE
         snapshot = ClusterMusicState.Snapshot()
         previousArtwork = null
@@ -102,6 +115,36 @@ internal class ClusterMusicView(context: Context) : View(context) {
         diagnosticFit = ClusterCardDiagnostics.Fit.NORMAL
         ClusterCardDiagnostics.remove(this)
         super.onDetachedFromWindow()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        updateProgressTick()
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        updateProgressTick()
+    }
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        updateProgressTick()
+    }
+
+    private fun shouldRefreshProgress(): Boolean = isAttachedToWindow && isShown &&
+        windowVisibility == VISIBLE && snapshot.info.playing && snapshot.hasProgress
+
+    private fun updateProgressTick() {
+        if (shouldRefreshProgress()) {
+            if (!progressTickScheduled) {
+                progressTickScheduled = true
+                main.postDelayed(progressTick, 1_000L)
+            }
+        } else if (progressTickScheduled) {
+            main.removeCallbacks(progressTick)
+            progressTickScheduled = false
+        }
     }
 
     private fun updateVisibility() {
@@ -121,6 +164,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
             previousLyric = null
             previousLyricState = null
         }
+        updateProgressTick()
         reportDiagnostics(if (width > 0 && height > 0) cardLayout().fit else ClusterCardDiagnostics.Fit.NORMAL)
         invalidate()
     }
@@ -143,11 +187,13 @@ internal class ClusterMusicView(context: Context) : View(context) {
         }
         val lines = if (lyrics.hasLyrics) listOf(lyrics.previous, lyrics.current).count { it != null } else 0
         ClusterCardDiagnostics.music(this, mode, lines, lyrics.titleChanges, lyrics.lyricField, reason,
-            lyrics.confirmedAfterMs, snapshot.coverDelayMs, fit, lyrics.trackRevision)
+            lyrics.confirmedAfterMs, snapshot.coverDelayMs, fit, lyrics.trackRevision,
+            if (mode != ClusterCardDiagnostics.MusicMode.NONE && snapshot.hasProgress)
+                ClusterCardDiagnostics.Progress.SHOWN else ClusterCardDiagnostics.Progress.HIDDEN)
     }
 
     internal data class CardLayout(val card: RectF, val artwork: RectF, val text: RectF,
-        val fit: ClusterCardDiagnostics.Fit)
+        val fit: ClusterCardDiagnostics.Fit, val progressRow: RectF?)
 
     internal fun cardLayout(): CardLayout {
         val naturalHeight = height * CARD_HEIGHT_FRACTION * ClusterMusicSettings.size(context) / 100f
@@ -162,13 +208,18 @@ internal class ClusterMusicView(context: Context) : View(context) {
         val card = RectF(left, top, left + cardWidth, top + cardHeight)
         val artworkTop = top + (cardHeight - side) / 2f
         val artwork = RectF(left + pad, artworkTop, left + pad + side, artworkTop + side)
-        val text = RectF(artwork.right + cardHeight * TEXT_GAP, top + pad, card.right - pad, card.bottom - pad)
+        val progressRow = if (snapshot.hasProgress) {
+            val center = (artwork.bottom + card.bottom) / 2f
+            RectF(card.left + pad, center - cardHeight * .045f, card.right - pad, center + cardHeight * .045f)
+        } else null
+        val text = RectF(artwork.right + cardHeight * TEXT_GAP, top + pad, card.right - pad,
+            if (progressRow != null) artwork.bottom else card.bottom - pad)
         val fit = when {
             left != desiredLeft || top != desiredTop -> ClusterCardDiagnostics.Fit.CLAMPED
             cardHeight < naturalHeight -> ClusterCardDiagnostics.Fit.SHRUNK
             else -> ClusterCardDiagnostics.Fit.NORMAL
         }
-        return CardLayout(card, artwork, text, fit)
+        return CardLayout(card, artwork, text, fit, progressRow)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -226,9 +277,11 @@ internal class ClusterMusicView(context: Context) : View(context) {
 
         val clip = canvas.save()
         canvas.clipRect(layout.text)
-        if (lyrics) drawLyrics(canvas, layout.text, layout.card.height(), palette, fade, textProgress)
+        if (lyrics) drawLyrics(canvas, layout.text, layout.card.height(), palette, fade, textProgress,
+            layout.progressRow != null)
         else drawCoverText(canvas, layout.text, layout.card.height(), palette, fade, textProgress)
         canvas.restoreToCount(clip)
+        layout.progressRow?.let { drawProgress(canvas, layout, it, palette, fade, now) }
         if (artProgress >= 1f) previousArtwork = null
         if (textProgress >= 1f) { previousInfo = null; previousLyric = null; previousLyricState = null }
         if (artProgress < 1f || textProgress < 1f ||
@@ -254,17 +307,19 @@ internal class ClusterMusicView(context: Context) : View(context) {
     }
 
     private fun drawLyrics(canvas: Canvas, bounds: RectF, cardHeight: Float, palette: ClusterCardPalette,
-        fade: Float, textProgress: Float) {
+        fade: Float, textProgress: Float, protectMainLines: Boolean) {
         if (bounds.width() <= 0f) return
         if (previousLyric != null && textProgress < 1f) {
             val oldState = previousLyricState
             val old = layoutText(bounds, cardHeight, previousLyric.orEmpty(),
                 oldState?.previous?.takeIf { oldState.hasLyrics },
-                previousInfo?.let { oldState?.information(it) }, true, palette, fade * (1f - textProgress))
+                previousInfo?.let { oldState?.information(it) }, true, palette, fade * (1f - textProgress),
+                protectMainLines)
             drawLyricsLayout(canvas, bounds.left, old)
         }
         val layout = layoutText(bounds, cardHeight, snapshot.lyrics.current.orEmpty(),
-            snapshot.lyrics.previous, snapshot.lyrics.information(snapshot.info), true, palette, fade * textProgress)
+            snapshot.lyrics.previous, snapshot.lyrics.information(snapshot.info), true, palette, fade * textProgress,
+            protectMainLines)
         drawLyricsLayout(canvas, bounds.left, layout)
     }
 
@@ -272,6 +327,57 @@ internal class ClusterMusicView(context: Context) : View(context) {
         layout.previous?.let { drawSingle(canvas, x, it) }
         drawMain(canvas, x, layout)
         layout.detail?.let { drawSingle(canvas, x, it) }
+    }
+
+    internal data class ProgressLayout(val elapsed: RectF, val bar: RectF, val duration: RectF,
+        val textScaleX: Float)
+
+    internal fun progressLayout(row: RectF, cardHeight: Float, durationMillis: Long): ProgressLayout {
+        progressTextPaint.textSize = maxOf(minimumTextSize(), cardHeight * .06f)
+        progressTextPaint.textScaleX = 1f
+        val reserved = maxOf(progressTextPaint.measureText("0:00:00"),
+            progressTextPaint.measureText(formatTime(durationMillis)))
+        val width = row.width().coerceAtLeast(0f)
+        val gap = min(cardHeight * .025f, width * .04f)
+        val labelWidth = min(reserved, ((width - 2f * gap) * .4f).coerceAtLeast(0f))
+        val scale = if (reserved > 0f) (labelWidth / reserved).coerceAtMost(1f) else 1f
+        val barHeight = min(cardHeight * .02f, row.height().coerceAtLeast(0f))
+        return ProgressLayout(
+            RectF(row.left, row.top, row.left + labelWidth, row.bottom),
+            RectF(row.left + labelWidth + gap, row.centerY() - barHeight / 2f,
+                row.right - labelWidth - gap, row.centerY() + barHeight / 2f),
+            RectF(row.right - labelWidth, row.top, row.right, row.bottom), scale,
+        )
+    }
+
+    private fun drawProgress(canvas: Canvas, layout: CardLayout, row: RectF, palette: ClusterCardPalette,
+        fade: Float, now: Long) {
+        val duration = snapshot.info.durationMillis?.takeIf { it > 0L } ?: return
+        val position = snapshot.positionMillis(now) ?: return
+        val progress = progressLayout(row, layout.card.height(), duration)
+        val clip = canvas.save()
+        canvas.clipRect(row.left, layout.artwork.bottom, row.right, layout.card.bottom)
+        progressTextPaint.textScaleX = progress.textScaleX
+        progressTextPaint.color = palette.secondary
+        progressTextPaint.alpha = (Color.alpha(palette.secondary) * fade).toInt().coerceIn(0, 255)
+        val baseline = row.centerY() - (progressTextPaint.ascent() + progressTextPaint.descent()) / 2f
+        progressTextPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(formatTime(position), progress.elapsed.left, baseline, progressTextPaint)
+        progressTextPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(formatTime(duration), progress.duration.right, baseline, progressTextPaint)
+
+        val radius = progress.bar.height() / 2f
+        paint.color = palette.secondary
+        paint.alpha = (Color.alpha(palette.secondary) * fade * .25f).toInt().coerceIn(0, 255)
+        canvas.drawRoundRect(progress.bar, radius, radius, paint)
+        val filled = RectF(progress.bar)
+        filled.right = filled.left + filled.width() * (position.toDouble() / duration.toDouble()).toFloat()
+        if (filled.width() > 0f) {
+            paint.color = palette.lyric
+            paint.alpha = (Color.alpha(palette.lyric) * fade).toInt().coerceIn(0, 255)
+            canvas.drawRoundRect(filled, radius, radius, paint)
+        }
+        canvas.restoreToCount(clip)
     }
 
     internal data class TextLine(val text: String, val paint: TextPaint, val top: Float) {
@@ -282,7 +388,7 @@ internal class ClusterMusicView(context: Context) : View(context) {
         val previous: TextLine?, val detail: TextLine?)
 
     internal fun layoutText(bounds: RectF, cardHeight: Float, current: String, previous: String?, detail: String?,
-        lyrics: Boolean, palette: ClusterCardPalette, alpha: Float): CardTextLayout {
+        lyrics: Boolean, palette: ClusterCardPalette, alpha: Float, protectMainLines: Boolean = false): CardTextLayout {
         val minimum = minimumTextSize()
         val gap = cardHeight * .03f
         fun line(text: String?, size: Float, color: Int, lineAlpha: Float): TextLine? {
@@ -300,13 +406,21 @@ internal class ClusterMusicView(context: Context) : View(context) {
             alpha * palette.previousLyricAlpha / 255f) else null
         var detailLine = line(detail, cardHeight * if (lyrics) .065f else .085f, palette.secondary, alpha)
         val minMain = maxOf(minimum, cardHeight * if (lyrics) .085f else .095f)
+        val maxMain = maxOf(minimum, cardHeight * if (lyrics) .115f else .14f)
         val minPaint = TextPaint(textPaint).apply { textSize = minMain }
         val minHeight = minPaint.descent() - minPaint.ascent() + 1f
         fun available(): Float = bounds.height() -
             (previousLine?.let { it.height + gap } ?: 0f) - (detailLine?.let { it.height + gap } ?: 0f)
+        if (lyrics && protectMainLines) {
+            val mainPaint = TextPaint(textPaint).apply { textSize = maxMain }
+            val natural = StaticLayout.Builder.obtain(current, 0, current.length, mainPaint,
+                bounds.width().toInt().coerceAtLeast(1)).setIncludePad(false).build()
+            val mainHeight = natural.getLineBottom(min(natural.lineCount, 3) - 1).toFloat()
+            if (available() < mainHeight) previousLine = null
+            if (available() < mainHeight) detailLine = null
+        }
         if (available() < minHeight) previousLine = null
         if (available() < minHeight) detailLine = null
-        val maxMain = maxOf(minimum, cardHeight * if (lyrics) .115f else .14f)
         val main = fittedText(current, bounds.width(), maxMain, minMain, if (lyrics) 3 else 2,
             available().coerceAtLeast(0f), if (lyrics) palette.lyric else palette.primary, alpha)
         val blockHeight = main.height + (previousLine?.let { it.height + gap } ?: 0f) +
@@ -378,6 +492,14 @@ internal class ClusterMusicView(context: Context) : View(context) {
         }
 
         const val FADE_MILLIS = 400L
+        internal fun formatTime(millis: Long): String {
+            val seconds = millis.coerceAtLeast(0L) / 1_000L
+            val hours = seconds / 3_600L
+            return if (hours > 0L) String.format(Locale.ROOT, "%d:%02d:%02d", hours,
+                (seconds / 60L) % 60L, seconds % 60L)
+            else String.format(Locale.ROOT, "%d:%02d", seconds / 60L, seconds % 60L)
+        }
+
         internal fun progress(now: Long, started: Long): Float =
             ((now - started).toFloat() / FADE_MILLIS).coerceIn(0f, 1f)
         const val TEMPORARY_MILLIS = 8_000L
