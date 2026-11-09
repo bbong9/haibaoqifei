@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_scan_instructions">На iPhone откройте «Настройки» → Bluetooth. Выберите iPhone в списке и подтвердите сопряжение на обоих устройствах.</string>
+    <string name="pair_scan_finished">Поиск завершён. Если iPhone не найден, оставьте его настройки Bluetooth открытыми и повторите поиск.</string>
+    <string name="pair_scan_failed">Не удалось выполнить поиск или сопряжение. Повторите попытку или откройте настройки Bluetooth автомобиля.</string>
+    <string name="pair_scan_confirm">Подтвердите запрос на сопряжение в автомобиле и на iPhone.</string>
+    <string name="pair_scan_again">Искать снова</string>
+    <string name="pair_scan_start">Поиск в DiPlay</string>
+    <string name="wheel_return_carplay">Возврат в CarPlay кнопкой руля</string>
+    <string name="wheel_return_carplay_description">Назначьте свободную кнопку. Служба кнопок открывает активную сессию CarPlay; во время звонков кнопки остаются у автомобиля. Доступность зависит от автомобиля.</string>
+    <string name="wheel_return_reserved">Кнопка зарезервирована для автомобиля, звонков или медиа. Выберите другую.</string>
+    <string name="settings_resume_music">Возобновлять музыку при беспроводном подключении</string>
+    <string name="settings_resume_music_description">Пытаться начать воспроизведение на выбранном iPhone, если музыка играла до отключения. Пауза на телефоне вне автомобиля может остаться незамеченной.</string>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_scan_instructions">Su iPhone apri Impostazioni → Bluetooth. Scegli il tuo iPhone e conferma l’associazione su entrambi i dispositivi.</string>
+    <string name="pair_scan_finished">Ricerca completata. Se iPhone non compare, lascia aperte le impostazioni Bluetooth e riprova.</string>
+    <string name="pair_scan_failed">Ricerca o associazione non riuscita. Riprova o apri le impostazioni Bluetooth dell’auto.</string>
+    <string name="pair_scan_confirm">Conferma la richiesta di associazione sull’auto e su iPhone.</string>
+    <string name="pair_scan_again">Cerca di nuovo</string>
+    <string name="pair_scan_start">Cerca in DiPlay</string>
+    <string name="wheel_return_carplay">Torna a CarPlay con un tasto al volante</string>
+    <string name="wheel_return_carplay_description">Assegna un tasto libero. Il servizio dei tasti mostra la sessione CarPlay attiva; durante le chiamate i tasti restano all’auto. La disponibilità dipende dal veicolo.</string>
+    <string name="wheel_return_reserved">Il tasto è riservato ad auto, chiamate o contenuti multimediali. Scegline un altro.</string>
+    <string name="settings_resume_music">Riprendi la musica alla riconnessione wireless</string>
+    <string name="settings_resume_music_description">Prova a riprodurre sull’iPhone selezionato se la musica era attiva prima della disconnessione. Una pausa sul telefono mentre sei lontano potrebbe non essere rilevata.</string>
+</resources>

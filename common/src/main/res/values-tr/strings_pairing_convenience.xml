@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_scan_instructions">iPhone üzerinde Ayarlar → Bluetooth bölümünü açın. Listeden iPhone seçin ve iki cihazda eşleştirmeyi onaylayın.</string>
+    <string name="pair_scan_finished">Tarama bitti. iPhone görünmüyorsa Bluetooth ayarlarını açık tutup yeniden tarayın.</string>
+    <string name="pair_scan_failed">Tarama veya eşleştirme yapılamadı. Yeniden deneyin ya da araç Bluetooth ayarlarını açın.</string>
+    <string name="pair_scan_confirm">Araçta ve iPhone üzerinde eşleştirme isteğini onaylayın.</string>
+    <string name="pair_scan_again">Yeniden tara</string>
+    <string name="pair_scan_start">DiPlay içinde tara</string>
+    <string name="wheel_return_carplay">Direksiyon tuşuyla CarPlay ekranına dön</string>
+    <string name="wheel_return_carplay_description">Kullanılmayan bir tuş atayın. Tuş hizmeti etkin CarPlay oturumunu öne getirir; aramalarda tuşlar araçta kalır. Kullanılabilirlik araca bağlıdır.</string>
+    <string name="wheel_return_reserved">Bu tuş araç, arama veya medya için ayrılmıştır. Başka bir tuş seçin.</string>
+    <string name="settings_resume_music">Kablosuz yeniden bağlantıda müziği sürdür</string>
+    <string name="settings_resume_music_description">Bağlantı kesilmeden önce müzik çalıyorsa seçilen iPhone üzerinde çalmayı deneyin. Araçtan uzaktayken telefonda duraklatma algılanmayabilir.</string>
+</resources>

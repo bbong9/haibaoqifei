@@ -18,6 +18,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.util.ReflectionHelpers
 
 /** Compact/full and RTL screenshots of the optional media-key setting at 1.5x text size. */
 @RunWith(RobolectricTestRunner::class)
@@ -27,7 +28,9 @@ class WheelMediaSettingsScreenshotsTest {
     @Test fun mediaKeyControlsRenderAtLargeFontsInThreeLayouts() {
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)
+        ReflectionHelpers.setField(activity, "page", "settings")
         WheelZoomSettings.setMediaPlayPause(activity, true)
+        WheelZoomSettings.setReturnCarPlay(activity, true)
         try {
             for ((filename, widthDp, language) in listOf(
                 Triple("compact-ja", 320, "ja-JP"),
@@ -45,8 +48,13 @@ class WheelMediaSettingsScreenshotsTest {
                 val row = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
                 DiPlayActivity::class.java.getDeclaredMethod("wheelKeysSettings", LinearLayout::class.java)
                     .apply { isAccessible = true }.invoke(activity, row)
+                DiPlayActivity::class.java.getDeclaredMethod("normalizeSettingsSpacing", LinearLayout::class.java)
+                    .apply { isAccessible = true }.invoke(activity, row)
                 assertTrue(allViews(row).filterIsInstance<TextView>().any {
                     it.text.toString() == activity.getString(R.string.wheel_media_play_pause)
+                })
+                assertTrue(allViews(row).filterIsInstance<TextView>().any {
+                    it.text.toString() == activity.getString(R.string.wheel_return_carplay)
                 })
                 val width = (widthDp * activity.resources.displayMetrics.density).toInt()
                 row.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
@@ -64,6 +72,7 @@ class WheelMediaSettingsScreenshotsTest {
                 }
             }
         } finally {
+            WheelZoomSettings.setReturnCarPlay(activity, false)
             activity.finish()
         }
     }

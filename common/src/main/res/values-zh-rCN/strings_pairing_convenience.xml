@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_scan_instructions">在 iPhone 上打开“设置 → 蓝牙”，在列表中选择你的 iPhone，并在车机和手机上确认配对。</string>
+    <string name="pair_scan_finished">扫描结束。如果没有找到 iPhone，请保持手机蓝牙设置页面打开并重新扫描。</string>
+    <string name="pair_scan_failed">扫描或配对失败，请重试或打开车机蓝牙设置。</string>
+    <string name="pair_scan_confirm">请在车机和 iPhone 上确认配对请求。</string>
+    <string name="pair_scan_again">重新扫描</string>
+    <string name="pair_scan_start">在应用内扫描</string>
+    <string name="wheel_return_carplay">方向盘按键返回 CarPlay</string>
+    <string name="wheel_return_carplay_description">指定一个未使用的按键。按键服务会将已连接的 CarPlay 切回前台；通话时按键仍归车机使用。是否可用取决于车机。</string>
+    <string name="wheel_return_reserved">这个按键保留给车机、通话或媒体，请选择其他按键。</string>
+    <string name="settings_resume_music">无线重连后续播音乐</string>
+    <string name="settings_resume_music_description">如果断开前正在播放，重连已选 iPhone 后尝试继续。离车后在手机上暂停，车机可能无法识别。</string>
+</resources>

@@ -483,6 +483,40 @@ class WheelKeyServiceTest {
         assertEquals(1, actions.size)
     }
 
+    @Test fun returnKeyOnlyConsumesAPressWhenAnActiveSessionCanBeOpened() {
+        assertFalse(WheelZoomSettings.returnCarPlay(service))
+        WheelZoomSettings.setEnabled(service, false)
+        WheelZoomSettings.setReturnCarPlay(service, true)
+        WheelZoomSettings.assign(service, WheelZoomSettings.Role.RETURN_CARPLAY, WheelKey(KeyEvent.KEYCODE_F9, 0, "?"))
+        var opened = 0
+        service.openCarPlay = { opened++; true }
+        service.session = { null }
+        assertEquals(false to false, press(KeyEvent.KEYCODE_F9))
+        service.session = { "iphone" }
+        service.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_CALL
+        assertEquals(false to false, press(KeyEvent.KEYCODE_F9))
+        service.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
+        assertTrue(key(KeyEvent.KEYCODE_F9, true))
+        assertTrue(key(KeyEvent.KEYCODE_F9, true, repeat = 1))
+        assertTrue(key(KeyEvent.KEYCODE_F9, false))
+        assertEquals(1, opened)
+        service.openCarPlay = { false }
+        assertEquals(false to false, press(KeyEvent.KEYCODE_F9))
+    }
+
+    @Test fun returnKeyRejectsProtectedAndAlreadyAssignedKeys() {
+        WheelZoomSettings.setReturnCarPlay(service, true)
+        assertTrue(WheelZoomSettings.protectedReturnKey(KeyEvent.KEYCODE_VOLUME_UP))
+        assertTrue(WheelZoomSettings.protectedReturnKey(KeyEvent.KEYCODE_CALL))
+        assertTrue(WheelZoomSettings.protectedReturnKey(291))
+        assertTrue(WheelZoomSettings.protectedReturnKey(313))
+        var refused: WheelZoomSettings.Role? = null
+        assertTrue(WheelKeyService.learn(WheelZoomSettings.Role.RETURN_CARPLAY, refused = { refused = it }) { _, _ -> })
+        assertEquals(true to true, press(KeyEvent.KEYCODE_F1))
+        assertEquals(WheelZoomSettings.Role.MODE, refused)
+        assertNull(WheelZoomSettings.key(service, WheelZoomSettings.Role.RETURN_CARPLAY))
+    }
+
     @Test fun remappedMediaKeyPreservesVehicleBehaviorDuringCallsWithoutPhoneOrWhenDisabled() {
         WheelZoomSettings.setEnabled(service, false)
         WheelZoomSettings.setMediaPlayPause(service, true)

@@ -222,7 +222,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private var disconnectButton: Button? = null
     private var lastRunning: Boolean? = null
     private var pendingWireless = false
+    private var bluetoothPermissionPending = false
+    private var pairingScanPermissionPending = false
+    private var pairedBeforeScan: Set<String> = emptySet()
+    private var iphonePairing: IphonePairing? = null
+    private var restoredPendingWireless = false
+    private var restoredBluetoothResultHandled = false
     private var bluetoothSettingsVisited = false
+    private var returnFromBluetoothForWireless = false
+    // Null means Bluetooth was off; otherwise a new bond is required before resuming.
+    private var pairedBeforeBluetoothSettings: Set<String>? = null
     private var initialLaunch = true
     private var notificationTransport = true
     private var exportInProgress = false
@@ -339,7 +348,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }
     }
     private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) choosePhone() else permissionHelp(getString(R.string.nearby_devices), getString(R.string.allow_nearby_devices_so_diplay_can_connect_to_your_paired))
+        bluetoothPermissionPending = false
+        if (restoredPendingWireless) restoredBluetoothResultHandled = true
+        if (granted) choosePhone() else {
+            pendingWireless = false
+            permissionHelp(getString(R.string.nearby_devices), getString(R.string.allow_nearby_devices_so_diplay_can_connect_to_your_paired))
+        }
+    }
+    private val pairingScanPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        pairingScanPermissionPending = false
+        if (restoredPendingWireless) restoredBluetoothResultHandled = true
+        if (pairingScanPermissions().all { permission -> checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED }) {
+            showIphonePairing()
+        } else {
+            pairingScanPermissionHelp()
+        }
     }
     private val bluetoothAutoConnectPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -394,6 +417,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun attachBaseContext(newBase: Context) {
+        // AppLocale.wrap can persist a migration marker on Android 13+. Detect a truly empty
+        // first installation before that unrelated preference is written.
+        SealQuickStart.prepare(newBase)
         val base = AppLocale.wrap(newBase)
         super.attachBaseContext(base)
         interfaceSystemDensityDpi = base.resources.configuration.densityDpi
@@ -438,6 +464,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.setup_error_auth)
         }
         pendingCarHotspotSetup = savedInstanceState?.getBoolean("pending_car_hotspot") ?: false
+        returnFromBluetoothForWireless = savedInstanceState?.getBoolean("return_from_bluetooth_for_wireless") ?: false
+        pairedBeforeBluetoothSettings = savedInstanceState?.getStringArrayList("paired_before_bluetooth_settings")?.toSet()
+        pendingWireless = savedInstanceState?.getBoolean("pending_wireless") ?: returnFromBluetoothForWireless
+        bluetoothPermissionPending = savedInstanceState?.getBoolean("bluetooth_permission_pending") ?: false
+        pairingScanPermissionPending = savedInstanceState?.getBoolean("pairing_scan_permission_pending") ?: false
+        pairedBeforeScan = savedInstanceState?.getStringArrayList("paired_before_scan")?.toSet() ?: emptySet()
+        restoredPendingWireless = pendingWireless || bluetoothPermissionPending || pairingScanPermissionPending
         bydVehicleAdvancedExpanded = savedInstanceState?.getBoolean("byd_vehicle_advanced") ?: false
         settingsCategory = savedInstanceState?.getString("settings_category")
             ?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
@@ -448,7 +481,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         setupStep = savedInstanceState?.getInt("setup_step") ?: SetupGuide.STEP_CAR
         setupFromSettings = savedInstanceState?.getBoolean("setup_from_settings") ?: false
         page = savedInstanceState?.getString("page") ?: requestedPage(intent)
-            ?: if (setupError == null && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
+            ?: if (setupError == null && !SealQuickStart.enabled(this) && SetupGuide.shouldOpenOnLaunch(SetupGuide.seen(this),
                     DiPlayPreferences.phoneAddress(this) != null)) "setup" else "home"
         render()
         scheduleAutomaticVehicleValidation()
@@ -508,6 +541,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         outState.putBoolean("settings_cluster_subpage", settingsClusterSubpage)
         connectionSettingsReturnCategory?.let { outState.putString("connection_settings_return_category", it.name) }
         outState.putBoolean("pending_car_hotspot", pendingCarHotspotSetup)
+        outState.putBoolean("pending_wireless", pendingWireless)
+        outState.putBoolean("bluetooth_permission_pending", bluetoothPermissionPending)
+        outState.putBoolean("pairing_scan_permission_pending", pairingScanPermissionPending)
+        outState.putStringArrayList("paired_before_scan", ArrayList(pairedBeforeScan))
+        outState.putBoolean("return_from_bluetooth_for_wireless", returnFromBluetoothForWireless && pendingWireless)
+        if (returnFromBluetoothForWireless && pendingWireless) {
+            pairedBeforeBluetoothSettings?.let { outState.putStringArrayList("paired_before_bluetooth_settings", ArrayList(it)) }
+        }
         outState.putBoolean("byd_vehicle_advanced", bydVehicleAdvancedExpanded)
         outState.putInt("setup_step", setupStep)
         outState.putBoolean("setup_from_settings", setupFromSettings)
@@ -547,6 +588,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     override fun onStart() {
         super.onStart()
+        iphonePairing?.onStart()
         // Results from the image picker and crop screens arrive before onResume.
         enforceInterfaceSize()
         CenterMapOverlay.onDiPlayScreenShown()
@@ -555,6 +597,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onStop() {
+        iphonePairing?.onStop()
         cancelUsbPermissionSetup()
         clusterSafeAreaDialog?.dismiss()
         startupHotspotCancelled = true
@@ -606,10 +649,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             (page == "home" || page == "settings" || page == "connection" || page == "setup")) render()
         startAppearanceUpdates()
         pausedForAdbSwitchChange = false
+        val resumingWireless = resumePendingWirelessAfterBluetoothSettings()
         if (initialLaunch) {
             initialLaunch = false
             startCarHotspotOnLaunch()
-            if (setupError == null && !CarPlayBackgroundSession.hasSession() &&
+            val restoringWireless = restoredPendingWireless
+            restoredPendingWireless = false
+            if (!resumingWireless && restoringWireless) {
+                // A recreated permission request delivers its own result. A recreated chooser does not,
+                // so show it again without starting a second independent auto-connect attempt.
+                if (!restoredBluetoothResultHandled && pendingWireless && !bluetoothPermissionPending && !pairingScanPermissionPending &&
+                    setupError == null && !CarPlayBackgroundSession.hasSession()) handler.post {
+                    if (!isFinishing && !isDestroyed && pendingWireless) choosePhone()
+                }
+            } else if (!resumingWireless && setupError == null && !CarPlayBackgroundSession.hasSession() &&
                 DiPlayPreferences.autoConnect(this) && requestedPage(intent) == null && page != "setup") {
                 handler.post {
                     val chooseWireless = DiPlayPreferences.autoConnectWireless(this)
@@ -619,6 +672,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             } else {
                 logAutoConnectDecision("skipped", "skip")
             }
+            restoredBluetoothResultHandled = false
         } else {
             logAutoConnectDecision("skipped", "skip")
         }
@@ -639,6 +693,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun onDestroy() {
+        iphonePairing?.close()
+        iphonePairing = null
         releaseSettingsBackground()
         settingsSearchPopup?.dismiss()
         appearanceObserverRemoval?.invoke()
@@ -2215,6 +2271,11 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
             })
             musicBufferChoice(card, wireless = true)
+            toggle(card, getString(R.string.settings_resume_music), getString(R.string.settings_resume_music_description),
+                ResumeMusic.enabled(this)) {
+                ResumeMusic.setEnabled(this, it)
+                CarPlayMediaKeys.resumePreferenceChanged(this)
+            }
             toggle(card, getString(R.string.settings_car_bluetooth_audio),
                 getString(R.string.settings_car_bluetooth_audio_description) + "\n" +
                     getString(R.string.settings_car_bluetooth_audio_hint),
@@ -3528,14 +3589,16 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
      * Where BYD's decoy answers android.settings.BLUETOOTH_SETTINGS, BYD's own Bluetooth manager is
      * opened instead. Every other head unit keeps the standard action, unchanged.
      */
-    private fun openBluetoothSettings() {
+    private fun openBluetoothSettings(): Boolean {
         if (!answeredByBydDecoy(Settings.ACTION_BLUETOOTH_SETTINGS)) {
-            openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-            return
+            return runCatching { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+                .onFailure { toast(getString(R.string.open_this_setting_from_your_car_s_settings_app)) }
+                .isSuccess
         }
-        if (openBydScreen(BYD_BLUETOOTH_MANAGER)) return
+        if (openBydScreen(BYD_BLUETOOTH_MANAGER)) return true
         Log.w(BYD_SETTINGS_TAG, "no Bluetooth screen on this head unit")
         toast(getString(R.string.open_this_setting_from_your_car_s_settings_app))
+        return false
     }
 
     private fun openCarWifiSettings() {
@@ -4602,7 +4665,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val zoomAvailable = wheelMapZoomAvailable()
         val vehicleKeysOn = WheelZoomSettings.joystick(this) ||
             (zoomAvailable && WheelZoomSettings.enabled(this))
-        if (WheelZoomSettings.siriKey(this) || WheelZoomSettings.mediaPlayPause(this) || vehicleKeysOn) {
+        if (WheelZoomSettings.siriKey(this) || WheelZoomSettings.mediaPlayPause(this) || WheelZoomSettings.returnCarPlay(this) || vehicleKeysOn) {
             wheelKeyServiceControls(card)
         }
         siriKeyControls(card)
@@ -4615,6 +4678,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (WheelZoomSettings.mediaPlayPause(this)) {
             wheelKeyAssignButton(card, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
                 getString(R.string.wheel_key_role_media_play_pause))
+        }
+        toggle(card, getString(R.string.wheel_return_carplay), getString(R.string.wheel_return_carplay_description),
+            WheelZoomSettings.returnCarPlay(this)) {
+            WheelZoomSettings.setReturnCarPlay(this, it)
+            render()
+        }
+        if (WheelZoomSettings.returnCarPlay(this)) {
+            wheelKeyAssignButton(card, WheelZoomSettings.Role.RETURN_CARPLAY, getString(R.string.wheel_return_carplay))
         }
         // It acts on BYD's short voice keys (327, 304) only, which other head units never send. Once on it
         // stays reachable, like the controls below, in case the package check misses the car.
@@ -4684,6 +4755,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 WheelZoomSettings.Role.SELECT -> R.string.wheel_key_role_select
                 WheelZoomSettings.Role.SIRI -> null
                 WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> null
+                WheelZoomSettings.Role.RETURN_CARPLAY -> null
             }.takeIf { joystick }
             val names = listOfNotNull(zoomName, joystickName)
             if (names.isEmpty()) continue
@@ -4790,6 +4862,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         WheelZoomSettings.Role.SELECT -> R.string.wheel_key_role_select
         WheelZoomSettings.Role.SIRI -> R.string.wheel_key_role_siri
         WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> R.string.wheel_key_role_media_play_pause
+        WheelZoomSettings.Role.RETURN_CARPLAY -> R.string.wheel_return_carplay
     }
 
     private class WindowKeyLearning(
@@ -6127,7 +6200,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         runCatching { StartupTimeline.event(this, "CONNECT_ABORT", "wireless" to wireless, "reason" to reason) }
     }
 
-    private fun connect(wireless: Boolean) {
+    private fun connect(wireless: Boolean) = connect(wireless, null)
+
+    private fun connect(wireless: Boolean, newlyPairedAddresses: Set<String>?) {
         runCatching { StartupTimeline.event(this, "CONNECT_REQUEST", "wireless" to wireless, "hasSession" to CarPlayBackgroundSession.hasSession()) }
         startupHotspotCancelled = true
         if (wireless && pendingCarHotspotSetup) { logConnectAbort(wireless, "pendingHotspotSetup"); toast(getString(R.string.save_your_hotspot_details_in_connection_setup_first)); page = "connection"; render(); return }
@@ -6144,8 +6219,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (wireless && carHotspotOff()) { logConnectAbort(wireless, "carHotspotOff"); carHotspotOffDialog(); return }
         if (wireless && DiPlayPreferences.phoneAddress(this) == null) {
             logConnectAbort(wireless, "noPairedPhone")
-            pendingWireless = true; choosePhone(); return
+            pendingWireless = true; choosePhone(newlyPairedAddresses); return
         }
+        pendingWireless = false
         val preferences = getSharedPreferences("diplay", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !preferences.getBoolean("notification_asked", false)) {
             logConnectAbort(wireless, "notificationPermission")
@@ -6165,8 +6241,105 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         runCatching { StartupTimeline.event(this, "OPEN_PROJECTION", "preferUsb" to false, "usbIntent" to false) }
         OwnScreenStart.start(this, CarPlayScreen.intent(this).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
-    private fun choosePhone() {
+
+    private fun openBluetoothForPendingWireless(pairedBefore: Set<String>?) {
+        returnFromBluetoothForWireless = pendingWireless
+        pairedBeforeBluetoothSettings = if (pendingWireless) pairedBefore else null
+        if (!openBluetoothSettings()) {
+            returnFromBluetoothForWireless = false
+            pairedBeforeBluetoothSettings = null
+            pendingWireless = false
+        }
+    }
+
+    /** A return is handled even if pairing was cancelled, so recreation cannot auto-start it again. */
+    private fun resumePendingWirelessAfterBluetoothSettings(): Boolean {
+        if (!returnFromBluetoothForWireless) return false
+        returnFromBluetoothForWireless = false
+        val pairedBefore = pairedBeforeBluetoothSettings
+        pairedBeforeBluetoothSettings = null
+        if (!pendingWireless || setupError != null || CarPlayBackgroundSession.hasSession()) {
+            pendingWireless = false
+            return true
+        }
+        val pairedNow = runCatching {
+            if (Build.VERSION.SDK_INT >= 31 &&
+                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) null
+            else {
+                val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: BluetoothAdapter.getDefaultAdapter()
+                if (adapter == null || !adapter.isEnabled) null else adapter.bondedDevices.map { it.address }.toSet()
+            }
+        }.getOrNull()
+        val newlyPaired = if (pairedNow != null && pairedBefore != null) pairedNow - pairedBefore else null
+        if (pairedNow.isNullOrEmpty() || (newlyPaired != null && newlyPaired.isEmpty())) {
+            pendingWireless = false
+            return true
+        }
+        handler.post {
+            if (!isFinishing && !isDestroyed && pendingWireless && !CarPlayBackgroundSession.hasSession()) {
+                connect(true, newlyPaired)
+            }
+        }
+        return true
+    }
+
+    private fun choosePhone() = choosePhone(null)
+
+    private fun pairingScanPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= 31) {
+        arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun beginIphonePairing(pairedBefore: Set<String>) {
+        pairedBeforeScan = pairedBefore
+        val missing = pairingScanPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) {
+            pairingScanPermissionPending = true
+            pairingScanPermission.launch(missing.toTypedArray())
+        } else showIphonePairing()
+    }
+
+    private fun pairingScanPermissionHelp() {
+        appDialogBuilder().setTitle(R.string.pair_your_iphone)
+            .setMessage(R.string.pair_scan_failed)
+            .setPositiveButton(R.string.open_bluetooth) { _, _ -> openBluetoothForPendingWireless(pairedBeforeScan) }
+            .setNegativeButton(R.string.cancel) { _, _ -> pendingWireless = false }
+            .setOnCancelListener { pendingWireless = false }.show()
+    }
+
+    private fun showIphonePairing() {
+        val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: BluetoothAdapter.getDefaultAdapter()
+        if (adapter == null || !runCatching { adapter.isEnabled }.getOrDefault(false)) {
+            pairingScanPermissionHelp()
+            return
+        }
+        iphonePairing?.close()
+        val pairing = IphonePairing(this, adapter,
+            paired = { device ->
+                iphonePairing = null
+                val address = runCatching { device.address }.getOrNull()
+                if (address == null) {
+                    pendingWireless = false
+                } else {
+                    val name = runCatching { device.name }.getOrNull() ?: "iPhone"
+                    DiPlayPreferences.savePhone(this, address, name)
+                    val start = pendingWireless
+                    pendingWireless = false
+                    render()
+                    if (start && setupError == null && !CarPlayBackgroundSession.hasSession()) connect(true)
+                }
+            },
+            cancelled = { iphonePairing = null; pendingWireless = false },
+            systemSettings = { iphonePairing = null; openBluetoothForPendingWireless(pairedBeforeScan) },
+        )
+        iphonePairing = pairing
+        pairing.show()
+    }
+
+    private fun choosePhone(newlyPairedAddresses: Set<String>?) {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            bluetoothPermissionPending = true
             bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT); return
         }
         val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: BluetoothAdapter.getDefaultAdapter()
@@ -6185,16 +6358,32 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ ->
                     bluetoothSettingsVisited = true
-                    openBluetoothSettings()
+                    openBluetoothForPendingWireless(null)
                 }
-                .setNegativeButton(getString(R.string.later), null).show(); return
+                .setNegativeButton(getString(R.string.later)) { _, _ -> pendingWireless = false }
+                .setOnCancelListener { pendingWireless = false }.show(); return
         }
         val devices = runCatching { adapter.bondedDevices.sortedBy { it.name ?: "" } }.getOrDefault(emptyList())
         if (devices.isEmpty()) {
             appDialogBuilder().setTitle(getString(R.string.pair_your_iphone))
                 .setMessage(getString(R.string.on_your_iphone_open_settings_bluetooth_and_pair_with_the_c))
-                .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openBluetoothSettings() }
-                .setNegativeButton(getString(R.string.got_it), null).show(); return
+                .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openBluetoothForPendingWireless(emptySet()) }
+                .setNeutralButton(getString(R.string.pair_scan_start)) { _, _ -> beginIphonePairing(emptySet()) }
+                .setNegativeButton(getString(R.string.got_it)) { _, _ -> pendingWireless = false }
+                .setOnCancelListener { pendingWireless = false }.show(); return
+        }
+        val automaticPhone = if (pendingWireless && sealEditionCheck(this) && DiPlayPreferences.phoneAddress(this) == null) {
+            SealQuickStart.singleLikelyIphone(devices,
+                name = { runCatching { it.name }.getOrNull() },
+                services = { device -> runCatching { device.uuids?.map { it.uuid }.orEmpty() }.getOrDefault(emptyList()) },
+            )?.takeIf { newlyPairedAddresses == null || it.address in newlyPairedAddresses }
+        } else null
+        if (automaticPhone != null) {
+            DiPlayPreferences.savePhone(this, automaticPhone.address, automaticPhone.name ?: "iPhone")
+            pendingWireless = false
+            render()
+            connect(true)
+            return
         }
         appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
             .setItems(devices.map { device ->
@@ -6206,8 +6395,13 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val start = pendingWireless; pendingWireless = false
                 render()
                 if (start) connect(true)
-            }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> openBluetoothSettings() }
-            .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
+            }.setPositiveButton(getString(R.string.pair_scan_start)) { _, _ ->
+                beginIphonePairing(devices.map { it.address }.toSet())
+            }.setNeutralButton(getString(R.string.pair_another)) { _, _ ->
+                openBluetoothForPendingWireless(devices.map { it.address }.toSet())
+            }
+            .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }
+            .setOnCancelListener { pendingWireless = false }.show()
     }
 
     private fun wirelessHelp() {
