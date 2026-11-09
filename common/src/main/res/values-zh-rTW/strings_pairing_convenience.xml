@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_start_instructions">在 iPhone 上打開「設定 → 藍牙」，然後在應用程式內掃描，或開啟車機藍牙設定進行配對。</string>
+    <string name="pair_scan_instructions">在 iPhone 上打開「設定 → 藍牙」，從清單選擇你的 iPhone，並在車機與手機上確認配對。</string>
+    <string name="pair_scan_finished">掃描結束。若找不到 iPhone，請保持手機藍牙設定頁面開啟並重新掃描。</string>
+    <string name="pair_scan_failed">掃描或配對失敗，請重試或開啟車機藍牙設定。</string>
+    <string name="pair_scan_confirm">請在車機和 iPhone 上確認配對要求。</string>
+    <string name="pair_scan_again">重新掃描</string>
+    <string name="pair_scan_start">在應用程式內掃描</string>
+</resources>

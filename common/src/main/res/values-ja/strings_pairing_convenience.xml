@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_start_instructions">iPhoneで「設定」→「Bluetooth」を開き、DiPlayで検索するか車のBluetooth設定を開いてペアリングしてください。</string>
+    <string name="pair_scan_instructions">iPhoneで「設定」→「Bluetooth」を開き、一覧からiPhoneを選んで両方の機器でペアリングを確認してください。</string>
+    <string name="pair_scan_finished">検索が終了しました。iPhoneが表示されない場合はBluetooth設定を開いたまま再検索してください。</string>
+    <string name="pair_scan_failed">検索またはペアリングできませんでした。再試行するか、車のBluetooth設定を開いてください。</string>
+    <string name="pair_scan_confirm">車とiPhoneでペアリング要求を確認してください。</string>
+    <string name="pair_scan_again">再検索</string>
+    <string name="pair_scan_start">DiPlayで検索</string>
+</resources>

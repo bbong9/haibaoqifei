@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_start_instructions">iPhone에서 설정 → Bluetooth를 열고 DiPlay에서 검색하거나 차량 Bluetooth 설정을 열어 페어링하세요.</string>
+    <string name="pair_scan_instructions">iPhone에서 설정 → Bluetooth를 열고 목록에서 iPhone을 선택한 후 두 기기에서 페어링을 확인하세요.</string>
+    <string name="pair_scan_finished">검색이 끝났습니다. iPhone이 없으면 Bluetooth 설정을 연 상태로 다시 검색하세요.</string>
+    <string name="pair_scan_failed">검색 또는 페어링에 실패했습니다. 다시 시도하거나 차량 Bluetooth 설정을 여세요.</string>
+    <string name="pair_scan_confirm">차량과 iPhone에서 페어링 요청을 확인하세요.</string>
+    <string name="pair_scan_again">다시 검색</string>
+    <string name="pair_scan_start">DiPlay에서 검색</string>
+</resources>

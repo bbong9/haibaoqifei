@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_start_instructions">En el iPhone, abre Ajustes → Bluetooth. Busca en DiPlay o abre los ajustes Bluetooth del coche para enlazar.</string>
+    <string name="pair_scan_instructions">En el iPhone, abre Ajustes → Bluetooth. Elige tu iPhone en la lista y confirma el enlace en ambos dispositivos.</string>
+    <string name="pair_scan_finished">Búsqueda terminada. Si no aparece el iPhone, deja abiertos sus ajustes de Bluetooth y busca de nuevo.</string>
+    <string name="pair_scan_failed">No se pudo buscar o enlazar. Inténtalo de nuevo o abre los ajustes Bluetooth del coche.</string>
+    <string name="pair_scan_confirm">Confirma la solicitud de enlace en el coche y el iPhone.</string>
+    <string name="pair_scan_again">Buscar de nuevo</string>
+    <string name="pair_scan_start">Buscar en DiPlay</string>
+</resources>

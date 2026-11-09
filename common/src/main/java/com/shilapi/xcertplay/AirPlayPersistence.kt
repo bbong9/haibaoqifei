@@ -401,7 +401,8 @@ object AirPlayPersistence {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val stored = prefs.getString(KEY_WIRELESS_HOTSPOT_MODE, null)
         val mode = WirelessHotspotMode.entries.firstOrNull { it.name == stored }
-            ?: WirelessHotspotMode.MANUAL
+            ?: if (stored == null && SealQuickStart.enabled(context)) WirelessHotspotMode.WIFI_P2P
+            else WirelessHotspotMode.MANUAL
         val supported = if (mode == WirelessHotspotMode.LOCAL_ONLY_HOTSPOT) WirelessHotspotMode.MANUAL else mode
         if (stored != supported.name) saveWirelessHotspotMode(context, supported)
         return supported
@@ -546,7 +547,7 @@ object AirPlayPersistence {
 
     fun loadAutoStartOnBoot(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_AUTO_START_ON_BOOT, false)
+            .getBoolean(KEY_AUTO_START_ON_BOOT, SealQuickStart.enabled(context))
 
     fun saveAutoStartOnBoot(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

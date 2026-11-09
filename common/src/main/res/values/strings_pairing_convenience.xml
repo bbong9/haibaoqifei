@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_start_instructions">On the iPhone, open Settings → Bluetooth. Scan in DiPlay or open the car Bluetooth settings to pair.</string>
+    <string name="pair_scan_instructions">On the iPhone, open Settings → Bluetooth. Choose your iPhone from the list and confirm the pairing on both devices.</string>
+    <string name="pair_scan_finished">Scan finished. If the iPhone is missing, keep its Bluetooth settings open and scan again.</string>
+    <string name="pair_scan_failed">Could not scan or pair. Try again or open the car Bluetooth settings.</string>
+    <string name="pair_scan_confirm">Confirm the pairing request on the car and iPhone.</string>
+    <string name="pair_scan_again">Scan again</string>
+    <string name="pair_scan_start">Scan in DiPlay</string>
+</resources>

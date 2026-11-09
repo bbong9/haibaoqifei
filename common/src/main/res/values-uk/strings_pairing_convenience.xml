@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_start_instructions">На iPhone відкрийте «Параметри» → Bluetooth. Для сполучення виконайте пошук у DiPlay або відкрийте налаштування Bluetooth автомобіля.</string>
+    <string name="pair_scan_instructions">На iPhone відкрийте «Параметри» → Bluetooth. Виберіть iPhone у списку та підтвердьте з’єднання на обох пристроях.</string>
+    <string name="pair_scan_finished">Пошук завершено. Якщо iPhone не знайдено, залиште його параметри Bluetooth відкритими й повторіть пошук.</string>
+    <string name="pair_scan_failed">Не вдалося виконати пошук або сполучення. Повторіть спробу чи відкрийте налаштування Bluetooth автомобіля.</string>
+    <string name="pair_scan_confirm">Підтвердьте запит на сполучення в автомобілі та на iPhone.</string>
+    <string name="pair_scan_again">Шукати знову</string>
+    <string name="pair_scan_start">Пошук у DiPlay</string>
+</resources>
