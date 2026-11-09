@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="pair_start_instructions">على iPhone، افتح الإعدادات ثم Bluetooth. ابحث في DiPlay أو افتح إعدادات Bluetooth في السيارة للاقتران.</string>
     <string name="pair_scan_instructions">افتح الإعدادات ثم Bluetooth على iPhone. اختر هاتفك من القائمة وأكد الاقتران على الجهازين.</string>
     <string name="pair_scan_finished">اكتمل البحث. إذا لم يظهر iPhone، أبق إعدادات Bluetooth مفتوحة وأعد البحث.</string>
     <string name="pair_scan_failed">تعذر البحث أو الاقتران. حاول مجدداً أو افتح إعدادات Bluetooth في السيارة.</string>

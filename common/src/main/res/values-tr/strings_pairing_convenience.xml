@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="pair_start_instructions">iPhone üzerinde Ayarlar → Bluetooth bölümünü açın. Eşleştirmek için DiPlay içinde tarayın veya araç Bluetooth ayarlarını açın.</string>
     <string name="pair_scan_instructions">iPhone üzerinde Ayarlar → Bluetooth bölümünü açın. Listeden iPhone seçin ve iki cihazda eşleştirmeyi onaylayın.</string>
     <string name="pair_scan_finished">Tarama bitti. iPhone görünmüyorsa Bluetooth ayarlarını açık tutup yeniden tarayın.</string>
     <string name="pair_scan_failed">Tarama veya eşleştirme yapılamadı. Yeniden deneyin ya da araç Bluetooth ayarlarını açın.</string>

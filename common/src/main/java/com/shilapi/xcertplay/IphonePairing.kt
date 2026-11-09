@@ -73,6 +73,9 @@ internal class IphonePairing(
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
         try {
+            // Bluetooth broadcasts can originate from a privileged Bluetooth app with its own UID;
+            // NOT_EXPORTED can prevent their delivery. AOSP protects all three actions in this filter,
+            // and bond completion is checked against the device state rather than broadcast extras.
             ContextCompat.registerReceiver(activity, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
             receiverRegistered = true
         } catch (_: RuntimeException) {

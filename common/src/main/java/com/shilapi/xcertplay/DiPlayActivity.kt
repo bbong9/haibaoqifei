@@ -6286,6 +6286,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun pairingScanPermissionHelp() {
+        val permissionHint = if (Build.VERSION.SDK_INT >= 31)
+            R.string.allow_nearby_devices_for_diplay_in_the_head_unit_s_app_per
+        else R.string.allow_precise_location_for_diplay_in_the_head_unit_s_app_p
+        appDialogBuilder().setTitle(R.string.pair_your_iphone)
+            .setMessage(permissionHint)
+            .setPositiveButton(R.string.app_settings) { _, _ ->
+                pendingWireless = false
+                openSystem(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            }
+            .setNeutralButton(R.string.open_bluetooth) { _, _ -> openBluetoothForPendingWireless(pairedBeforeScan) }
+            .setNegativeButton(R.string.cancel) { _, _ -> pendingWireless = false }
+            .setOnCancelListener { pendingWireless = false }.show()
+    }
+
+    private fun pairingScanUnavailableHelp() {
         appDialogBuilder().setTitle(R.string.pair_your_iphone)
             .setMessage(R.string.pair_scan_failed)
             .setPositiveButton(R.string.open_bluetooth) { _, _ -> openBluetoothForPendingWireless(pairedBeforeScan) }
@@ -6296,7 +6311,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     private fun showIphonePairing() {
         val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: BluetoothAdapter.getDefaultAdapter()
         if (adapter == null || !runCatching { adapter.isEnabled }.getOrDefault(false)) {
-            pairingScanPermissionHelp()
+            pairingScanUnavailableHelp()
             return
         }
         iphonePairing?.close()
@@ -6351,7 +6366,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val devices = runCatching { adapter.bondedDevices.sortedBy { it.name ?: "" } }.getOrDefault(emptyList())
         if (devices.isEmpty()) {
             appDialogBuilder().setTitle(getString(R.string.pair_your_iphone))
-                .setMessage(getString(R.string.on_your_iphone_open_settings_bluetooth_and_pair_with_the_c))
+                .setMessage(getString(R.string.pair_start_instructions))
                 .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openBluetoothForPendingWireless(emptySet()) }
                 .setNeutralButton(getString(R.string.pair_scan_start)) { _, _ -> beginIphonePairing(emptySet()) }
                 .setNegativeButton(getString(R.string.got_it)) { _, _ -> pendingWireless = false }

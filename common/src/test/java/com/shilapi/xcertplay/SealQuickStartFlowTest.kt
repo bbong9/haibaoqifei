@@ -150,6 +150,48 @@ class SealQuickStartFlowTest {
         assertFalse(ReflectionHelpers.getField(screen, "pendingWireless"))
     }
 
+    @Test fun android10RequestsFineLocationBeforeScanningAndExplainsDenial() {
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+        val screen = open()
+        click(AlertDialog.BUTTON_NEUTRAL)
+
+        val request = shadowOf(screen).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.ACCESS_FINE_LOCATION), request.requestedPermissions.toList())
+        assertNull(ReflectionHelpers.getField<IphonePairing?>(screen, "iphonePairing"))
+        assertFalse(adapter.isDiscovering)
+
+        screen.onRequestPermissionsResult(request.requestCode, request.requestedPermissions,
+            IntArray(request.requestedPermissions.size) { android.content.pm.PackageManager.PERMISSION_DENIED })
+        idle()
+        assertNull(ReflectionHelpers.getField<IphonePairing?>(screen, "iphonePairing"))
+        assertFalse(adapter.isDiscovering)
+        assertEquals(screen.getString(com.shilapi.xcertplay.host.R.string.allow_precise_location_for_diplay_in_the_head_unit_s_app_p),
+            dialog().findViewById<android.widget.TextView>(android.R.id.message).text.toString())
+        assertEquals(screen.getString(com.shilapi.xcertplay.host.R.string.app_settings),
+            dialog().getButton(AlertDialog.BUTTON_POSITIVE).text.toString())
+        assertEquals(screen.getString(com.shilapi.xcertplay.host.R.string.open_bluetooth),
+            dialog().getButton(AlertDialog.BUTTON_NEUTRAL).text.toString())
+
+        click(AlertDialog.BUTTON_POSITIVE)
+        assertEquals(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, shadowOf(screen).nextStartedActivity.action)
+        assertFalse(ReflectionHelpers.getField(screen, "pendingWireless"))
+    }
+
+    @Test fun android10GrantingFineLocationStartsTheScanner() {
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+        val screen = open()
+        click(AlertDialog.BUTTON_NEUTRAL)
+        val request = shadowOf(screen).lastRequestedPermission
+        assertNull(ReflectionHelpers.getField<IphonePairing?>(screen, "iphonePairing"))
+
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+        screen.onRequestPermissionsResult(request.requestCode, request.requestedPermissions,
+            IntArray(request.requestedPermissions.size) { android.content.pm.PackageManager.PERMISSION_GRANTED })
+        idle()
+        assertNotNull(ReflectionHelpers.getField<IphonePairing?>(screen, "iphonePairing"))
+        assertTrue(adapter.isDiscovering)
+    }
+
     @Test fun cancellingPairAnotherDoesNotSelectAnExistingPhone() {
         shadowOf(adapter).setBondedDevices(devices("Alice's iPhone" to "00:11:22:33:44:55", "Bob's iPhone" to "00:11:22:33:44:66"))
         val screen = open()
@@ -217,7 +259,9 @@ class SealQuickStartFlowTest {
             IntArray(request.requestedPermissions.size) { android.content.pm.PackageManager.PERMISSION_DENIED })
         idle()
         assertEquals(screen.getString(com.shilapi.xcertplay.host.R.string.open_bluetooth),
-            dialog().getButton(AlertDialog.BUTTON_POSITIVE).text.toString())
+            dialog().getButton(AlertDialog.BUTTON_NEUTRAL).text.toString())
+        assertEquals(screen.getString(com.shilapi.xcertplay.host.R.string.allow_nearby_devices_for_diplay_in_the_head_unit_s_app_per),
+            dialog().findViewById<android.widget.TextView>(android.R.id.message).text.toString())
         click(AlertDialog.BUTTON_NEGATIVE)
         assertFalse(ReflectionHelpers.getField(screen, "pendingWireless"))
         assertNull(DiPlayPreferences.phoneAddress(context))
