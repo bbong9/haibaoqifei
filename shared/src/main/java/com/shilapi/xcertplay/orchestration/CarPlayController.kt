@@ -268,12 +268,6 @@ class CarPlayController(
     /** Told when the iPhone starts or stops playing media; may run on any thread. */
     @Volatile var playbackListener: ((Boolean) -> Unit)? = null
 
-    /** Real iPhone playback changes only; unlike playbackListener, teardown does not synthesize false. */
-    @Volatile var playbackUpdateListener: ((Boolean) -> Unit)? = null
-
-    /** A local media command was requested; used to defer automatic actions after driver input. */
-    @Volatile var mediaButtonListener: ((Int) -> Unit)? = null
-
     /** Told when retained iPhone now-playing metadata changes; may run on any thread. */
     @Volatile var nowPlayingListener: ((com.shilapi.xcertplay.media.CarPlayNowPlaying) -> Unit)? = null
 
@@ -712,7 +706,6 @@ class CarPlayController(
     fun sendMediaButton(index: Int): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
-        runCatching { mediaButtonListener?.invoke(index) }
         return try {
             touchExecutor.execute { session.sendMedia(index) }
             true
@@ -885,10 +878,7 @@ class CarPlayController(
             playbackStatus.acceptUpdate(frame)?.let { it to (it.playing != previousPlaying) }
         }?.let { (update, playingChanged) ->
             nowPlayingListener?.invoke(update)
-            if (playingChanged) {
-                playbackUpdateListener?.invoke(update.playing)
-                playbackListener?.invoke(update.playing)
-            }
+            if (playingChanged) playbackListener?.invoke(update.playing)
         }
     }
 

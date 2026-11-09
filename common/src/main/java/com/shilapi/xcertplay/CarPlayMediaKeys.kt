@@ -56,10 +56,6 @@ internal object CarPlayMediaKeys {
     private var initialAlbumRecovery = InitialAlbumRecovery()
     private var initialAlbumRetry: Runnable? = null
     private var controller: CarPlayController? = null
-    private var resumePhone: String? = null
-    private var resumeSession: Any? = null
-    private var resumeAttempt: Runnable? = null
-    internal const val RESUME_DELAY_MILLIS = 3_000L
     private var session: MediaSession? = null
     private var focusRequest: AudioFocusRequestCompat? = null
     private var focusOwner: Any? = null
@@ -77,24 +73,19 @@ internal object CarPlayMediaKeys {
     private var placeholder: Bitmap? = null
 
     @Synchronized
-    fun attach(context: Context, next: CarPlayController, wirelessPhone: String? = null) {
+    fun attach(context: Context, next: CarPlayController) {
         if (controller !== next) {
-            cancelResumeLocked()
-            resumeSession = null
             releaseLocked(sessionEnded = controller != null)
             artworkOwner = artworkQueue.newSession()
         }
         appContext = context.applicationContext
         controller = next
-        resumePhone = wirelessPhone
         GeelyWheelKeys.start(context)
         com.shilapi.xcertplay.media.AmbientMusicController.claimPlaybackOwner(next)
         next.playbackListener = { playing ->
             com.shilapi.xcertplay.media.AmbientMusicController.phonePlaybackChanged(next, playing)
             onIphonePlaying(next, playing)
         }
-        next.playbackUpdateListener = { playing -> onPhonePlaybackUpdate(next, playing) }
-        next.mediaButtonListener = { index -> onUserMediaAction(next, index) }
         next.nowPlayingListener = { _ -> onNowPlayingChanged(next) }
         next.artworkListener = { id, bytes -> onArtworkChanged(next, id, bytes) }
         val retained = next.nowPlayingSnapshot()
@@ -106,21 +97,12 @@ internal object CarPlayMediaKeys {
     @Synchronized
     fun detach(expected: CarPlayController?) {
         if (expected == null || controller !== expected) return
-        val context = appContext
-        if (resumePhone != null && context != null && ResumeMusic.enabled(context) && expected.nowPlayingSnapshot().playing) {
-            ResumeMusic.refreshPlayingRecord(context, resumePhone)
-        }
         com.shilapi.xcertplay.media.AmbientMusicController.releasePlaybackOwner(expected)
         expected.playbackListener = null
-        expected.playbackUpdateListener = null
-        expected.mediaButtonListener = null
         expected.nowPlayingListener = null
         expected.artworkListener = null
         runCatching { diagnosticPlaybackListener?.invoke(null) }
         controller = null
-        resumePhone = null
-        resumeSession = null
-        cancelResumeLocked()
         GeelyWheelKeys.stop()
         releaseLocked(sessionEnded = true)
     }
@@ -133,77 +115,13 @@ internal object CarPlayMediaKeys {
     /** The iPhone started or stopped playing; may run on any thread. */
     private fun onIphonePlaying(expected: CarPlayController, playing: Boolean) {
         synchronized(this) {
-            if (controller === expected) {
-                // Teardown emits a synthetic false after clearing a previously playing session.
-                // A genuine pause was already recorded by onPhonePlaybackUpdate and stays paused.
-                if (!playing) appContext?.let { ResumeMusic.refreshPlayingRecord(it, resumePhone) }
-                runCatching { diagnosticPlaybackListener?.invoke(playing) }
-            }
+            if (controller === expected) runCatching { diagnosticPlaybackListener?.invoke(playing) }
         }
         if (playing) mainHandler.post {
             synchronized(this) {
                 if (controller === expected) regainFocusLocked(onIphonePlaybackResume = true)
             }
         }
-    }
-
-    /** A real iAP update, distinct from the synthetic stop sent when the session is torn down. */
-    @Synchronized
-    internal fun onPhonePlaybackUpdate(expected: CarPlayController, playing: Boolean) {
-        if (controller !== expected) return
-        appContext?.let { ResumeMusic.record(it, resumePhone, playing) }
-        cancelResumeLocked()
-    }
-
-    /** Called once an AirPlay session is active, including a new session on the same controller. */
-    @Synchronized
-    fun onSessionActive(expected: CarPlayController) {
-        if (controller !== expected) return
-        val token = expected.activeAirPlaySessionToken() ?: return
-        if (resumeSession === token) return
-        resumeSession = token
-        cancelResumeLocked()
-        val context = appContext ?: return
-        if (expected.nowPlayingSnapshot().playing) {
-            ResumeMusic.record(context, resumePhone, true)
-            return
-        }
-        if (!ResumeMusic.shouldResume(context, resumePhone)) return
-        val attempt = Runnable {
-            synchronized(this) {
-                resumeAttempt = null
-                if (controller !== expected || expected.activeAirPlaySessionToken() !== token ||
-                    !ResumeMusic.shouldResume(context, resumePhone) || inCall(context) ||
-                    expected.nowPlayingSnapshot().playing) return@synchronized
-                val sent = expected.sendMediaButton(CarPlayMediaButton.PLAY)
-                Log.i(TAG, "resume music: play sent=$sent")
-            }
-        }
-        resumeAttempt = attempt
-        mainHandler.postDelayed(attempt, RESUME_DELAY_MILLIS)
-    }
-
-    @Synchronized
-    fun resumePreferenceChanged(context: Context) {
-        cancelResumeLocked()
-        val current = controller ?: return
-        if (current.activeAirPlaySessionToken() != null && current.nowPlayingSnapshot().playing) {
-            ResumeMusic.record(context, resumePhone, true)
-        }
-    }
-
-    @Synchronized
-    internal fun onUserMediaAction(expected: CarPlayController, index: Int) {
-        if (controller !== expected) return
-        cancelResumeLocked()
-        if (index == CarPlayMediaButton.PAUSE || index == CarPlayMediaButton.PLAY_PAUSE) {
-            appContext?.let { ResumeMusic.record(it, resumePhone, false) }
-        }
-    }
-
-    private fun cancelResumeLocked() {
-        resumeAttempt?.let(mainHandler::removeCallbacks)
-        resumeAttempt = null
     }
 
     /** Publishes the iPhone's retained metadata through Android's system media session. */

@@ -6,9 +6,4 @@
     <string name="pair_scan_confirm">Confirma la solicitud de enlace en el coche y el iPhone.</string>
     <string name="pair_scan_again">Buscar de nuevo</string>
     <string name="pair_scan_start">Buscar en DiPlay</string>
-    <string name="wheel_return_carplay">Volver a CarPlay con un botón del volante</string>
-    <string name="wheel_return_carplay_description">Asigna un botón libre. El servicio de botones trae al frente la sesión activa de CarPlay; durante las llamadas los botones siguen siendo del coche. Depende del vehículo.</string>
-    <string name="wheel_return_reserved">Ese botón está reservado para el coche, las llamadas o el contenido multimedia. Elige otro.</string>
-    <string name="settings_resume_music">Reanudar música al reconectar de forma inalámbrica</string>
-    <string name="settings_resume_music_description">Intenta reproducir en el iPhone seleccionado si había música antes de desconectarse. Puede que no detecte una pausa hecha en el teléfono mientras estabas fuera.</string>
 </resources>

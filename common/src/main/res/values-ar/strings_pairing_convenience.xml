@@ -6,9 +6,4 @@
     <string name="pair_scan_confirm">أكد طلب الاقتران على السيارة وiPhone.</string>
     <string name="pair_scan_again">البحث مجدداً</string>
     <string name="pair_scan_start">البحث في DiPlay</string>
-    <string name="wheel_return_carplay">العودة إلى CarPlay بزر المقود</string>
-    <string name="wheel_return_carplay_description">عيّن زراً غير مستخدم. تعيد خدمة أزرار المقود جلسة CarPlay النشطة؛ وتحتفظ السيارة بالأزرار أثناء المكالمات. يعتمد توفر الميزة على السيارة.</string>
-    <string name="wheel_return_reserved">هذا الزر محجوز للسيارة أو المكالمات أو الوسائط. اختر زراً آخر.</string>
-    <string name="settings_resume_music">استئناف الموسيقى عند إعادة الاتصال اللاسلكي</string>
-    <string name="settings_resume_music_description">يحاول تشغيل الموسيقى على iPhone المحدد إذا كانت تعمل قبل انقطاع الاتصال. قد لا يكتشف إيقافها على الهاتف أثناء الابتعاد.</string>
 </resources>

@@ -5465,7 +5465,6 @@ open class CarPlayHostActivity : ComponentActivity() {
                         installIphoneCornerMask(session, pending.second.first, pending.second.second)
                     } else clearIphoneCornerMask()
                     CarPlayBackgroundSession.active = true
-                    controller?.let(CarPlayMediaKeys::onSessionActive)
                     LastConnectionProblem.clearConnection(this@CarPlayHostActivity)
                     showConnectionHelp(null)
                     callPopupSessionReady = true
@@ -5493,8 +5492,6 @@ open class CarPlayHostActivity : ComponentActivity() {
                     if (firstFrame) appendLog("Main video first frame rendered; cluster output may start")
                     ensureClusterPresentation()
                     if (!firstFrame) return@runOnUiThread
-                    // The primary stream token may not exist yet when onSessionActive fires.
-                    controller?.let(CarPlayMediaKeys::onSessionActive)
                     mainHandler.postDelayed({
                         if (controllerGeneration == restartGeneration && activeAirPlaySession === session &&
                             !shuttingDown.get() && CarPlayBackgroundSession.isOwner(this@CarPlayHostActivity) &&
@@ -5838,8 +5835,7 @@ open class CarPlayHostActivity : ComponentActivity() {
         controller = next
         resetSidePanel() // a new session starts without the side panel
         updateClusterMapShown()
-        CarPlayMediaKeys.attach(this, next,
-            config.wirelessBluetoothDeviceAddress.takeIf { config.transport == CarPlayTransport.WIRELESS })
+        CarPlayMediaKeys.attach(this, next)
         if (airPlayConfig.videoInCar) CarPlayVideo.attach(this, next)
         val display = CarPlaySessionDisplay(
             airPlayConfig.main.widthPixels, airPlayConfig.main.heightPixels,

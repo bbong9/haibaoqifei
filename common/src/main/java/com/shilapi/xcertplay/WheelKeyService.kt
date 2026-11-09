@@ -24,7 +24,6 @@ import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.media.NavigationPlayback
 import com.shilapi.xcertplay.hud.BydNavigationOutputs
 import com.shilapi.xcertplay.hud.BydOutputSettings
-import com.shilapi.xcertplay.hud.CarPlayCallKeyPolicy
 
 /**
  * Optional: steering-wheel keys zoom CarPlay's dashboard map and work as a CarPlay joystick. BYD's window
@@ -79,12 +78,6 @@ class WheelKeyService : AccessibilityService() {
     internal var knob: (AirPlayKnobState) -> Boolean = { CarPlayBackgroundSession.snapshot()?.controller?.sendKnob(it) == true }
     internal var routeActive: () -> Boolean = { CarPlayGlance.snapshot().maneuverType != null }
     internal var requestSiri: () -> Boolean = { CarPlayBackgroundSession.snapshot()?.controller?.requestSiri() == true }
-    internal var openCarPlay: () -> Boolean = {
-        runCatching {
-            startActivity(CarPlayScreen.intent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-            true
-        }.getOrDefault(false)
-    }
 
     // With the auto-off setting the joystick ends a while after the last press and when a route starts,
     // so the keys go back to music and volume without a thought.
@@ -218,7 +211,6 @@ class WheelKeyService : AccessibilityService() {
         val role = when {
             WheelZoomSettings.isSiriKey(this, key) -> WheelZoomSettings.Role.SIRI
             WheelZoomSettings.isMediaPlayPauseKey(this, key) -> WheelZoomSettings.Role.MEDIA_PLAY_PAUSE
-            WheelZoomSettings.isReturnKey(this, key) -> WheelZoomSettings.Role.RETURN_CARPLAY
             WheelZoomSettings.anyEnabled(this) -> WheelZoomSettings.roleOf(this, key)
             else -> null
         }
@@ -277,11 +269,10 @@ class WheelKeyService : AccessibilityService() {
             physicalKey = physicalKey,
             onFirstPress = {
                 learning?.let { role ->
-                    if ((role == WheelZoomSettings.Role.MEDIA_PLAY_PAUSE && CarPlayRemoteKeys.isProtectedNavigationKey(event.keyCode)) ||
-                        (role == WheelZoomSettings.Role.RETURN_CARPLAY && WheelZoomSettings.protectedReturnKey(event.keyCode))) {
+                    if (role == WheelZoomSettings.Role.MEDIA_PLAY_PAUSE &&
+                        CarPlayRemoteKeys.isProtectedNavigationKey(event.keyCode)) {
                         note("Wheel media key not assigned: navigation key ${event.keyCode} is reserved")
-                        Toast.makeText(this, if (role == WheelZoomSettings.Role.RETURN_CARPLAY) R.string.wheel_return_reserved
-                            else R.string.wheel_media_navigation_reserved, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.wheel_media_navigation_reserved, Toast.LENGTH_SHORT).show()
                         return@let WheelZoomKeys.Action.CONSUME
                     }
                     val done = learnt
@@ -297,7 +288,7 @@ class WheelKeyService : AccessibilityService() {
                         done?.invoke(role, key)
                     }
                     WheelZoomKeys.Action.CONSUME
-                } ?: returnPress(role, calling) ?: mediaPress(role, calling) ?: siriPress(role, calling, event.eventTime) ?: joystickPress(role, calling)
+                } ?: mediaPress(role, calling) ?: siriPress(role, calling, event.eventTime) ?: joystickPress(role, calling)
             },
         )
         when (action) {
@@ -378,13 +369,6 @@ class WheelKeyService : AccessibilityService() {
         if (role != WheelZoomSettings.Role.MEDIA_PLAY_PAUSE || calling || session() == null) return null
         note("Remapped wheel media play/pause sent=${sendMedia(CarPlayMediaButton.PLAY_PAUSE)}")
         return WheelZoomKeys.Action.CONSUME
-    }
-
-    private fun returnPress(role: WheelZoomSettings.Role?, calling: Boolean): WheelZoomKeys.Action? {
-        if (role != WheelZoomSettings.Role.RETURN_CARPLAY || calling || session() == null) return null
-        val opened = openCarPlay()
-        note("Return to CarPlay from wheel key opened=$opened")
-        return if (opened) WheelZoomKeys.Action.CONSUME else WheelZoomKeys.Action.PASS
     }
 
     // The joystick's part of a first press; null leaves the key to the zoom, or to the car.
@@ -878,7 +862,7 @@ class WheelJoystick {
             WheelZoomSettings.Role.SELECT -> Action.SELECT
             WheelZoomSettings.Role.MODE -> Action.BACK
             WheelZoomSettings.Role.JOYSTICK, WheelZoomSettings.Role.SIRI,
-            WheelZoomSettings.Role.MEDIA_PLAY_PAUSE, WheelZoomSettings.Role.RETURN_CARPLAY -> Action.PASS
+            WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> Action.PASS
         }
     }
 
@@ -976,7 +960,6 @@ object WheelZoomSettings {
     private const val KEY_JOYSTICK_AUTO_OFF = "joystick_auto_off"
     private const val KEY_SIRI = "siri_key"
     private const val KEY_MEDIA_PLAY_PAUSE = "media_play_pause"
-    private const val KEY_RETURN_CARPLAY = "return_carplay"
     private const val KEY_SIRI_DOUBLE_PRESS = "siri_double_press"
     private const val KEY_SIRI_DOUBLE_PRESS_INTERVAL = "siri_double_press_interval"
     private const val KEY_SIRI_TRIGGER_DELAY = "siri_trigger_delay"
@@ -1003,7 +986,6 @@ object WheelZoomSettings {
         SELECT(WheelKey(353, 505, BYD_KEYS)),
         SIRI(null),
         MEDIA_PLAY_PAUSE(null),
-        RETURN_CARPLAY(null),
     }
 
     /** The mode key switches zoom mode until pressed again, or turns it on for a few seconds. */
@@ -1041,13 +1023,6 @@ object WheelZoomSettings {
     fun siriKey(context: Context): Boolean = prefs(context).getBoolean(KEY_SIRI, false)
 
     fun mediaPlayPause(context: Context): Boolean = prefs(context).getBoolean(KEY_MEDIA_PLAY_PAUSE, false)
-
-    fun returnCarPlay(context: Context): Boolean = prefs(context).getBoolean(KEY_RETURN_CARPLAY, false)
-
-    fun setReturnCarPlay(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_RETURN_CARPLAY, enabled).apply()
-        WheelKeyService.settingsChanged()
-    }
 
     fun setMediaPlayPause(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_MEDIA_PLAY_PAUSE, enabled).apply()
@@ -1095,19 +1070,13 @@ object WheelZoomSettings {
 
     /** Whether any setting needs the key service. */
     fun anyEnabled(context: Context): Boolean =
-        enabled(context) || joystick(context) || siriKey(context) || mediaPlayPause(context) || returnCarPlay(context)
+        enabled(context) || joystick(context) || siriKey(context) || mediaPlayPause(context)
 
     fun isSiriKey(context: Context, key: WheelKey): Boolean = siriKey(context) && key(context, Role.SIRI) == key
 
     fun isMediaPlayPauseKey(context: Context, key: WheelKey): Boolean =
         mediaPlayPause(context) && !CarPlayRemoteKeys.isProtectedNavigationKey(key.code) &&
             key(context, Role.MEDIA_PLAY_PAUSE) == key
-
-    fun protectedReturnKey(code: Int): Boolean = CarPlayRemoteKeys.isProtectedNavigationKey(code) ||
-        CarPlayCallKeyPolicy.isAnswerKey(code) || CarPlayCallKeyPolicy.isEndKey(code) || code == 291 || code == 292
-
-    fun isReturnKey(context: Context, key: WheelKey): Boolean =
-        returnCarPlay(context) && !protectedReturnKey(key.code) && key(context, Role.RETURN_CARPLAY) == key
 
     /**
      * The active role that already has [key], when [role] would share it with the Siri key: [roleOf] gives a
@@ -1120,15 +1089,13 @@ object WheelZoomSettings {
             when (it) {
                 Role.SIRI -> siriKey(context)
                 Role.MEDIA_PLAY_PAUSE -> mediaPlayPause(context)
-                Role.RETURN_CARPLAY -> returnCarPlay(context)
                 Role.MODE, Role.ZOOM_IN, Role.ZOOM_OUT -> zoom || joystick
                 else -> joystick
             }
         }
         return active.firstOrNull { it != role &&
             (it == Role.SIRI || role == Role.SIRI ||
-                it == Role.MEDIA_PLAY_PAUSE || role == Role.MEDIA_PLAY_PAUSE ||
-                it == Role.RETURN_CARPLAY || role == Role.RETURN_CARPLAY) && key(context, it) == key }
+                it == Role.MEDIA_PLAY_PAUSE || role == Role.MEDIA_PLAY_PAUSE) && key(context, it) == key }
     }
 
     fun key(context: Context, role: Role): WheelKey? =
@@ -1141,7 +1108,7 @@ object WheelZoomSettings {
 
     /** The zoom or joystick role with [key]; [isSiriKey] checks the Siri role, which has its own switch. */
     fun roleOf(context: Context, key: WheelKey): Role? =
-        Role.entries.firstOrNull { it != Role.SIRI && it != Role.MEDIA_PLAY_PAUSE && it != Role.RETURN_CARPLAY && key(context, it) == key }
+        Role.entries.firstOrNull { it != Role.SIRI && it != Role.MEDIA_PLAY_PAUSE && key(context, it) == key }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

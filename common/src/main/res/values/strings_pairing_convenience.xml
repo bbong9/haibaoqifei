@@ -6,9 +6,4 @@
     <string name="pair_scan_confirm">Confirm the pairing request on the car and iPhone.</string>
     <string name="pair_scan_again">Scan again</string>
     <string name="pair_scan_start">Scan in DiPlay</string>
-    <string name="wheel_return_carplay">Wheel key returns to CarPlay</string>
-    <string name="wheel_return_carplay_description">Assign an unused key. The wheel-key service brings an active CarPlay session forward; during calls the car keeps its keys. Availability depends on the car.</string>
-    <string name="wheel_return_reserved">That key is reserved for the car, calls or media. Choose another key.</string>
-    <string name="settings_resume_music">Resume music on wireless reconnect</string>
-    <string name="settings_resume_music_description">For the selected iPhone, try to play if music was playing before disconnection. Pausing on the phone while away may not be detected.</string>
 </resources>

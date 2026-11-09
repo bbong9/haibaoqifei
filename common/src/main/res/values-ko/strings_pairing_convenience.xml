@@ -6,9 +6,4 @@
     <string name="pair_scan_confirm">차량과 iPhone에서 페어링 요청을 확인하세요.</string>
     <string name="pair_scan_again">다시 검색</string>
     <string name="pair_scan_start">DiPlay에서 검색</string>
-    <string name="wheel_return_carplay">핸들 키로 CarPlay 돌아가기</string>
-    <string name="wheel_return_carplay_description">사용하지 않는 키를 지정하세요. 키 서비스가 연결된 CarPlay를 앞으로 가져오며 통화 중에는 차량 키를 우선합니다. 차량에 따라 사용이 제한됩니다.</string>
-    <string name="wheel_return_reserved">이 키는 차량, 통화 또는 미디어용입니다. 다른 키를 선택하세요.</string>
-    <string name="settings_resume_music">무선 재연결 시 음악 이어 재생</string>
-    <string name="settings_resume_music_description">선택한 iPhone에서 연결이 끊기기 전에 음악이 재생 중이었다면 재생을 시도합니다. 떨어져 있을 때 휴대폰에서 일시 정지한 것은 감지하지 못할 수 있습니다.</string>
 </resources>

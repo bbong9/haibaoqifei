@@ -50,7 +50,6 @@ object SettingsBackupCodec {
     private val DIPLAY_KEYS = setOf(
         "auto_connect",
         "connect_on_phone_bluetooth",
-        "resume_music",
         "default_connection_mode",
         "settings_force_full_layout",
         "app_appearance_button",
@@ -63,7 +62,7 @@ object SettingsBackupCodec {
     private val CAR_HOTSPOT_KEYS = setOf("auto_enable", "config_write")
     private val FILES = mapOf(
         "xcertplay_airplay" to Policy.Allow(AIRPLAY_KEYS, AIRPLAY_PREFIXES, types = mapOf("smooth_video_latency" to KeyType.INT)),
-        "diplay" to Policy.Allow(DIPLAY_KEYS, types = mapOf("resume_music" to KeyType.BOOLEAN)),
+        "diplay" to Policy.Allow(DIPLAY_KEYS),
         // These readers call getInt and getBoolean, which throw on any other stored type. A key that is not stored yet
         // has no type to compare with, so the type is declared here.
         "carplay_picture" to Policy.Allow(PICTURE_KEYS, types = PICTURE_KEYS.associateWith { KeyType.INT }),

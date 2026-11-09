@@ -6,9 +6,4 @@
     <string name="pair_scan_confirm">Підтвердьте запит на сполучення в автомобілі та на iPhone.</string>
     <string name="pair_scan_again">Шукати знову</string>
     <string name="pair_scan_start">Пошук у DiPlay</string>
-    <string name="wheel_return_carplay">Повернення до CarPlay кнопкою керма</string>
-    <string name="wheel_return_carplay_description">Призначте вільну кнопку. Служба кнопок відкриває активний сеанс CarPlay; під час дзвінків кнопки залишаються автомобілю. Доступність залежить від автомобіля.</string>
-    <string name="wheel_return_reserved">Кнопку зарезервовано для автомобіля, дзвінків або медіа. Виберіть іншу.</string>
-    <string name="settings_resume_music">Відновлювати музику під час бездротового з’єднання</string>
-    <string name="settings_resume_music_description">Спробувати ввімкнути музику на вибраному iPhone, якщо вона грала до відключення. Пауза на телефоні поза автомобілем може залишитися непоміченою.</string>
 </resources>

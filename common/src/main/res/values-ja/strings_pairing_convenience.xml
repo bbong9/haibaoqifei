@@ -6,9 +6,4 @@
     <string name="pair_scan_confirm">車とiPhoneでペアリング要求を確認してください。</string>
     <string name="pair_scan_again">再検索</string>
     <string name="pair_scan_start">DiPlayで検索</string>
-    <string name="wheel_return_carplay">ハンドルのキーでCarPlayに戻る</string>
-    <string name="wheel_return_carplay_description">未使用のキーを割り当てます。キーサービスが接続中のCarPlayを前面に表示します。通話中は車のキー操作を優先します。車種によっては利用できません。</string>
-    <string name="wheel_return_reserved">このキーは車両、通話、メディア用に予約されています。別のキーを選んでください。</string>
-    <string name="settings_resume_music">ワイヤレス再接続時に音楽を再開</string>
-    <string name="settings_resume_music_description">選択したiPhoneで切断前に再生中だった場合、再生を試みます。離れている間にiPhoneで一時停止したことは検出できない場合があります。</string>
 </resources>

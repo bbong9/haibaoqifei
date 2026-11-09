@@ -2271,11 +2271,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 setPadding(0, dp(SETTINGS_BLOCK_GAP_DP), 0, 0)
             })
             musicBufferChoice(card, wireless = true)
-            toggle(card, getString(R.string.settings_resume_music), getString(R.string.settings_resume_music_description),
-                ResumeMusic.enabled(this)) {
-                ResumeMusic.setEnabled(this, it)
-                CarPlayMediaKeys.resumePreferenceChanged(this)
-            }
             toggle(card, getString(R.string.settings_car_bluetooth_audio),
                 getString(R.string.settings_car_bluetooth_audio_description) + "\n" +
                     getString(R.string.settings_car_bluetooth_audio_hint),
@@ -4665,7 +4660,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val zoomAvailable = wheelMapZoomAvailable()
         val vehicleKeysOn = WheelZoomSettings.joystick(this) ||
             (zoomAvailable && WheelZoomSettings.enabled(this))
-        if (WheelZoomSettings.siriKey(this) || WheelZoomSettings.mediaPlayPause(this) || WheelZoomSettings.returnCarPlay(this) || vehicleKeysOn) {
+        if (WheelZoomSettings.siriKey(this) || WheelZoomSettings.mediaPlayPause(this) || vehicleKeysOn) {
             wheelKeyServiceControls(card)
         }
         siriKeyControls(card)
@@ -4678,14 +4673,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (WheelZoomSettings.mediaPlayPause(this)) {
             wheelKeyAssignButton(card, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
                 getString(R.string.wheel_key_role_media_play_pause))
-        }
-        toggle(card, getString(R.string.wheel_return_carplay), getString(R.string.wheel_return_carplay_description),
-            WheelZoomSettings.returnCarPlay(this)) {
-            WheelZoomSettings.setReturnCarPlay(this, it)
-            render()
-        }
-        if (WheelZoomSettings.returnCarPlay(this)) {
-            wheelKeyAssignButton(card, WheelZoomSettings.Role.RETURN_CARPLAY, getString(R.string.wheel_return_carplay))
         }
         // It acts on BYD's short voice keys (327, 304) only, which other head units never send. Once on it
         // stays reachable, like the controls below, in case the package check misses the car.
@@ -4755,7 +4742,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 WheelZoomSettings.Role.SELECT -> R.string.wheel_key_role_select
                 WheelZoomSettings.Role.SIRI -> null
                 WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> null
-                WheelZoomSettings.Role.RETURN_CARPLAY -> null
             }.takeIf { joystick }
             val names = listOfNotNull(zoomName, joystickName)
             if (names.isEmpty()) continue
@@ -4862,7 +4848,6 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         WheelZoomSettings.Role.SELECT -> R.string.wheel_key_role_select
         WheelZoomSettings.Role.SIRI -> R.string.wheel_key_role_siri
         WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> R.string.wheel_key_role_media_play_pause
-        WheelZoomSettings.Role.RETURN_CARPLAY -> R.string.wheel_return_carplay
     }
 
     private class WindowKeyLearning(
